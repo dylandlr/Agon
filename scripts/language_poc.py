@@ -239,10 +239,16 @@ def cmd_measure(args):
         return
     common = collections.Counter(first_words).most_common(8)
     print("most said:", ", ".join(f"{' '.join(word(m) for m in w)} x{c}" for w, c in common))
-    print("what the words tell about the speaker's situation (mutual information, bits; 0 = nothing):")
+    # each message's leading word against the speaker's situation, with a shuffled-situation null
+    # (with few utterances raw MI is inflated: only the excess over chance means anything)
+    lead = [w[0] for w in first_words]
+    rng = np.random.default_rng(0)
+    print("what the leading word tells about the speaker's situation (bits over chance; p from 500 shuffles):")
     for name, ys in contexts.items():
-        print(f"  {name:28s} {mutual_information(first_words, ys):.3f}  (situation entropy "
-              f"{mutual_information(ys, ys):.2f})")
+        mi = mutual_information(lead, ys)
+        null = [mutual_information(lead, list(rng.permutation(np.array(ys, dtype=object)))) for _ in range(500)]
+        p = (1 + sum(x >= mi for x in null)) / 501
+        print(f"  {name:28s} {mi - float(np.mean(null)):+.3f}  (raw {mi:.3f}, p = {p:.3f})")
     shared = [m for m, sp in per_word_speakers.items() if len(sp) >= 2]
     print(f"words used by two or more speakers: {len(shared)} of {len(per_word_speakers)}")
     if grounded:

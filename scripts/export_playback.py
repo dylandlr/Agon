@@ -127,13 +127,14 @@ def obs_groups(cfg):
     chan[E.CH_BODIES] = 6
     chan[E.CH_MINERALS:E.CH_MINERALS + E.N_MINERAL_CHANNELS] = 5                              # minerals (how they look)
     chan[E.CH_FAUNA:E.CH_FAUNA + E.N_FAUNA_CHANNELS] = 3                                       # animals' looks, bugs
-    chan[E.CH_FLORA:E.CH_FLORA + E.N_FLORA_CHANNELS - 1] = 1                                  # plants by kind
-    chan[E.CH_FLORA + E.N_FLORA_CHANNELS - 1] = 0                                             # waste (the land)
+    chan[E.CH_FLORA:E.CH_FLORA + 4] = 1                                                       # plants by kind
+    chan[E.CH_FLORA + 4] = 0                                                                  # waste (the land)
+    chan[E.CH_FLORA + 5] = 11                                                                 # something written there
     groups = [np.tile(chan, v * v)]
     own = np.full(E.OWN_FEATURES, 8)                                                           # body, underground, conditions
-    own[[0, 1, 2, 19, 20]] = 7                                                                 # satiety, water, energy, sleepiness, asleep
+    own[[0, 1, 2, 19, 20, 22]] = 7                                                             # satiety, water, energy, sleepiness, asleep, urge
     groups += [own, np.full(2 * E.N_MAT + 1, 9), np.full(5 + E.N_WEATHER, 10),
-               np.full(E.HEARD_FEATURES, 11), np.full(E.map_features(cfg), 12)]
+               np.full(E.HEARD_FEATURES, 11), np.full(E.READ_FEATURES, 11), np.full(E.map_features(cfg), 12)]
     g = np.concatenate(groups)
     assert len(g) == E.obs_dim(cfg), (len(g), E.obs_dim(cfg))
     return g

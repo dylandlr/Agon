@@ -339,7 +339,7 @@ def test_messages_are_heard_by_nearby_listeners_next_tick():
     cfg, s, _ = _quiet_world(n=2)
     west, mid, _ = _neighbor_pair(s.terrain)
     s = s._replace(pos=jnp.asarray([west, mid], jnp.int32))
-    msgs = jnp.array([[3, 0, 7], [0, 0, 0]])
+    msgs = jnp.zeros((2, E.MSG_LEN), jnp.int32).at[0, 0].set(3).at[0, 2].set(7)
     s2, _, _, info = E.step(s, jnp.array([E.REST, E.REST]), cfg, msgs)
     assert bool(info.spoke[0]) and not bool(info.spoke[1])
     obs = np.asarray(E.observe(s2, cfg))
@@ -347,11 +347,12 @@ def test_messages_are_heard_by_nearby_listeners_next_tick():
     win = obs[1, :v * v * c].reshape(v, v, c)
     spoke_ch = c - E.N_SOCIAL_FEATURES + E.N_MEM + E.N_APPEARANCE   # memory, appearance, then the spoke flag
     assert win[r, r - 1, spoke_ch] == 1.0                    # the speaker's cell shows it spoke
-    heard = obs[1, v * v * c + E.N_BODY_FEATURES - E.HEARD_FEATURES: v * v * c + E.N_BODY_FEATURES - E.HEARD_FEATURES + E.HEARD_FEATURES]
+    h0 = v * v * c + E.N_BODY_FEATURES - E.READ_FEATURES - E.HEARD_FEATURES   # heard, then what one reads
+    heard = obs[1, h0:h0 + E.HEARD_FEATURES]
     slot = heard[: E.MSG_LEN * E.VOCAB].reshape(E.MSG_LEN, E.VOCAB)
-    assert slot[0, 3] == 1 and slot[1, 0] == 1 and slot[2, 7] == 1 and slot.sum() == 3
+    assert slot[0, 3] == 1 and slot[1, 0] == 1 and slot[2, 7] == 1 and slot.sum() == E.MSG_LEN
     np.testing.assert_allclose(heard[E.MSG_LEN * E.VOCAB: E.MSG_LEN * E.VOCAB + 2], [0.0, -1.0 / r])
-    assert obs[0, v * v * c + E.N_BODY_FEATURES - E.HEARD_FEATURES: v * v * c + E.N_BODY_FEATURES - E.HEARD_FEATURES + E.HEARD_FEATURES].sum() == 0  # silent partner
+    assert obs[0, h0:h0 + E.HEARD_FEATURES].sum() == 0  # silent partner
     # Speaking costs a little energy
     quiet, *_ = E.step(s, jnp.array([E.REST, E.REST]), cfg)
     assert float(s2.energy[0]) < float(quiet.energy[0])

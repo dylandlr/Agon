@@ -121,7 +121,7 @@ def test_the_layers_do_not_meet():
     assert win[1, ..., agents].sum() == 1 and win[2, ..., agents].sum() == 1   # above, only each other
     s2, _, _, info = STEP(s, _act(E.REST, E.STRIKE_N + k, E.REST))          # 1 strikes at that cell
     assert bool(info.struck_by_agent[2]) and not bool(info.struck_by_agent[0])
-    heard = E.heard_messages(s._replace(last_msg=jnp.array([[0, 0, 0], [3, 3, 3], [0, 0, 0]], jnp.int32)), CFG)
+    heard = E.heard_messages(s._replace(last_msg=jnp.zeros((3, E.MSG_LEN), jnp.int32).at[1].set(3)), CFG)
     assert float(np.abs(np.asarray(heard[0])).sum()) == 0 and float(np.abs(np.asarray(heard[2])).sum()) > 0
 
 
