@@ -74,7 +74,7 @@ def thin_fields(data) -> None:
     data["rle"] = True
 
 
-DIFF_FIELDS = ("wood", "minerals", "honey", "grubs")
+DIFF_FIELDS = ("wood", "minerals", "honey", "grubs", "marks")
 
 
 def rle(text: str) -> str:
@@ -250,6 +250,7 @@ def world_static(state, cfg):
                        "cell_km": cfg.cell_km, "relief_m": cfg.relief_m,
                        "ecology": bool(cfg.ecology), "fouling": bool(cfg.fouling), "flora_kinds": list(_eco.KINDS),
                        "plant_unit_kcal": round(_eco.unit_kcal(cfg)), "foul_ref": cfg.foul_ref,
+                       "language_mode": cfg.language_mode, "writing": bool(cfg.writing), "lexicon": list(E.LEXICON),
                        "max_bio_years": cfg.max_bio_years, "care_empathy": cfg.care_empathy,
                        "care_kin": cfg.care_kin, "care_reciprocity": cfg.care_reciprocity,
                        "care_revenge": cfg.care_revenge, "loneliness_stress": cfg.loneliness_stress,
@@ -380,6 +381,9 @@ def build_frame(t, prev, state, a, info, evs, env_cfg, n_agents, minds=None):
         # minerals lying on the ground: [row, column, mineral index, amount]
         "minerals": [[int(r), int(c), int(k), round(float(s.minerals[r, c, k]), 1)]
                      for r, c, k in zip(*np.nonzero(s.minerals > 0.05))],
+        # inscriptions: [row, column, symbol, symbol, ...] (env.LEXICON words in grounded mode)
+        **({"marks": [[int(r), int(c), *[int(v) for v in s.marks[r, c]]] for r, c in zip(*np.nonzero(np.asarray(s.marks).any(-1)))]}
+           if env_cfg.writing else {}),
         "plants": "".join(str(min(3, int(round(float(v) * (3.0 / env_cfg.plant_max if env_cfg.ecology else 1.0)))))
                           for v in np.asarray(E.forage_grid(s, env_cfg)).reshape(-1)),
         # with ecology: each cell's four kinds (greens, fruit, nuts, roots), how well each would gather
@@ -445,6 +449,8 @@ def main():
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--out", type=str, default="runs/playback.html")
     ap.add_argument("--world", choices=["classic", "living"], default="classic", help="for --random and --decisions")
+    ap.add_argument("--language", choices=["emergent", "grounded"], default=None, help="for --random and --decisions")
+    ap.add_argument("--writing", action="store_true", help="for --random and --decisions")
     for knob, what in (("food", "plant abundance (scarcity)"), ("predators", "predator numbers (0 = harmless)"),
                        ("disease", "infection chances"), ("hazards", "extreme weather, lightning, falls")):
         ap.add_argument(f"--{knob}", type=float, default=None,
@@ -471,11 +477,16 @@ def main():
                                    downed=bool(h.get("downed", False)), grazing=bool(h.get("grazing", False)),
                                    clothing=bool(h.get("clothing", False)), ecology=bool(h.get("ecology", False)),
                                    fouling=bool(h.get("fouling", False)))
+        import dataclasses as _dc
+        env_cfg = _dc.replace(env_cfg, language_mode=h.get("language", "emergent"), writing=bool(h.get("writing", False)))
         if h.get("reproduction"):
             env_cfg = with_reproduction(env_cfg, n_founders=h.get("founders") or None)
     elif args.world == "living":
         from lifesim.config import living_world
         env_cfg = living_world(env_cfg, underground=args.underground)
+    if args.language or args.writing:
+        import dataclasses as _dc
+        env_cfg = _dc.replace(env_cfg, language_mode=args.language or env_cfg.language_mode, writing=args.writing or env_cfg.writing)
     from lifesim.threats import with_threats
     run_knobs = {}
     if args.run and not args.random and not args.decisions and (Path(args.run) / "history.json").exists():

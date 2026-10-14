@@ -102,6 +102,11 @@ def main():
     ap.add_argument("--fouling", action=argparse.BooleanOptionalAction, default=True,
                     help="with --world living: waste builds where people stay; drinking beside it risks "
                          "infection (EnvConfig.fouling)")
+    ap.add_argument("--language", choices=["emergent", "grounded"], default="emergent",
+                    help="emergent: symbols mean nothing given; grounded: a defined lexicon (env.LEXICON) whose "
+                         "phrases about water and food with a direction are understood by listeners")
+    ap.add_argument("--writing", action="store_true",
+                    help="WRITE scratches one's message into the ground, read by anyone beside it")
     ap.add_argument("--archetypes", default="",
                     help="temperament profiles for the first founders, e.g. tyrant:1,saint:1 (lifesim/archetypes.py)")
     ap.add_argument("--world-model", action=argparse.BooleanOptionalAction, default=False,
@@ -141,6 +146,8 @@ def main():
     if args.world == "living":
         env_cfg = living_world(env_cfg, underground=args.underground, downed=args.downed, grazing=args.grazing,
                                clothing=args.clothing, ecology=args.ecology, fouling=args.fouling)
+    import dataclasses as _dc
+    env_cfg = _dc.replace(env_cfg, language_mode=args.language, writing=args.writing)
     elif args.underground:
         raise SystemExit("--underground needs --world living (the cave mouths are a biome)")
     env_cfg = with_time_scale(env_cfg, args.days_per_year, args.days_per_bio_year)

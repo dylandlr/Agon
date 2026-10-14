@@ -466,6 +466,8 @@ def main():
                                downed=bool(hist.get("downed", False)), grazing=bool(hist.get("grazing", False)),
                                clothing=bool(hist.get("clothing", False)), ecology=bool(hist.get("ecology", False)),
                                fouling=bool(hist.get("fouling", False)))
+        import dataclasses as _dc
+        env_cfg = _dc.replace(env_cfg, language_mode=hist.get("language", "emergent"), writing=bool(hist.get("writing", False)))
     if hist.get("reproduction"):
         env_cfg = with_reproduction(with_time_scale(env_cfg, hist.get("days_per_year", 40),
                                                     hist.get("days_per_bio_year", 1.0)),

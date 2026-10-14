@@ -314,6 +314,30 @@ survival, violence and gifts. Watching and copying talkers more made talking
 spread on its own. Use `--speech-attention 2 --teach-bonus 1` to study that
 effect deliberately.
 
+## Grounded language and writing (an active language mode)
+
+`--language grounded` (EnvConfig.language_mode; the default stays "emergent", whose symbols mean
+nothing given: the thesis's emergent condition) gives the message channel a defined lexicon of 31
+words (`env.LEXICON`): things (water, food, meat, fire, wood, stone, shelter, predator, prey,
+waste), the eight directions, here / near / far, come, go away, give, help, follow, yes, no, me,
+you, many. A message is up to four words (MSG_LEN 4, VOCAB 32 in both modes).
+
+- **Understood, not just heard:** a phrase naming water or food with a direction (or "here"),
+  e.g. "water east far", puts that place into every listener's remembered map as heard (fresh
+  0.6, below what is seen; seeing the place overrides it). "No food west" clears it. So knowledge
+  passes by speech: one who found water can send others to it, and the given seek-water and
+  seek-food skills then lead them there. The rest (warnings, requests, yes and no) is heard but
+  carries no built-in effect: what it comes to mean is up to the listeners.
+- **Nothing is enforced:** what to say, when, to whom, and whom to believe is learned. A speaker
+  can be wrong or lie; listeners can learn whom to trust (they hear who spoke).
+- **Writing** (`--writing`): `WRITE` scratches one's message (this tick's, else the last) into the
+  ground where one stands. Anyone beside it reads it (the inscription is in their senses, and is
+  understood as speech is), and everyone sees from afar that something is written there.
+  Scratched in earth it lasts 20 days; cut in rock, a year.
+- **Playback:** speech and inscriptions show in the agents' script (32 glyphs); in grounded
+  worlds the **Translate** button switches bubbles, the log and the tile inspector to English
+  ("Water far to the east."). Inscriptions show as scratched stones on the map.
+
 ## The core experiment: group reward, counters, comparison
 
 - **Prosociality weight alpha** (`--alpha`): each agent trains on

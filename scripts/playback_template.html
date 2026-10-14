@@ -215,7 +215,7 @@ canvas.map { border-radius: 3px; outline: 1px solid rgba(0, 0, 0, 0.35); }
         <div class="mapwrap">
           <canvas class="map" id="map" aria-label="Map of the world at the current tick"></canvas>
           <div class="letters" id="letters" aria-live="polite"></div>
-          <div class="hud"><span class="zm" role="group" aria-label="Zoom"><button id="zoom-out" title="Zoom out (-)" aria-label="Zoom out">&minus;</button><span id="zoom-lv">1&times;</span><button id="zoom-in" title="Zoom in (=)" aria-label="Zoom in">+</button><button id="follow" aria-pressed="false" title="Keep the camera on the selected person (F)">Follow</button></span><span id="hud-time"></span>
+          <div class="hud"><span class="zm" role="group" aria-label="Zoom"><button id="zoom-out" title="Zoom out (-)" aria-label="Zoom out">&minus;</button><span id="zoom-lv">1&times;</span><button id="zoom-in" title="Zoom in (=)" aria-label="Zoom in">+</button><button id="follow" aria-pressed="false" title="Keep the camera on the selected person (F)">Follow</button><button id="translate" aria-pressed="false" title="Show what the agents say and write in English (their lexicon), or in their own script" hidden>Translate</button></span><span id="hud-time"></span>
             <span class="spd" role="group" aria-label="Speed"><button data-spd="0" title="Pause (Space)" aria-label="Pause">&#10074;&#10074;</button><button data-spd="1" title="1&times; (key 1)" aria-label="Speed 1">&#9654;</button><button data-spd="2" title="3&times; (key 2)" aria-label="Speed 3">&#9654;&#9654;</button><button data-spd="3" title="6&times; (key 3)" aria-label="Speed 6">&#9654;&#9654;&#9654;</button><button data-spd="4" title="15&times; (key 4)" aria-label="Speed 15">&#9654;&#9654;&#9654;&#9654;</button></span>
           </div>
         </div>
@@ -393,7 +393,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   // between (scripts/export_playback.py thin_fields); rebuild every frame here.
   for (let i = 1; i < F.length; i++) {
     for (const key of ["plants", "flora", "clouds", "snow", "air_map", "bugs_map"]) if (F[i][key] === undefined && F[i - 1][key] !== undefined) F[i][key] = F[i - 1][key];
-    for (const key of ["wood", "minerals", "honey", "grubs"]) {
+    for (const key of ["wood", "minerals", "honey", "grubs", "marks"]) {
       if (F[i][key] !== undefined || F[i - 1][key] === undefined) continue;
       const d = F[i][key + "~"];
       if (!d) { F[i][key] = F[i - 1][key]; continue; }
@@ -562,8 +562,37 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     $("biomes").hidden = false;
   }
 
-  // ---------- message glyphs: 16 symbols as 3x3 patterns (0 = silence)
-  const GLYPH = [0, 186, 341, 146, 56, 455, 273, 84, 495, 7, 448, 73, 292, 170, 325, 511];
+  // ---------- message glyphs: 32 symbols as 3x3 patterns (0 = silence): the agents' script
+  const GLYPH = [0, 186, 341, 146, 56, 455, 273, 84, 495, 7, 448, 73, 292, 170, 325, 511,
+                 403, 214, 365, 147, 438, 89, 334, 121, 467, 282, 157, 428, 211, 346, 99, 393];
+  // Language (DATA.consts.language_mode): in "grounded" worlds every symbol is a word of the lexicon,
+  // so speech and writing can be translated (the Translate button); in "emergent" worlds symbols
+  // mean nothing given, and only their sound (one syllable each) and shape are shown.
+  const LEX = (DATA.consts && DATA.consts.lexicon) || null;
+  const GROUNDED = !!LEX && (DATA.consts || {}).language_mode === "grounded";
+  const SYLL = ["", "ka", "lo", "mi", "ta", "ru", "se", "no", "va", "pi", "de", "zu", "ha", "yo", "be", "ni",
+                "go", "fe", "ri", "mu", "sa", "te", "wo", "la", "ki", "po", "du", "ne", "si", "bo", "ja", "re"];
+  let TRANSLATE = GROUNDED && (() => { try { return localStorage.getItem("agon-translate") !== "0"; } catch (e) { return true; } })();
+  const THINGS = ["water", "food", "meat", "fire", "wood", "stone", "shelter", "predator", "prey", "waste"];
+  const DIRW = ["north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest"];
+  function glossOf(msg) {                            // a grounded phrase in plain English
+    const w = msg.filter((m) => m > 0).map((m) => LEX[m] || "?");
+    if (!w.length) return "";
+    const thing = w.find((x) => THINGS.includes(x)), dir = w.find((x) => DIRW.includes(x));
+    const here = w.includes("here"), far = w.includes("far"), near = w.includes("near"), no = w.includes("no"), many = w.includes("many");
+    if (thing && (dir || here)) {
+      const what = `${no ? "no " : many ? "plenty of " : ""}${thing === "predator" || thing === "prey" ? (no ? "" : "a ") + thing : thing}`;
+      const where = dir ? `${far ? "far " : near ? "close by " : ""}to the ${dir}` : "here";
+      const s2 = `${what} ${where}`; return s2[0].toUpperCase() + s2.slice(1) + (thing === "predator" && !no ? "!" : ".");
+    }
+    const s3 = w.join(" "); return s3[0].toUpperCase() + s3.slice(1) + (w.some((x) => ["come", "go away", "help", "give", "follow"].includes(x)) ? "!" : ".");
+  }
+  const spokenOf = (msg) => { const x = msg.filter((m) => m > 0).map((m) => SYLL[m] || "").join(""); return x ? x[0].toUpperCase() + x.slice(1) : ""; };
+  function sayText(msg) {                            // how a message reads in the log
+    const sound = spokenOf(msg), sym = msg.filter((m) => m > 0).join("-");
+    if (GROUNDED && TRANSLATE) return `"${glossOf(msg)}" (${msg.filter((m) => m > 0).map((m) => LEX[m]).join(" ")})`;
+    return `"${sound}" (${sym})`;
+  }
   const drawGlyph = (g, sym, x, y, s) => { g.fillStyle = "#1b2038"; for (let i = 0; i < 9; i++) if ((GLYPH[sym] >> i) & 1) g.fillRect(x + (i % 3) * s, y + Math.floor(i / 3) * s, s * 0.9, s * 0.9); };
   const roundRect = (g, x, y, w, h, rad) => { g.beginPath(); g.moveTo(x + rad, y); g.arcTo(x + w, y, x + w, y + h, rad); g.arcTo(x + w, y + h, x, y + h, rad); g.arcTo(x, y + h, x, y, rad); g.arcTo(x, y, x + w, y, rad); g.closePath(); };
 
@@ -1466,6 +1495,9 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     if (a.health < 0.35) { px(g, x + 1, y - 2, INKP, 4, 3); px(g, x + 1.5, y - 1.5, "#e04848", 3, 2); }
   }
   function drawSpeech(a, r, c) {
+    if (GROUNDED && TRANSLATE) { cellDraw(ctx, r, c, (g) => { const t = glossOf(a.msg); if (!t) return; g.font = "bold 0.26px sans-serif";
+      const w = g.measureText(t).width + 0.16; roundRect(g, 0.5 - w / 2, -0.78, w, 0.38, 0.1); g.fillStyle = "#f4f1e4"; g.fill(); g.lineWidth = LW * 0.8; g.strokeStyle = INK; g.stroke();
+      g.fillStyle = "#1b2038"; g.textBaseline = "middle"; g.fillText(t, 0.5 - w / 2 + 0.08, -0.59); }); return; }
     cellDraw(ctx, r, c, (g) => {
       const syms = a.msg.filter((m) => m > 0), w = 0.12 + syms.length * 0.3;
       roundRect(g, 0.5 - w / 2, -0.78, w, 0.38, 0.1); g.fillStyle = "#f4f1e4"; g.fill(); g.lineWidth = LW * 0.8; g.strokeStyle = INK; g.stroke();
@@ -1867,6 +1899,12 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       px(ctx, x + 1, y + 1, "#3f7f3e", w - 2, 3); px(ctx, x + 1, y + 1, "#6fae50", 2, 1);
       if (v === 3) { px(ctx, x + 2, y + 2, "#e0434e"); px(ctx, x + 4, y + 1, "#e0434e"); }
     }
+    (f.marks || []).forEach(([r, c, ...syms]) => {    // inscriptions: a flat stone scratched with the script
+      if (r < VR0 || r >= VR1 || c < VC0 || c >= VC1) return;
+      const x = c * P + 2, y = r * P + 9, n = syms.filter((m) => m > 0).length, w = 2 + 4 * n;
+      px(ctx, x - 1, y - 1, INKP, w + 2, 6); px(ctx, x, y, "#b9b2a2", w, 4); px(ctx, x, y + 3, "#8d8678", w, 1);
+      let j = 0; syms.forEach((m) => { if (m > 0) { for (let i = 0; i < 9; i++) if ((GLYPH[m] >> i) & 1) px(ctx, x + 1 + j * 4 + (i % 3), y + Math.floor(i / 3), "#4a4438"); j++; } });
+    });
     (f.foul || []).forEach(([r, c, v]) => {           // where people have stayed: trodden dirt, refuse, flies
       if (v < 2) return;
       for (let k = 0; k < Math.min(4, v - 1); k++) { const x = c * P + 2 + Math.floor(hash(r, c, 90 + k) * 11), y = r * P + 3 + Math.floor(hash(r, c, 95 + k) * 10);
@@ -1943,6 +1981,12 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     }
   }
   function pixSpeech(a) {
+    if (GROUNDED && TRANSLATE) {                     // translated: the words, in a bubble sized to them
+      const t = glossOf(a.msg); if (!t) return;
+      ctx.save(); ctx.font = "bold 5px sans-serif"; const tw = Math.ceil(ctx.measureText(t).width), x = a.c * P + 7 - tw / 2 - 2, y = a.r * P - 14;
+      px(ctx, x - 1, y - 1, INKP, tw + 6, 9); px(ctx, x, y, "#f3efe2", tw + 4, 7); px(ctx, a.c * P + 6, y + 8, INKP, 3, 1); px(ctx, a.c * P + 7, y + 7, "#f3efe2");
+      ctx.fillStyle = "#1b2038"; ctx.textBaseline = "top"; ctx.fillText(t, x + 2, y + 1); ctx.restore(); return;
+    }
     const x = a.c * P, y = a.r * P, n = a.msg.filter((m) => m > 0).length, w = 2 + 4 * Math.max(n, 1);
     px(ctx, x + 7 - w / 2 - 1, y - 12, INKP, w + 2, 7); px(ctx, x + 7 - w / 2, y - 11, "#f3efe2", w, 5); px(ctx, x + 6, y - 5, INKP, 3, 1); px(ctx, x + 7, y - 6, "#f3efe2");
     let j = 0; a.msg.forEach((m) => { if (m > 0) { pixGlyph(m, x + 7 - w / 2 + 1 + j * 4, y - 10); j++; } });
@@ -2705,7 +2749,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     switch (a.act) {
       case "move": did = `walked from ${placeTok(from[0], from[1])} to ${placeTok(a.r, a.c)} (${terrAt(a.r, a.c)})`; break;
       case "move_failed": did = `tried to walk${aim}, but stumbled and stayed at ${placeTok(a.r, a.c)}`; break;
-      case "gather": { const e = ev("gather"); did = `gathered ${gained.map(([mm, d]) => `${d.toFixed(2)} ${e && e.kind && mm === "plant" ? e.kind : mat(mm)}${kcal(mm, d)}`).join(" and ") || (e ? `${e.amount} ${e.kind || e.what}` : mat(a.hand))} at ${placeTok(a.r, a.c)}${e && e.tool ? ` with ${e.tool.replace(/_/g, " ")}` : ""}`; break; }
+      case "gather": { const e = ev("gather"); did = `gathered ${gained.map(([mm, d]) => `${d.toFixed(2)} ${e && e.plant && mm === "plant" ? e.plant : mat(mm)}${kcal(mm, d)}`).join(" and ") || (e ? `${e.amount} ${e.plant || e.what}` : mat(a.hand))} at ${placeTok(a.r, a.c)}${e && e.tool ? ` with ${e.tool.replace(/_/g, " ")}` : ""}`; break; }
       case "gather_lost": did = `reached for food at ${placeTok(a.r, a.c)} but someone else got it first`; break;
       case "eat": did = `ate ${spent.map(([mm, d]) => `${(-d).toFixed(2)} ${mat(mm)}${kcal(mm, d)}`).join(" and ") || mat(a.hand)}`; break;
       case "drink": { const w = Object.values(STEP_DIR).map(([dr, dc]) => [a.r + dr, a.c + dc]).find(([r, c]) => r >= 0 && c >= 0 && r < G && c < G && DATA.terrain[r * G + c] === "3");
@@ -3199,6 +3243,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     html += "<h3>On it now</h3>" + row([
       ["Plants", terr === 3 ? null : f.flora ? (DATA.consts.flora_kinds || []).map((nm, k) => `${nm} ${f.flora[4 * idx + k]}/9`).join(", ")
         + " (how well each would gather here; dropped food counts too)" : `${+f.plants[idx]} of 3`],
+      ["Written here", (() => { const m = (f.marks || []).find(([rr, cc]) => rr === r && cc === c); return m ? (GROUNDED && TRANSLATE ? `"${glossOf(m.slice(2))}"` : `"${spokenOf(m.slice(2))}" (${m.slice(2).filter((x) => x > 0).join("-")})`) + " scratched into the ground" : null; })()],
       ["Waste", (f.foul || []).some(([rr, cc]) => rr === r && cc === c) ? `${(f.foul.find(([rr, cc]) => rr === r && cc === c) || [])[2]}/9: people have stayed here; drinking near it risks infection` : null],
       ["Meat", at(f.meat) ? "raw meat lying here" : null], ["Cooked meat", at(f.cooked) ? "cooked meat lying here" : null],
       ["Wood", at(f.wood) ? "dead wood" : null], ["Fire", at(f.fire) ? "burning" : null],
@@ -3512,7 +3557,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
         if (!a || !a.was_alive) continue;
         if (!a.alive) { add(`${mention(selected)} died.`, "danger", fj.time.slice(-5)); continue; }
         add(narrateAgent(a, pa, selected, fj), CAT(a), fj.time.slice(-5));
-        if (a.said) add(`${mention(selected)} said "${a.said}" (${a.msg.filter((x) => x > 0).join("-")}), heard by ${a.heard_by.length ? a.heard_by.map(mention).join(", ") : "no one"}.`, "social");
+        if (a.said) add(`${mention(selected)} said ${sayText(a.msg)}, heard by ${a.heard_by.length ? a.heard_by.map(mention).join(", ") : "no one"}.`, "social");
         tickEvents(fj, selected);
       }
       return;
@@ -3530,7 +3575,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
         add(narrateAgent(a, fp && fp.agents[k], k, fj), CAT(a), fj.time.slice(-5));
         if (a.said) {
           const heard = a.heard_by.length ? a.heard_by.map((h) => mention(h)).join(", ") : "no one";
-          add(`${mention(k)} said "${a.said}" (${a.msg.filter((x) => x > 0).join("-")}), heard by ${heard}.`, "social");
+          add(`${mention(k)} said ${sayText(a.msg)}, heard by ${heard}.`, "social");
         }
       });
       tickEvents(fj);
@@ -3804,6 +3849,12 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   centreOnBand();
   $("zoom-in").addEventListener("click", () => zoomTo(zi + 1));
   $("zoom-out").addEventListener("click", () => zoomTo(zi - 1));
+  {                                                   // Translate: the agents' script, or English (grounded worlds only)
+    const tb = $("translate"); tb.hidden = !GROUNDED; tb.setAttribute("aria-pressed", String(TRANSLATE));
+    tb.addEventListener("click", () => { TRANSLATE = !TRANSLATE; tb.setAttribute("aria-pressed", String(TRANSLATE));
+      try { localStorage.setItem("agon-translate", TRANSLATE ? "1" : "0"); } catch (e) { /* storage unavailable */ }
+      show(cur); updateSide(cur); if (typeof updateInspector === "function") updateInspector(cur); });
+  }
   $("follow").addEventListener("click", () => { follow = !follow; $("follow").setAttribute("aria-pressed", String(follow)); if (follow && viewN() === G) zoomTo(Math.min(2, VIEW_LEVELS.length - 1)); centreOnSelected(); applyCam(); });
   wrap.addEventListener("wheel", (ev) => { if (!ev.ctrlKey && !ev.metaKey) { ev.preventDefault(); const b = map.getBoundingClientRect(); zoomTo(zi + (ev.deltaY < 0 ? 1 : -1), ev.clientX - b.left, ev.clientY - b.top); } }, { passive: false });
   map.addEventListener("mousedown", (ev) => { if (viewN() < G) { drag = [ev.clientX, ev.clientY, camR, camC]; dragged = false; } });

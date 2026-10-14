@@ -168,6 +168,15 @@ class EnvConfig:
     # waste there (the fouling above, which then comes only from this). Past full, it happens anyway:
     # soiling oneself is stressful and wakes a sleeper. Infants have no control. Choosing where to go
     # (away from the water one drinks) is left to learning.
+    # Language (lifesim/env.py LEXICON): "emergent" (symbols mean nothing given) or "grounded" (a
+    # defined lexicon; phrases about water and food with a direction are understood by listeners and
+    # put into their remembered maps). writing: WRITE scratches one's message into the ground, read
+    # by anyone beside it (scratched in earth it lasts mark_days, cut in rock mark_days_rock).
+    language_mode: str = "emergent"
+    writing: bool = False
+    heard_recency: float = 0.6         # how fresh a heard place is in one's map (seen is 1)
+    mark_days: float = 20.0
+    mark_days_rock: float = 365.0
     excretion: bool = False
     urge_rate: float = 0.06            # per tick at 30 minutes, x (0.5 + hydration): ~4-6 reliefs a day
     urge_sleep_mult: float = 0.4       # made more slowly asleep (the body holds it at night)

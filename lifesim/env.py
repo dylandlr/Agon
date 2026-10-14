@@ -51,7 +51,8 @@ SEEK_SHELTER = SLEEP + 4                                         # 74: to known 
 N_SKILLS = 4
 DELVE = SEEK_SHELTER + 1          # 75: on a cave mouth, go down into the caves, or back up (cfg.underground)
 RELIEVE = DELVE + 1               # 76: relieve oneself where one stands (cfg.excretion)
-N_ACTIONS = RELIEVE + 1
+WRITE = RELIEVE + 1               # 77: scratch one's message into the ground here (cfg.writing)
+N_ACTIONS = WRITE + 1
 LAYER_OFF = 4096                  # added to a below agent's column in layered_pos: no one above is ever near
 
 # ---------------------------------------------------------------- materials
@@ -73,7 +74,7 @@ MIN_COLOR = jnp.array(mn.COLOR)                                  # (M, 3) how ea
 MIN_LUSTER = jnp.array(mn.LUSTER)
 N_MINERAL_CHANNELS = 5            # per cell: minerals present, and their colour (r, g, b) and lustre
 N_FAUNA_CHANNELS = 7              # per cell: animals' size, fangs, colour; mosquitoes, flies, hive, mound
-N_FLORA_CHANNELS = 5              # per cell: how well greens, fruit, nuts, roots would gather here; waste
+N_FLORA_CHANNELS = 6              # per cell: how well greens, fruit, nuts, roots would gather here; waste; an inscription
 assert PLACE_N == SELECT_0 + N_MAT, "one select action per material"
 _DIRS = ["n", "ne", "e", "se", "s", "sw", "w", "nw"]
 ACTION_NAMES = (["rest"] + [f"move_{d}" for d in _DIRS] + ["grasp", "eat", "drink"]
@@ -81,7 +82,7 @@ ACTION_NAMES = (["rest"] + [f"move_{d}" for d in _DIRS] + ["grasp", "eat", "drin
                 + [f"touch_{d}" for d in _DIRS]
                 + [f"select_{m}" for m in MAT_NAMES]
                 + [f"place_{d}" for d in _DIRS] + ["mate", "sleep", "seek_water", "seek_food", "flee", "seek_shelter"]
-                + ["delve", "relieve"])
+                + ["delve", "relieve", "write"])
 
 MOVE_DELTAS = jnp.array([[0, 0], [-1, 0], [-1, 1], [0, 1], [1, 1],
                          [1, 0], [1, -1], [0, -1], [-1, -1]], dtype=jnp.int32)
@@ -90,10 +91,10 @@ NEIGHBORS8 = MOVE_DELTAS[1:]
 # ---------------------------------------------------------------- outcomes
 (OUT_NONE, OUT_REST, OUT_MOVE, OUT_GATHER, OUT_GATHER_LOST, OUT_EAT, OUT_DRINK,
  OUT_STRIKE_MISS, OUT_STRIKE_ANIMAL, OUT_STRIKE_AGENT, OUT_KILL, OUT_MOVE_FAILED,
- OUT_RELEASE, OUT_TOUCH, OUT_TOKEN, OUT_SELECT, OUT_PLACE, OUT_MATE, OUT_SLEEP, OUT_RELIEVE) = range(20)
+ OUT_RELEASE, OUT_TOUCH, OUT_TOKEN, OUT_SELECT, OUT_PLACE, OUT_MATE, OUT_SLEEP, OUT_RELIEVE, OUT_WRITE) = range(21)
 OUTCOME_NAMES = ["none", "rest", "move", "gather", "gather_lost", "eat", "drink",
                  "strike_miss", "strike_animal", "strike_agent", "kill", "move_failed",
-                 "release", "touch", "token", "select", "place", "mate", "sleep", "relieve"]
+                 "release", "touch", "token", "select", "place", "mate", "sleep", "relieve", "write"]
 
 # Death causes: index 1.. match the damage component order in step()
 CAUSE_NAMES = ["none", "starvation", "thirst", "exhaustion", "cold", "heat",
@@ -118,13 +119,25 @@ MEM_NAMES = ["struck_me", "gave_near_me", "touched_me", "seen_violent"]
 N_APPEARANCE = 3
 # ---------------------------------------------------------------- language
 # Every agent emits a message each tick on a channel separate from its action:
-# MSG_LEN symbols from a vocabulary of VOCAB, symbol 0 = silence. No symbol has a
-# built-in meaning; a first symbol of 0 means silence. Listeners hear the
-# N_HEARD nearest speakers within view.
-MSG_LEN = 3
-VOCAB = 16
+# MSG_LEN symbols from a vocabulary of VOCAB, symbol 0 = silence; a first symbol of 0
+# means silence. Listeners hear the N_HEARD nearest speakers within view.
+# Emergent mode (cfg.language_mode "emergent", the default): no symbol has a built-in
+# meaning. Grounded mode ("grounded"): every symbol is a word of LEXICON, and a phrase
+# naming water or food with a direction (and here / near / far) is understood: it puts
+# that place, as heard, into each listener's remembered map ("no water east" clears it).
+# What to say, when, to whom, and whom to believe is left to learning.
+MSG_LEN = 4
+VOCAB = 32
+LEXICON = ["", "water", "food", "meat", "fire", "wood", "stone", "shelter", "predator", "prey", "waste",
+           "north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest",
+           "here", "near", "far", "come", "go away", "give", "help", "follow", "yes", "no", "me", "you", "many"]
+assert len(LEXICON) == VOCAB
+W_WATER, W_FOOD = 1, 2
+W_DIR0 = 11                       # 11..18: north .. northwest, in MOVE_DELTAS order
+W_HERE, W_NEAR, W_FAR, W_NO = 19, 20, 21, 28
 N_HEARD = 3
 HEARD_FEATURES = N_HEARD * (MSG_LEN * VOCAB + 2 + N_MEM)
+READ_FEATURES = MSG_LEN * VOCAB + 2   # an inscription on one's own cell or beside it, and where it is
 # Per visible agent: memory about it, its appearance, whether it spoke last tick
 N_SOCIAL_FEATURES = N_MEM + N_APPEARANCE + 1 + 8 + 1   # ... + height, weight, scars, lasting injury, sex, pregnant, asleep, courting, attachment
 
@@ -143,7 +156,7 @@ CH_FAUNA = CH_MINERALS + N_MINERAL_CHANNELS
 CH_FLORA = CH_FAUNA + N_FAUNA_CHANNELS
 OWN_FEATURES = 23 + cond.K        # own body and conditions, first in the body vector
 SHARED_START = OWN_FEATURES + N_MAT + N_MAT + 1    # after inventory, hand and torch: time and weather
-N_BODY_FEATURES = OWN_FEATURES + N_MAT + N_MAT + 1 + 5 + N_WEATHER + HEARD_FEATURES
+N_BODY_FEATURES = OWN_FEATURES + N_MAT + N_MAT + 1 + 5 + N_WEATHER + HEARD_FEATURES + READ_FEATURES
 
 
 # ---------------------------------------------------------------- state
@@ -248,6 +261,8 @@ class State(NamedTuple):
     flora_patch: jnp.ndarray    # (G, G, 4) how rich each patch is in each kind (fixed for the world)
     foul: jnp.ndarray           # (G, G) waste where people have stayed, person-days per km^2
     urge: jnp.ndarray           # (N,) 0..1 need to relieve oneself (cfg.excretion)
+    marks: jnp.ndarray          # (G, G, MSG_LEN) int32: what is written on each cell (all 0: nothing)
+    mark_time: jnp.ndarray      # (G, G) int32: when it was written (-1: never)
     # animals
     small: Animals
     large: Animals
@@ -969,6 +984,7 @@ def reset(key: jax.Array, cfg: EnvConfig, genotype: gt.Genotype | None = None,
     return State(
         key=ks[8], t=jnp.int32(0), terrain=terrain, height=height, cliff=generate_cliffs(height), plants=plants,
         flora=flora, flora_patch=flora_patch, foul=jnp.zeros((g, g)), urge=jnp.zeros(n),
+        marks=jnp.zeros((g, g, MSG_LEN), jnp.int32), mark_time=jnp.full((g, g), -1, jnp.int32),
         meat=jnp.zeros((g, g)), cooked=jnp.zeros((g, g)),
         wood=jnp.where(terrain == FOREST, cfg.wood_max * jax.random.uniform(ks[10], (g, g)), 0.0),
         stones=jnp.zeros((g, g)), minerals=generate_minerals(jax.random.fold_in(key, 99), terrain, cfg) + cv["surface_minerals"],
@@ -1128,13 +1144,15 @@ def action_mask(state: State, cfg: EnvConfig) -> jnp.ndarray:
     skills_ok = jnp.broadcast_to(jnp.asarray(cfg.skills), (n, N_SKILLS)) & jnp.any(can_move, axis=1)[:, None] \
         & ~below[:, None]                                            # the given skills know only the surface
     can_relieve = (state.urge >= cfg.relieve_min) if cfg.excretion else jnp.zeros_like(can_eat)
+    can_write = (~below & ~state.asleep) if cfg.writing else jnp.zeros_like(can_eat)
     # Sleep needs sleep pressure (the body clock lowers the bar at night); asleep, one may sleep on
     can_sleep = state.asleep | (state.sleepiness >= jnp.where(is_night(state.t, cfg), cfg.sleep_onset_night,
                                                               cfg.sleep_onset))
     mask = jnp.concatenate([jnp.ones_like(can_eat)[:, None], can_move, can_grasp[:, None],
                             can_eat[:, None], can_drink[:, None], can_strike,
                             can_release[:, None], can_touch, can_select, can_place, can_mate[:, None],
-                            can_sleep[:, None], skills_ok, can_delve[:, None], can_relieve[:, None]],
+                            can_sleep[:, None], skills_ok, can_delve[:, None], can_relieve[:, None],
+                            can_write[:, None]],
                            axis=1)
     dead = jnp.zeros_like(mask).at[:, REST].set(True)
     # Asleep, one can only sleep on or wake up (REST); after collapsing from exhaustion, only sleep on
@@ -1302,7 +1320,8 @@ def observe(state: State, cfg: EnvConfig) -> jnp.ndarray:
     chans.append(jnp.where(inb[..., None], jnp.concatenate([look, bugs], -1)[rc, cc], 0.0))
     # Plants by kind (how well each would gather here) and waste, seen and smelled
     flora_look = jnp.concatenate([eco.quality(state.flora, cfg),
-                                  (1.0 - jnp.exp(-state.foul / cfg.foul_ref))[..., None]], -1)
+                                  (1.0 - jnp.exp(-state.foul / cfg.foul_ref))[..., None],
+                                  jnp.any(state.marks > 0, axis=-1).astype(jnp.float32)[..., None]], -1)
     chans.append(jnp.where(inb[..., None], flora_look[rc, cc], 0.0))
     # Social features: each observer sees, in the cell of every other visible agent,
     # its own memory of that agent, the agent's appearance and last token.
@@ -1402,8 +1421,67 @@ def observe(state: State, cfg: EnvConfig) -> jnp.ndarray:
                              (state.torch > 0).astype(jnp.float32)[:, None],
                              jnp.where(state.below[:, None] & (jnp.arange(shared.shape[0]) >= 5)[None, :],
                                        0.0, jnp.broadcast_to(shared, (n, shared.shape[0]))),   # below: no weather
-                             heard_messages(state, cfg)], axis=-1)
+                             heard_messages(state, cfg), read_marks(state, cfg)], axis=-1)
     return jnp.concatenate([win.reshape(n, -1), feats, read_mind_map(state.mind_map, state.pos, cfg)], axis=-1)
+
+
+def mark_beside(state: State, cfg: EnvConfig):
+    """(N,) whether each agent can read an inscription (on its own cell, else the first beside it,
+    above ground and awake), and (N, 2) where."""
+    g = cfg.grid_size
+    cand = state.pos[:, None, :] + MOVE_DELTAS[None]                         # own cell first
+    ok = _in_bounds(cand, g)
+    cc = jnp.clip(cand, 0, g - 1)
+    has = ok & jnp.any(state.marks[cc[..., 0], cc[..., 1]] > 0, axis=-1)
+    first = jnp.argmax(has, axis=1)
+    can = jnp.any(has, axis=1) & state.alive & ~state.below & ~state.asleep
+    return can, cc[jnp.arange(state.pos.shape[0]), first]
+
+
+def read_marks(state: State, cfg: EnvConfig) -> jnp.ndarray:
+    """(N, READ_FEATURES): the inscription one can read (one-hot symbols) and where it is."""
+    can, at = mark_beside(state, cfg)
+    words = state.marks[at[:, 0], at[:, 1]]
+    feats = jnp.concatenate([jax.nn.one_hot(words, VOCAB).reshape(-1, MSG_LEN * VOCAB),
+                             (at - state.pos).astype(jnp.float32)], axis=-1)
+    return jnp.where(can[:, None], feats, 0.0)
+
+
+def phrase_place(msgs, src, cfg: EnvConfig):
+    """Read phrases as the grounded language means them. msgs (S, MSG_LEN) from sources at src (S, 2).
+    Returns (S,) channel of the remembered map it speaks of (0 water, 1 food, -1 neither), (S,) the
+    value it gives (1 there is, 0 there is none), and (S, 2) the place: the source + direction x
+    distance (here 0, near half the view radius, far twice it; no distance said = near)."""
+    g = cfg.grid_size
+    is_thing = (msgs == W_WATER) | (msgs == W_FOOD)
+    thing_at, has_thing = jnp.argmax(is_thing, axis=1), jnp.any(is_thing, axis=1)
+    thing = msgs[jnp.arange(msgs.shape[0]), thing_at]
+    is_dir = (msgs >= W_DIR0) & (msgs < W_DIR0 + 8)
+    dir_at, has_dir = jnp.argmax(is_dir, axis=1), jnp.any(is_dir, axis=1)
+    d = MOVE_DELTAS[1 + jnp.clip(msgs[jnp.arange(msgs.shape[0]), dir_at] - W_DIR0, 0, 7)]
+    here = jnp.any(msgs == W_HERE, axis=1)
+    near, far = max(2, cfg.view_radius // 2), 2 * cfg.view_radius
+    dist = jnp.where(jnp.any(msgs == W_FAR, axis=1), far, near)
+    place = jnp.clip(src + jnp.where((here & ~has_dir)[:, None], 0, d * dist[:, None]), 0, g - 1)
+    channel = jnp.where(has_thing & (has_dir | here), jnp.where(thing == W_WATER, 0, 1), -1)
+    value = jnp.where(jnp.any(msgs == W_NO, axis=1), 0.0, 1.0)
+    return channel, value, place
+
+
+def comprehend(mind_map, heard, channel, value, place, cfg: EnvConfig):
+    """Each listener (row of heard (L, S)) takes in what each source it heard said: the place goes
+    into its remembered map, as heard (recency cfg.heard_recency, not consolidated)."""
+    L, S = heard.shape
+    li = jnp.broadcast_to(jnp.arange(L)[:, None], (L, S))
+    pr = jnp.broadcast_to(place[None, :, 0], (L, S))
+    pc = jnp.broadcast_to(place[None, :, 1], (L, S))
+    ch = jnp.broadcast_to(jnp.maximum(channel, 0)[None, :], (L, S))
+    ok = heard & (channel >= 0)[None, :]
+    old = mind_map[li, pr, pc]                                                 # (L, S, 4)
+    new = old.at[..., 0].set(jnp.where(ch == 0, value[None, :], old[..., 0]))
+    new = new.at[..., 1].set(jnp.where(ch == 1, value[None, :], old[..., 1]))
+    new = new.at[..., 2].set(jnp.maximum(old[..., 2], cfg.heard_recency))
+    return mind_map.at[li, pr, pc].set(jnp.where(ok[..., None], new, old))
 
 
 def heard_messages(state: State, cfg: EnvConfig) -> jnp.ndarray:
@@ -2199,6 +2277,18 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     msg = jnp.clip(msg, 0, VOCAB - 1)
     spoke_now = alive0 & (msg[:, 0] > 0)                   # first symbol 0 = staying silent
     msg = jnp.where(spoke_now[:, None], msg, 0)
+    # Writing: one's message this tick (else the last one) scratched into the ground here
+    writing = (a == WRITE) & alive0 & ~below0 if cfg.writing else jnp.zeros(n, bool)
+    text = jnp.where(spoke_now[:, None], msg, state.last_msg)
+    writing = writing & jnp.any(text > 0, axis=1)
+    wcell = jnp.where(writing[:, None], state.pos, g)                     # out of range: dropped
+    marks = state.marks.at[wcell[:, 0], wcell[:, 1]].set(text, mode="drop")
+    mark_time = state.mark_time.at[wcell[:, 0], wcell[:, 1]].set(state.t, mode="drop")
+    age_days = (state.t - mark_time) * cfg.tick_minutes / 1440.0
+    lasts = jnp.where(state.terrain == ROCK, cfg.mark_days_rock, cfg.mark_days)
+    gone = (mark_time >= 0) & (age_days > lasts)
+    marks = jnp.where(gone[..., None], 0, marks)
+    mark_time = jnp.where(gone, -1, mark_time)
     # Relationship memory: observer (row) about actor (column)
     sight_now = jnp.where(night, dark_radius(state, cfg), cfg.view_radius)  # darkness limits witnessing
     sight_now = jnp.where(below0, light0, sight_now)
@@ -2655,7 +2745,20 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     else:
         foul = state.foul
     forage_now = forage_grid(state._replace(plants=plants, flora=flora), cfg)
-    mind_map = update_mind_map(state.mind_map, pos_after, alive & ~below_after, state.terrain, forage_now, map_sight, cfg,
+    heard_map = state.mind_map
+    if cfg.language_mode == "grounded":
+        # what was said this tick is understood by those who heard it (as heard_messages: within
+        # view, on one's layer, the closest only when asleep); what is written, by those beside it
+        lp_s = layered_pos(state.pos, below0)
+        d_s = _cheb(lp_s[:, None, :], lp_s[None, :, :])
+        hear_r = jnp.where(state.asleep, 1, cfg.view_radius)
+        heard_now = spoke_now[None, :] & ~jnp.eye(n, dtype=bool) & (d_s <= hear_r[:, None]) & alive0[:, None]
+        ch, val, place = phrase_place(msg, state.pos, cfg)
+        heard_map = comprehend(heard_map, heard_now, ch, val, place, cfg)
+        can_read, at = mark_beside(state, cfg)
+        ch_r, val_r, place_r = phrase_place(state.marks[at[:, 0], at[:, 1]], at, cfg)
+        heard_map = comprehend(heard_map, jnp.eye(n, dtype=bool) & can_read[:, None], ch_r, val_r, place_r, cfg)
+    mind_map = update_mind_map(heard_map, pos_after, alive & ~below_after, state.terrain, forage_now, map_sight, cfg,
                                consolidate=deep_sleep)
 
     # ---------------------------------------------------------- novelty
@@ -2805,10 +2908,10 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     sleep_depth = jnp.where(asleep, sleep_depth, 0)
 
     outcome = jnp.select(
-        [~alive0, sleeping, relieving, resting, is_move & move_fail, is_move, winner, gathering, eating, drinking,
+        [~alive0, sleeping, relieving, writing, resting, is_move & move_fail, is_move, winner, gathering, eating, drinking,
          any_kill, hit_agent, hit_pred | hit_large | hit_small, is_strike,
          releasing, is_touch, is_select, is_place, is_mate],
-        [OUT_NONE, OUT_SLEEP, OUT_RELIEVE, OUT_REST, OUT_MOVE_FAILED, OUT_MOVE, OUT_GATHER, OUT_GATHER_LOST, OUT_EAT,
+        [OUT_NONE, OUT_SLEEP, OUT_RELIEVE, OUT_WRITE, OUT_REST, OUT_MOVE_FAILED, OUT_MOVE, OUT_GATHER, OUT_GATHER_LOST, OUT_EAT,
          OUT_DRINK, OUT_KILL, OUT_STRIKE_AGENT, OUT_STRIKE_ANIMAL, OUT_STRIKE_MISS,
          OUT_RELEASE, OUT_TOUCH, OUT_SELECT, OUT_PLACE, OUT_MATE], OUT_NONE)
 
@@ -2846,6 +2949,7 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         below=jnp.where(alive0, below_after, state.below),
         small=small, large=large, predators=predators,
         flora=flora, flora_patch=state.flora_patch, foul=foul, urge=keep(urge, state.urge),
+        marks=marks, mark_time=mark_time,
     )
     if cfg.reproduction:
         next_state, born = _give_birth(next_state, birthing, jax.random.fold_in(keys[0], 78), cfg)

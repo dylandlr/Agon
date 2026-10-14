@@ -229,3 +229,53 @@ def test_urge_is_seen_and_off_when_excretion_is_off():
     assert np.isclose(obs[0, body0 + 22], 0.42)
     off = dataclasses.replace(CFG, excretion=False)
     assert not bool(E.action_mask(s._replace(urge=jnp.full(2, 0.9)), off)[0, E.RELIEVE])
+
+
+# ---------------------------------------------------------------- grounded language and writing
+LANG = dataclasses.replace(CFG, language_mode="grounded", writing=True)
+LSTEP = jax.jit(lambda s, a, m: E.step(s, a, LANG, m))
+
+
+def _phrase(*words):
+    m = jnp.zeros(E.MSG_LEN, jnp.int32)
+    return m.at[:len(words)].set(jnp.array([E.LEXICON.index(w) for w in words]))
+
+
+def _two(s, a=(5, 5), b=(5, 7)):
+    return _calm(s)._replace(pos=jnp.array([a, b], jnp.int32), mind_map=jnp.zeros_like(s.mind_map))
+
+
+def test_a_phrase_about_water_puts_the_place_in_listeners_maps():
+    s = _two(E.reset(jax.random.PRNGKey(20), LANG))
+    msg = jnp.stack([_phrase("water", "east", "far"), _phrase()])
+    out, *_ = LSTEP(s, jnp.array([E.REST, E.REST]), msg)
+    far = 2 * LANG.view_radius
+    place = (5, min(15, 5 + far))
+    assert float(out.mind_map[1, place[0], place[1], 0]) == 1.0 and float(out.mind_map[1, place[0], place[1], 2]) > 0.5
+    # "no food far west" clears what one remembered there (out of the listener's sight: sight beats hearsay)
+    s2 = s._replace(mind_map=s.mind_map.at[1, 5, 0, 1].set(1.0).at[1, 5, 0, 2].set(1.0))
+    out, *_ = LSTEP(s2, jnp.array([E.REST, E.REST]), jnp.stack([_phrase("no", "food", "west", "far"), _phrase()]))
+    assert float(out.mind_map[1, 5, 0, 1]) == 0.0
+    # emergent mode: the same symbols mean nothing
+    emer = jax.jit(lambda st, a, m: E.step(st, a, CFG, m))
+    out, *_ = emer(s, jnp.array([E.REST, E.REST]), msg)
+    assert float(out.mind_map[1, place[0], place[1], 0]) == 0.0
+
+
+def test_writing_leaves_an_inscription_that_others_read_and_that_fades():
+    s = _two(E.reset(jax.random.PRNGKey(21), LANG), a=(5, 5), b=(12, 12))
+    msg = jnp.stack([_phrase("food", "south", "far"), _phrase()])
+    out, _, _, info = LSTEP(s, jnp.array([E.WRITE, E.REST]), msg)
+    assert int(info.outcome[0]) == E.OUT_WRITE and list(np.asarray(out.marks[5, 5])) == list(np.asarray(msg[0]))
+    # someone who later stands beside it reads it: the place enters their map, and it is in their senses
+    reader = out._replace(pos=jnp.array([[12, 12], [5, 6]], jnp.int32), last_msg=jnp.zeros_like(out.last_msg))
+    seen = np.asarray(E.read_marks(reader, LANG))[1]
+    assert seen[:E.MSG_LEN * E.VOCAB].reshape(E.MSG_LEN, E.VOCAB)[0, E.LEXICON.index("food")] == 1.0
+    after, *_ = LSTEP(reader, jnp.array([E.REST, E.REST]), jnp.zeros((2, E.MSG_LEN), jnp.int32))
+    far = 2 * LANG.view_radius                                           # out of the reader's sight
+    assert float(after.mind_map[1, min(15, 5 + far), 5, 1]) == 1.0
+    # scratched in earth, it is gone after mark_days
+    old = out._replace(t=out.t + int(LANG.mark_days * LANG.day_length) + 2)
+    if int(old.terrain[5, 5]) != E.ROCK:
+        gone, *_ = LSTEP(old, jnp.array([E.REST, E.REST]), jnp.zeros((2, E.MSG_LEN), jnp.int32))
+        assert not bool(jnp.any(gone.marks[5, 5] > 0))
