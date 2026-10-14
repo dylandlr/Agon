@@ -199,6 +199,7 @@ class State(NamedTuple):
     infection: jnp.ndarray      # (N,) int32 ticks of illness remaining
     immunity: jnp.ndarray       # (N,) in [0, 1]
     stress: jnp.ndarray         # (N,) in [0, 1]
+    clothing: jnp.ndarray       # (N,) in [0, 1]: how much of the body hides cover (EnvConfig.clothing)
     pain_aversion: jnp.ndarray  # (N,) phenotype; drifts from genotype with trauma
     weight: jnp.ndarray         # (N,) kg; rises when well fed, burns when starving
     drop_owner: jnp.ndarray     # (G, G) int32: who last dropped food on this cell (-1: nobody)
@@ -964,6 +965,8 @@ def reset(key: jax.Array, cfg: EnvConfig, genotype: gt.Genotype | None = None,
         collapsed=jnp.zeros(n, bool), body_temp=jnp.zeros(n),
         injury=jnp.zeros(n), infection=jnp.zeros(n, jnp.int32), immunity=jnp.zeros(n),
         stress=jnp.zeros(n), pain_aversion=geno.pain_aversion, genotype=geno,
+        clothing=jnp.where(founders, jax.random.uniform(jax.random.fold_in(key, 71), (n,), minval=cfg.clothing_min,
+                                                         maxval=1.0), 0.0) if cfg.clothing else jnp.zeros(n),
         weight=cfg.ideal_bmi * (cfg.base_height_cm * geno.height / 100.0) ** 2 * geno.build,
         drop_owner=jnp.full((g, g), -1, jnp.int32), drop_time=jnp.zeros((g, g), jnp.int32),
         habituation=jnp.zeros((n, n, N_HABIT)), attachment=jnp.zeros((n, n)),
@@ -1682,7 +1685,7 @@ def _give_birth(ns: State, birthing, key, cfg: EnvConfig):
             energy=put(s.energy, 1.0), health=put(s.health, 1.0), inv=put(s.inv, jnp.zeros(N_MAT)),
             hand=put(s.hand, PLANT), torch=put(s.torch, 0), age=put(s.age, 0), birth_age=put(s.birth_age, 0),
             body_temp=put(s.body_temp, 0.0), injury=put(s.injury, 0.0), infection=put(s.infection, 0),
-            immunity=put(s.immunity, 0.0), stress=put(s.stress, 0.0),
+            immunity=put(s.immunity, 0.0), stress=put(s.stress, 0.0), clothing=put(s.clothing, 0.0),   # born bare
             pain_aversion=put(s.pain_aversion, child_geno.pain_aversion[0]), genotype=geno,
             weight=put(s.weight, ideal), scars=put(s.scars, 0.0), lasting_injury=put(s.lasting_injury, 0.0),
             appearance=put(s.appearance, look), last_msg=put(s.last_msg, jnp.zeros(MSG_LEN, jnp.int32)),
@@ -2168,7 +2171,9 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         load = load - jnp.where(rained_on, cfg.rain_chill, 0.0) - cfg.snow_chill * snow_here
     huddle = jnp.minimum(jnp.sum(near & alive0[None, :], axis=1), 3)
     load = load + cfg.huddle_warmth * huddle                   # body heat of neighbors
-    body_temp = state.body_temp + cfg.thermal_rate / (geno.insulation * fx.get("insulation", 1.0)) * (load - state.body_temp)
+    # clothing keeps heat in when it is colder than comfort (and does little against heat)
+    wrap = 1.0 + cfg.clothing_insulation * state.clothing * (load < 0)
+    body_temp = state.body_temp + cfg.thermal_rate / (geno.insulation * fx.get("insulation", 1.0) * wrap) * (load - state.body_temp)
     body_temp = jnp.clip(body_temp, -1.5, 1.5)
 
     # ---------------------------------------------------------- metabolism
@@ -2685,7 +2690,7 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         age=age, alive=alive, visited=visited, mind_map=mind_map,
         body_temp=keep(body_temp, state.body_temp), injury=keep(injury, state.injury),
         infection=jnp.where(alive0, infection, state.infection),
-        immunity=keep(immunity, state.immunity), stress=keep(stress, state.stress),
+        immunity=keep(immunity, state.immunity), stress=keep(stress, state.stress), clothing=state.clothing,
         sleepiness=sleepiness, asleep=asleep, sleep_depth=sleep_depth.astype(jnp.int32), collapsed=collapsed,
         pain_aversion=keep(pain_aversion, state.pain_aversion), genotype=geno,
         weight=keep(weight, state.weight), birth_age=state.birth_age,

@@ -91,3 +91,18 @@ def test_a_kill_sates_a_predator_and_hunger_weakens_it():
             sated = True
             break
     assert sated
+
+
+def test_clothing_differs_by_founder_babies_are_bare_and_it_keeps_heat_in():
+    cfg = _calm(living_world(EnvConfig(grid_size=16, n_agents=6)))
+    s = E.reset(jax.random.PRNGKey(4), cfg)
+    c = np.asarray(s.clothing)
+    assert (c >= cfg.clothing_min).all() and (c <= 1.0).all() and len(np.unique(np.round(c, 3))) == 6
+    assert not np.asarray(E.reset(jax.random.PRNGKey(4), dataclasses.replace(cfg, clothing=False)).clothing).any()
+    # cold: the clothed one's body cools more slowly than the bare one's
+    cold = dataclasses.replace(cfg, season_temp=(-10.0,) * 4, n_agents=2)
+    s = E.reset(jax.random.PRNGKey(5), cold)
+    s = s._replace(clothing=jnp.array([1.0, 0.0]), body_temp=jnp.zeros(2), pos=jnp.stack([s.pos[0], s.pos[0]]),
+                   genotype=s.genotype._replace(insulation=jnp.ones(2)))
+    s2, _, _, _ = E.step(s, jnp.array([E.REST, E.REST]), cold)
+    assert float(s2.body_temp[0]) > float(s2.body_temp[1])
