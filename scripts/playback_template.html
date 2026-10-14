@@ -981,8 +981,13 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       if (side) {
         const ax = Math.round(cx - armW / 2);
         if (o.strike) for (let x = 0; x < armL; x++) { set(Math.round(cx) + x, Y(neck + 2), "S"); set(Math.round(cx) + x, Y(neck + 3), "d"); }
-        else if (o.act === "eat") { if (o.ph) diag(ax + 1, neck + 3, 0.45, -1, neck + 4 - mouthY, lset); else diag(ax + 1, neck + 2, 0.5, 0.4, Math.round(armL * 0.5)); }
-        else if (o.act === "reach" || o.act === "drink") diag(ax + 1, neck + 2, 0.55, 0.85, feet - neck - 2 - (o.ph ? 0 : 2));
+        else if (o.act === "eat") { if (o.ph) diag(ax + 1, neck + 3, 0.45, -1, neck + 4 - mouthY, lset);
+          else for (let x = 0; x < 4; x++) { set(ax + 1 + x, Y(neck + 3), "S"); set(ax + 1 + x, Y(neck + 4), "d"); } }   // hand held at the chest
+        else if (o.act === "reach" || o.act === "drink") {   // the arm goes out from the shoulder, then down, well clear of the body
+          const front = Math.round(cx + sh / 2) + 3, low = feet - (o.ph ? 0 : 2);
+          for (let x = ax + 1; x <= front; x++) { set(x, Y(neck + 1), "S"); set(x, Y(neck + 2), "d"); }
+          for (let y = neck + 1; y <= low; y++) { set(front, Y(y), "S"); set(front + 1, Y(y), y >= low - 1 ? "d" : "S"); }
+        }
         else if (o.act === "touch") for (let x = 0; x < Math.round(armL * (o.ph ? 0.95 : 0.7)); x++) { set(ax + 1 + x, Y(neck + 4), "S"); set(ax + 1 + x, Y(neck + 5), "d"); }
         else armCol(ax + sw, neck + 1, armL);
       } else if (o.act && !o.strike) {
