@@ -813,6 +813,19 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       if (step) { px(g, x0 - 1.5, yb - 2, "#9cc4b4", 1, 0.5); px(g, x0 + w + 0.5, yb - 1.5, "#9cc4b4", 1, 0.5); }
     }
   }
+  // standing in grass: a few blades in front of the feet, over them, swaying with the world's frame and
+  // pushed the way one walks (Mudborne's frogs sit in the grass, not on it)
+  function grassInFront(g, u, x0, yb, w, step, dir, seed) {
+    if (u.snow >= 2 || !(u.t === 0 || u.t === 1 || u.t === 5)) return;
+    const pal = u.t === 0 ? PAL.grass : u.t === 1 ? PAL.forest : PAL.tundra, wf = worldFrame(flick);
+    const lean = step ? dir : wf === 1 ? 0.5 : wf === 2 ? -0.5 : 0;
+    const n = Math.max(3, Math.round(w / 2.5));
+    for (let i = 0; i < n; i++) {
+      const bx = x0 + (i + 0.5) * (w / n) + (hash(seed, i, 61) - 0.5), h = 1.5 + Math.floor(hash(seed, i, 62) * 3) * 0.5;
+      g.fillStyle = i % 2 ? pal[3] : pal[1]; g.fillRect(bx, yb - h, 0.5, h);
+      g.fillStyle = pal[3]; g.fillRect(bx + lean * 0.5, yb - h - 0.5, 0.5, 0.5);
+    }
+  }
   function footFx(g, u, fx, fy, frac) {
     if (reduced) return;
     const ph = Math.max(0, Math.min(1, ((frac * 4) % 1)));            // within this footfall, 0..1
@@ -827,19 +840,66 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       g.fillStyle = `rgba(${dc}, ${al})`; g.fillRect(fx - 1 - rise, fy - 1, 2, 1); g.fillRect(fx + rise, fy - 1 - rise * 0.5, 1, 1);
     }
   }
-  function snowPrints(i) {                            // prints where people walked in snow, fading over ~2 hours
+  // footprints where people walked, by ground: in snow (about 2 game hours), wet sand (1 hour) and marsh
+  // mud (filling with water, 1.5 hours); a pair of prints a step, set along the way they went
+  const PRINT = { snow: [120, "150, 168, 190"], 4: [60, "176, 150, 112"], 6: [90, "70, 110, 104"] };
+  function footPrints(i) {
     const f = F[i];
-    if (!f || !f.snow || reduced) return;
-    const K = Math.min(120, Math.max(2, Math.round(120 / TM)));
-    for (let j = Math.max(1, i - K); j <= i; j++) {
-      const age = (i - j) / K, al = 0.55 * (1 - age);
+    if (!f || reduced) return;
+    const Kmax = Math.min(120, Math.max(2, Math.round(120 / TM)));
+    for (let j = Math.max(1, i - Kmax); j <= i; j++) {
       F[j].agents.forEach((a, k) => {
-        if (!a.alive || a.below || a.asleep) return;
+        if (!a.alive || a.below || a.asleep || a.downed) return;
         const p = F[j - 1].agents[k];
-        if (!p || (p.r === a.r && p.c === a.c) || +f.snow[a.r * G + a.c] < 1) return;
-        const x = a.c * P + 5 + (k % 3), y = a.r * P + 12 + ((j + k) % 2);
-        ctx.fillStyle = `rgba(150, 168, 190, ${al})`; ctx.fillRect(x, y, 1, 1); ctx.fillRect(x + 3, y + 1, 1, 1);
+        if (!p || (p.r === a.r && p.c === a.c)) return;
+        const cell = a.r * G + a.c, onSnow = f.snow && +f.snow[cell] >= 1, t = DATA.terrain[cell];
+        const kind = onSnow ? PRINT.snow : PRINT[t];
+        if (!kind) return;
+        const K = Math.max(2, Math.round(kind[0] / TM)), age = (i - j) / K;
+        if (age >= 1) return;
+        const al = 0.55 * (1 - age), dx = Math.sign(a.c - p.c), dy = Math.sign(a.r - p.r);
+        const x = a.c * P + 7 - dx * 3 + (k % 2), y = a.r * P + 12 - dy * 3;
+        ctx.fillStyle = `rgba(${kind[1]}, ${al})`;
+        ctx.fillRect(x - (dy ? 1 : 0), y - (dx ? 1 : 0), 1, 1); ctx.fillRect(x + (dy ? 1 : 0) + dx * 2, y + (dx ? 1 : 0) + dy * 2, 1, 1);
       });
+    }
+  }
+  // worn ground: where people and big animals keep treading, plants and grass give way to bare earth;
+  // traffic over the last two game days (agent-ticks, from a running sum), at four strengths
+  const WEAR_CUM = [];
+  function wearAt(i) {
+    const span = Math.max(4, Math.round(2880 / TM));
+    const cum = (j) => {
+      if (j < 0) return null;
+      if (WEAR_CUM[j]) return WEAR_CUM[j];
+      for (let q = WEAR_CUM.length; q <= j; q++) {
+        const prev = q > 0 ? WEAR_CUM[q - 1] : null, n = new Float32Array(G * G);
+        if (prev) n.set(prev);
+        F[q].agents.forEach((a) => { if (a.alive && !a.below && !a.asleep) n[a.r * G + a.c] += 1; });
+        (F[q].large || []).forEach(([r, c, , b]) => { if (!b) n[r * G + c] += 0.5; });
+        WEAR_CUM[q] = n;
+      }
+      return WEAR_CUM[j];
+    };
+    const now = cum(i), then = cum(i - span), w = new Float32Array(G * G), perHour = 60 / TM;
+    for (let q = 0; q < G * G; q++) w[q] = 1 - Math.exp(-(now[q] - (then ? then[q] : 0)) / (6 * perHour));   // ~6 hours of treading wears it
+    return w;
+  }
+  let WEAR_STAMP_ = null;
+  const wearStamps = () => WEAR_STAMP_ || (WEAR_STAMP_ = [1, 2, 3].map((lv) => {   // bare, flattened patches: more of them the more worn
+    const cv = document.createElement("canvas"); cv.width = P; cv.height = P; const g = cv.getContext("2d");
+    const rnd = rngOf(lv, 7, 3);
+    for (let n = 0; n < lv * 22; n++) { const x = Math.floor(rnd() * P), y = Math.floor(rnd() * P), long = rnd() < 0.5;
+      g.fillStyle = rnd() < 0.6 ? "#8f806c" : "#a3947c"; g.fillRect(x, y, long ? 2 : 1, 1); }
+    if (lv >= 2) { g.fillStyle = "rgba(143, 128, 108, 0.35)"; g.fillRect(3, 3, P - 6, P - 6); }
+    return cv;
+  }));
+  function wornGround(i) {
+    if (reduced) return;
+    const w = wearAt(i);
+    for (let q = 0; q < G * G; q++) {
+      const t = DATA.terrain[q]; if (w[q] < 0.25 || !(t === "0" || t === "1" || t === "5" || t === "6")) continue;
+      ctx.drawImage(wearStamps()[w[q] > 0.8 ? 2 : w[q] > 0.5 ? 1 : 0], (q % G) * P, Math.floor(q / G) * P);
     }
   }
   const SIZE_OF = (k) => { const n = ((DATA.fauna || [])[k] || {}).name; return ["mammoth", "aurochs", "horse", "bear"].includes(n) ? 1 : 0; };
@@ -1078,6 +1138,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     }
     blit(s, x + 8 - s.width / 4, y + 15 - s.height / 2 + bob);
     contactBand(g, under, x + 3, y + 15, 10, step);
+    grassInFront(g, under, x + 3, y + 15, 10, step, face === 3 ? -1 : face === 2 ? 1 : 0, k);
     if ((a.stress || 0) >= 0.6 && !reduced) {       // a tell before it breaks (ONI): a sweat drop, a dark scribble when worse
       const o = Math.floor(flick / 2) % 2;
       if (a.stress < 0.8) { px(g, x + 13.5, y + 1 + o, INKP, 2, 3); px(g, x + 14, y + 1.5 + o, "#9fd0ff", 1, 2); px(g, x + 14, y + 1.5 + o, "#ffffff", 0.5, 0.5); }
@@ -1099,10 +1160,23 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   }
   // animals: at the same density as people (half an art pixel), facing the way they last went, gliding
   // between cells and stepping as they go; each species its own build and marks
-  const QUAD = {   // len, ht, leg, head w, head h, neck: in sprite pixels (half an art pixel)
-    rabbit: [10, 7, 2, 6, 5, 1], deer: [18, 9, 8, 7, 6, 5], aurochs: [22, 12, 6, 8, 8, 1], boar: [16, 10, 4, 7, 7, 0],
-    horse: [20, 10, 8, 7, 6, 6], mammoth: [44, 28, 14, 16, 15, 0], wolf: [16, 8, 6, 7, 6, 2], "big cat": [18, 8, 6, 7, 6, 1],
-    bear: [20, 12, 5, 8, 8, 0] };
+  // Animals at their real size, on the same scale as people (175 cm = 33 sprite pixels): shoulder
+  // height and head-and-body length (cm) of the species as they lived alongside early people. Body,
+  // legs and head follow fixed shares of those. Small animals are drawn no smaller than a legibility
+  // floor (a 14-pixel body), so a rabbit or a tortoise is larger than life; everything from a wolf up is
+  // true to scale against people and each other.
+  const PX_PER_CM = 33 / 175, MIN_BODY = 14;
+  const REAL = {                       // [shoulder height, head-and-body length] in cm
+    rabbit: [22, 40], wolf: [80, 130], boar: [90, 150], deer: [120, 200], "big cat": [120, 210], bear: [130, 250],
+    horse: [135, 210], aurochs: [175, 290], mammoth: [300, 440] };
+  const NECK = { deer: 0.25, horse: 0.28 }, LEGS = { rabbit: 0.3, boar: 0.45, bear: 0.42, mammoth: 0.42 };
+  const DEPTH = { mammoth: 0.55, bear: 0.5, boar: 0.5, aurochs: 0.48 }, LEGW = { mammoth: 0.13, aurochs: 0.08, bear: 0.09, boar: 0.07 };
+  const QUAD = Object.fromEntries(Object.entries(REAL).map(([n, [H, L]]) => {
+    const s_ = PX_PER_CM, up = Math.max(1, MIN_BODY / (0.62 * L * s_));   // scale up only the small, to the floor
+    const r = (v) => Math.max(2, Math.round(v * up));
+    return [n, [r(0.62 * L * s_), r((DEPTH[n] || 0.42) * H * s_), r((LEGS[n] || 0.55) * H * s_), r(0.2 * L * s_), r(0.3 * H * s_), Math.round((NECK[n] || 0) * H * s_ * up)]];
+  }));
+  const LEG_W = (n) => Math.max(2, Math.round((LEGW[n] || 0.055) * (REAL[n] || [60])[0] * PX_PER_CM));
   function quadSprite(n, col, step) {
     const [len, ht, leg, hw, hh, neck] = QUAD[n] || [14, 8, 5, 6, 6, 1];
     const W = len + hw + 6, H = ht + leg + neck + 6;
@@ -1110,7 +1184,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       const lite = tone(col, 0.22), dark = tone(col, -0.25), darker = tone(col, -0.4);
       const x0 = 3, y0 = neck + 3, legY = y0 + ht - 2;
       // legs (far pair darker), lifting and reaching with the step
-      const s1 = step === 1 ? 1 : step === 3 ? -1 : 0, lw = n === "mammoth" ? 7 : n === "bear" || n === "aurochs" ? 3 : 2;
+      const s1 = step === 1 ? 1 : step === 3 ? -1 : 0, lw = LEG_W(n);
       [[x0 + 1 + s1, true], [x0 + 4 - s1, false], [x0 + len - 5 - s1, true], [x0 + len - 2 - lw + s1, false]].forEach(([lx, far], j) => {
         const lift = (j % 2 === 0 ? s1 : -s1) > 0 ? 1 : 0;
         px(q, lx, legY, far ? darker : dark, lw, leg + 2 - lift); px(q, lx, legY + leg + 1 - lift, INKP, lw, 1);
@@ -1141,11 +1215,13 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       if (n === "boar") { px(q, hx + hw - 2, hy + hh - 2, "#f0ead8", 2, 1); for (let i = 0; i < len - 4; i += 2) px(q, x0 + 2 + i, y0 - 1, darker, 1, 2); }
       if (n === "horse") { for (let i = 0; i < neck + 3; i++) px(q, hx - 1, hy + i, darker, 2, 1); }
       if (n === "mammoth") {                         // twice a person's height: a domed back, a long trunk, curved tusks, shaggy hair
-        px(q, x0 + len - 14, y0 - 3, col, 12, 3); px(q, x0 + len - 12, y0 - 4, lite, 8, 1);             // the hump
-        px(q, hx + hw - 4, hy + hh - 1, col, 4, leg + 6); px(q, hx + hw - 3, hy + hh - 1, lite, 1, leg + 4);   // trunk
-        px(q, hx + hw - 2, hy + hh + leg + 4, dark, 4, 2);
-        px(q, hx + hw - 8, hy + hh - 2, "#f0ead8", 3, 4); px(q, hx + hw - 6, hy + hh + 2, "#f0ead8", 3, 3);   // tusks, curving up
-        px(q, hx + hw - 3, hy + hh + 4, "#f0ead8", 3, 2); px(q, hx + hw, hy + hh + 2, "#f0ead8", 2, 3);
+        const hump = Math.round(len * 0.35), tw = Math.max(4, Math.round(hw * 0.3));
+        px(q, x0 + len - hump - 2, y0 - 4, col, hump, 4); px(q, x0 + len - hump, y0 - 5, lite, hump - 4, 1);   // the hump
+        px(q, hx + hw - tw, hy + hh - 1, col, tw, leg + 2); px(q, hx + hw - tw + 1, hy + hh - 1, lite, 1, leg);  // trunk to the ground
+        px(q, hx + hw - tw, hy + hh + leg, dark, tw, 2);
+        for (let i = 0; i < 10; i++) { const tx = hx + hw - tw - 1 + Math.round(i * 0.9), ty = hy + hh + 2 + Math.round(4 * Math.sin(i / 9 * Math.PI)) - Math.max(0, i - 6);
+          px(q, tx, ty, "#f0ead8", 2, 2); }                                                                     // a long tusk, curving down, out and up
+        for (let i = 0; i < len; i += 2) px(q, x0 + i, y0 + ht - 1, darker, 1, 3 + (i % 4 === 0 ? 2 : 0));         // long shaggy hair below
         for (let i = 0; i < len; i += 3) px(q, x0 + i, y0 + ht - 2, darker, 1, 4);                       // shaggy fringe
         for (let i = 2; i < len - 4; i += 4) px(q, x0 + i, y0 + 3 + (i % 3), dark, 1, 3); }
       if (n === "big cat") for (let i = 0; i < 5; i++) px(q, x0 + 3 + i * 3, y0 + 2 + (i % 2) * 3, darker, 1, 1);
@@ -1168,11 +1244,17 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       px(q, 2, 5, col, 10, 7); px(q, 1, 6, col, 1, 4); px(q, 9, 1, col, 5, 6); px(q, 10, 0, "#d8343a", 3, 1); px(q, 14, 3, "#e0b04a", 2, 1);
       px(q, 12, 2, INKP); px(q, 3, 6, lite, 5, 1); px(q, 3, 10, dark, 7, 1); px(q, 0, 4, tone(col, -0.35), 2, 3);
       px(q, 5 + (step === 1 ? 1 : 0), 12, "#e0b04a", 1, 4); px(q, 8 - (step === 3 ? 1 : 0), 12, "#e0b04a", 1, 4); });
-    if (n === "crocodile") return fineSprite(`A|croc|${step}`, 30, 10, (q) => {
-      px(q, 0, 4, col, 4, 2); px(q, 4, 3, col, 18, 5); px(q, 22, 4, col, 8, 3); px(q, 22, 6, dark, 8, 1);
-      for (let i = 5; i < 21; i += 3) px(q, i, 2, dark, 2, 1); px(q, 5, 3, lite, 15, 1);
-      px(q, 23, 4, "#e0d040"); px(q, 28, 5, "#e8e8d0", 1, 1); px(q, 25, 6, "#e8e8d0", 1, 1);
-      px(q, 7 + (step === 1 ? 1 : 0), 8, dark, 2, 2); px(q, 17 - (step === 3 ? 1 : 0), 8, dark, 2, 2); });
+    if (n === "crocodile") {                                // about 4 m long and 45 cm high, low to the ground
+      const L = Math.round(400 * PX_PER_CM), tail = Math.round(L * 0.45), body = Math.round(L * 0.38), head = L - tail - body;
+      return fineSprite(`A|croc|${step}`, L + 2, 12, (q) => {
+        for (let i = 0; i < tail; i++) { const t = i / tail; px(q, i, 5 + Math.round(2 * (1 - t)), col, 1, 1 + Math.round(3 * t)); if (i % 3 === 0) px(q, i, 4 + Math.round(2 * (1 - t)), dark); }
+        px(q, tail, 3, col, body, 6); px(q, tail + 1, 3, lite, body - 2, 1); px(q, tail, 8, dark, body, 1);
+        for (let i = tail + 1; i < tail + body - 1; i += 3) px(q, i, 2, dark, 2, 1);
+        px(q, tail + body, 4, col, head, 3); px(q, tail + body, 6, dark, head, 1); px(q, tail + body + 1, 3, "#e0d040");
+        for (let i = 2; i < head; i += 3) px(q, tail + body + i, 7, "#e8e8d0");
+        const s1 = step === 1 ? 1 : step === 3 ? -1 : 0;
+        [[tail + 2 + s1, 9], [tail + body - 4 - s1, 9]].forEach(([lx, ly]) => px(q, lx, ly, dark, 3, 2)); });
+    }
     if (n === "tortoise") return fineSprite(`A|tort|${step}`, 18, 12, (q) => {
       px(q, 3, 2, "#5a6a32", 10, 7); px(q, 4, 1, "#5a6a32", 8, 1); px(q, 5, 3, "#8a9a4a", 2, 2); px(q, 9, 3, "#8a9a4a", 2, 2); px(q, 7, 6, "#8a9a4a", 2, 2);
       px(q, 3, 8, "#3f4a22", 10, 1); px(q, 13, 4, col, 4, 3); px(q, 15, 4, INKP); px(q, 4 + (step % 2), 9, col, 2, 2); px(q, 10 - (step % 2), 9, col, 2, 2); });
@@ -1218,6 +1300,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     if (under && (step === 1 || step === 3) && mv && (mv.pr !== r || mv.pc !== c)) footFx(g0, under, x + 8 - w / 4 + (step === 1 ? 0 : w / 2), y + 14, POSE.frac);
     g0.drawImage(s, x + 8 - w / 2, y + 14.5 - h + lift, w, h);
     if (under && n !== "snake" && n !== "crocodile") contactBand(g0, under, Math.round(x + 8 - w * 0.4), y + 14.5, Math.round(w * 0.8), step);
+    if (under) grassInFront(g0, under, Math.round(x + 8 - w * 0.4), y + 14.5, Math.round(w * 0.8), step, face, k + 77);
   }
   // ---------- the ground, built once: woven blades, flat bare patches with grass hanging over their
   // edges, banks where land meets water, rocks, then trees in rows from the top so the lower ones stand
@@ -1414,8 +1497,14 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   // the world's ambient frame (Mudborne): every tile animates together, once a second, in the order
   // rest, lean, rest, lean the other way; only fire and torches flicker faster
   const worldFrame = (flick) => (reduced ? 0 : [0, 1, 0, 2][Math.floor(flick / 4) % 4]);
+  let OCC = new Set(), THROUGH = new Set();            // cells stood on now; cells entered this tick
   function pixGround(f, flick) {
     const wf = worldFrame(flick);
+    OCC = new Set(); THROUGH = new Set();
+    const fi = F[POSE.i], fp = POSE.i > 0 ? F[POSE.i - 1] : null;
+    (fi ? fi.agents : []).forEach((a, k) => { if (!a.alive || a.below) return; OCC.add(a.r * G + a.c);
+      const p = fp && fp.agents[k]; if (p && (p.r !== a.r || p.c !== a.c)) THROUGH.add(a.r * G + a.c); });
+    for (const grp of ["small", "large", "pred"]) ((fi && fi[grp]) || []).forEach(([r, c, , b]) => { if (!b) OCC.add(r * G + c); });
     // water sparkles that come and go with the world's frame
     if (!reduced) for (let r = 0; r < G; r++) for (let c = 0; c < G; c++) if (DATA.terrain[r * G + c] === "3" && hash(r, c, 77 + wf) < 0.22)
       px(ctx, c * P + Math.floor(hash(c, r, wf) * P), r * P + 4 + Math.floor(hash(r, c, 99 + wf) * 10), "#d8f4ee");
@@ -1429,6 +1518,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       const t = DATA.terrain[r * G + c];
       if ((t === "0" || t === "6") && hash(r, c, 401) < 0.18) {
         const x = c * P + 2 + Math.floor(hash(r, c, 402) * 11), y = c % 2 ? r * P + 9 : r * P + 4, pal = t === "0" ? PAL.grass : PAL.marsh;
+        if (OCC.has(r * G + c)) { px(ctx, x - 1, y + 4, pal[4], 4, 1); px(ctx, x, y + 3, pal[3], 3, 1); px(ctx, x + 2, y + 3, "#b6d6b0"); continue; }   // trodden flat
         px(ctx, x, y + 1, pal[4], 1, 4); px(ctx, x + 1 + sway, y, pal[3], 1, 4); px(ctx, x + 2, y + 2, pal[2], 1, 3); px(ctx, x + 1 + sway, y, "#b6d6b0");
       } else if (t === "3" && f.clouds && +f.clouds[r * G + c] >= 5 && !reduced) {
         const ph = (Math.floor(flick / 2) + Math.floor(hash(r, c, 405) * 3)) % 3, x = c * P + 3 + Math.floor(hash(r, c, 406) * 8), y = r * P + 4 + Math.floor(hash(r, c, 407) * 8);
@@ -1440,7 +1530,8 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     for (let r = 0; r < G; r++) for (let c = 0; c < G; c++) {
       const v = +f.plants[r * G + c];
       if (!v || DATA.terrain[r * G + c] === "1") continue;
-      const x = c * P + 2 + Math.floor(hash(r, c, 71) * 7), y = r * P + 7 + Math.floor(hash(r, c, 72) * 4);
+      const shake = !reduced && THROUGH.has(r * G + c) ? (flick % 2 ? 1 : -1) * (POSE.frac < 0.9 ? 1 : 0) : 0;   // brushed past
+      const x = c * P + 2 + Math.floor(hash(r, c, 71) * 7) + shake, y = r * P + 7 + Math.floor(hash(r, c, 72) * 4);
       if (v === 1) { px(ctx, x + 1, y + 2, "#2d4d4b", 1, 2); px(ctx, x, y + 1, "#6fae50"); px(ctx, x + 2, y + 1, "#6fae50"); px(ctx, x + 1, y + 1, "#8fcf62"); continue; }   // a sprout
       const w = v === 2 ? 5 : 7;
       px(ctx, x + 1, y, INKP, w - 2, 1); px(ctx, x, y + 1, INKP, w, 3); px(ctx, x + 1, y + 4, INKP, w - 2, 1);
@@ -2032,7 +2123,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     drawOverlay(f, i);
     GROUND_FRAME = f;
     if (ART === "pixel") {                           // shadows first, all on one surface, laid once
-      pixelScale(() => snowPrints(i));
+      pixelScale(() => { wornGround(i); footPrints(i); });
       if (shadowCv.width !== map.width || shadowCv.height !== map.height) { shadowCv.width = map.width; shadowCv.height = map.height; }
       shadowG.setTransform(1, 0, 0, 1, 0, 0); shadowG.clearRect(0, 0, shadowCv.width, shadowCv.height);
       SHADOW_MODE = 1;
@@ -2099,6 +2190,21 @@ const DATA = /*__PLAYBACK_DATA__*/null;
         g.beginPath(); g.moveTo(0.4, 0.42); g.lineTo(0.6, 0.42); g.lineTo(0.5, 0.6); g.closePath(); g.fillStyle = "rgba(214, 196, 255, 0.95)"; g.fill(); });
     });
     SHADOW_MODE = 0;
+    if (ART === "pixel" && !reduced) pixelScale(() => f.agents.forEach((a, k) => {   // what one's hands do to the world
+      const ty = evNow.get(k); if (!ty || !a.alive || a.below || !at[k]) return;
+      const [rr, cc] = at[k], ph = Math.min(1, frac);
+      if (ty.has("drink")) {                          // rings spreading where the water was touched
+        const w = [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [-1, 1], [1, -1], [1, 1]].find(([dr, dc]) => tAt(a.r + dr, a.c + dc) === 3);
+        if (w) { const x = (a.c + w[1]) * P + 8 - w[1] * 5, y = (a.r + w[0]) * P + 8 - w[0] * 5;
+          ctx.strokeStyle = `rgba(216, 244, 238, ${0.9 * (1 - ph)})`; ctx.lineWidth = 0.5;
+          for (const s2 of [1, 0.55]) { ctx.beginPath(); ctx.ellipse(x, y, 1 + 4 * ph * s2, 0.5 + 2 * ph * s2, 0, 0, TAU); ctx.stroke(); } }
+      }
+      if (ty.has("gather")) {                         // bits of leaf and stem flicked up from the hand
+        for (let j = 0; j < 4; j++) { const ang = hash(k, j, 9) * Math.PI, d = 2 + 5 * ph;
+          ctx.fillStyle = `rgba(${j % 2 ? "111, 174, 80" : "143, 128, 108"}, ${1 - ph})`;
+          ctx.fillRect(cc * P + 11 + Math.cos(ang) * d, rr * P + 9 - Math.sin(ang) * d + 4 * ph * ph, 1, 1); }
+      }
+    }));
     f.agents.forEach((a) => { if (a.alive && a.msg.some((m) => m > 0)) { if (ART === "pixel") pixelScale(() => pixSpeech(a)); else drawSpeech(a, a.r, a.c); } });
     // clouds: shadows where thick; rain or snow falling where thicker (rain_threshold = 5 of 9)
     if (f.clouds && overlay === "none") for (let r = 0; r < G; r++) for (let c = 0; c < G; c++) {
@@ -3384,7 +3490,8 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   }
   show(0);
   window.__agonDrawAt = (i, frac) => drawFrame(i, flick, frac);       // for checking poses in tests
-  window.__agonSprite = (o) => bodySprite(o);                          // for sprite sheets
+  window.__agonSprite = (o) => bodySprite(o);
+  window.__agonFauna = (n, step = 0) => smallSprite(n, PIX_SPRITE[n] || "#888", step);   // for size sheets                          // for sprite sheets
   window.__agonHover = (k) => { hovered = k; };                         // for checking the hover outline
   requestAnimationFrame((ts) => { last = ts; loop(ts); });
 })();
