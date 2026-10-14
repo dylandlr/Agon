@@ -50,7 +50,8 @@ SEEK_WATER, SEEK_FOOD, FLEE = SLEEP + 1, SLEEP + 2, SLEEP + 3   # 71-73: given s
 SEEK_SHELTER = SLEEP + 4                                         # 74: to known forest or cave, then rest
 N_SKILLS = 4
 DELVE = SEEK_SHELTER + 1          # 75: on a cave mouth, go down into the caves, or back up (cfg.underground)
-N_ACTIONS = DELVE + 1
+RELIEVE = DELVE + 1               # 76: relieve oneself where one stands (cfg.excretion)
+N_ACTIONS = RELIEVE + 1
 LAYER_OFF = 4096                  # added to a below agent's column in layered_pos: no one above is ever near
 
 # ---------------------------------------------------------------- materials
@@ -80,7 +81,7 @@ ACTION_NAMES = (["rest"] + [f"move_{d}" for d in _DIRS] + ["grasp", "eat", "drin
                 + [f"touch_{d}" for d in _DIRS]
                 + [f"select_{m}" for m in MAT_NAMES]
                 + [f"place_{d}" for d in _DIRS] + ["mate", "sleep", "seek_water", "seek_food", "flee", "seek_shelter"]
-                + ["delve"])
+                + ["delve", "relieve"])
 
 MOVE_DELTAS = jnp.array([[0, 0], [-1, 0], [-1, 1], [0, 1], [1, 1],
                          [1, 0], [1, -1], [0, -1], [-1, -1]], dtype=jnp.int32)
@@ -89,10 +90,10 @@ NEIGHBORS8 = MOVE_DELTAS[1:]
 # ---------------------------------------------------------------- outcomes
 (OUT_NONE, OUT_REST, OUT_MOVE, OUT_GATHER, OUT_GATHER_LOST, OUT_EAT, OUT_DRINK,
  OUT_STRIKE_MISS, OUT_STRIKE_ANIMAL, OUT_STRIKE_AGENT, OUT_KILL, OUT_MOVE_FAILED,
- OUT_RELEASE, OUT_TOUCH, OUT_TOKEN, OUT_SELECT, OUT_PLACE, OUT_MATE, OUT_SLEEP) = range(19)
+ OUT_RELEASE, OUT_TOUCH, OUT_TOKEN, OUT_SELECT, OUT_PLACE, OUT_MATE, OUT_SLEEP, OUT_RELIEVE) = range(20)
 OUTCOME_NAMES = ["none", "rest", "move", "gather", "gather_lost", "eat", "drink",
                  "strike_miss", "strike_animal", "strike_agent", "kill", "move_failed",
-                 "release", "touch", "token", "select", "place", "mate", "sleep"]
+                 "release", "touch", "token", "select", "place", "mate", "sleep", "relieve"]
 
 # Death causes: index 1.. match the damage component order in step()
 CAUSE_NAMES = ["none", "starvation", "thirst", "exhaustion", "cold", "heat",
@@ -140,7 +141,7 @@ CH_SNOW = N_TERRAIN + 16
 CH_MINERALS = N_TERRAIN + 17      # N_MINERAL_CHANNELS channels, then fauna, then the social features
 CH_FAUNA = CH_MINERALS + N_MINERAL_CHANNELS
 CH_FLORA = CH_FAUNA + N_FAUNA_CHANNELS
-OWN_FEATURES = 22 + cond.K        # own body and conditions, first in the body vector
+OWN_FEATURES = 23 + cond.K        # own body and conditions, first in the body vector
 SHARED_START = OWN_FEATURES + N_MAT + N_MAT + 1    # after inventory, hand and torch: time and weather
 N_BODY_FEATURES = OWN_FEATURES + N_MAT + N_MAT + 1 + 5 + N_WEATHER + HEARD_FEATURES
 
@@ -246,6 +247,7 @@ class State(NamedTuple):
     flora: jnp.ndarray          # (G, G, 4) standing crop of greens, fruit, nuts, roots, in food units
     flora_patch: jnp.ndarray    # (G, G, 4) how rich each patch is in each kind (fixed for the world)
     foul: jnp.ndarray           # (G, G) waste where people have stayed, person-days per km^2
+    urge: jnp.ndarray           # (N,) 0..1 need to relieve oneself (cfg.excretion)
     # animals
     small: Animals
     large: Animals
@@ -320,12 +322,15 @@ class StepInfo(NamedTuple):
     below: jnp.ndarray                 # (N,) bool: underground after this tick
     delved: jnp.ndarray                # (N,) bool: went down or came up this tick
     dark: jnp.ndarray                  # (N,) bool: below with no light where it stands (afraid, groping)
-    stress_from: jnp.ndarray           # (N, 7) stress gained this tick by source (STRESS_SOURCES)
+    stress_from: jnp.ndarray           # (N, 8) stress gained this tick by source (STRESS_SOURCES)
     downed: jnp.ndarray                # (N,) bool: down after this tick (EnvConfig.downed)
+    relieved: jnp.ndarray              # (N,) bool: relieved itself by choice (EnvConfig.excretion)
+    soiled: jnp.ndarray                # (N,) bool: could not hold it any longer
 
 
 GRAZERS = ("rabbit", "fowl", "tortoise", "deer", "aurochs", "boar", "horse", "mammoth")   # eat plants (cfg.grazing)
-STRESS_SOURCES = ("hurt", "danger", "unmet needs", "loneliness", "missing someone", "sleep debt", "darkness")
+STRESS_SOURCES = ("hurt", "danger", "unmet needs", "loneliness", "missing someone", "sleep debt", "darkness",
+                  "needing to relieve oneself")
 
 
 # ---------------------------------------------------------------- helpers
@@ -962,7 +967,7 @@ def reset(key: jax.Array, cfg: EnvConfig, genotype: gt.Genotype | None = None,
     founders = jnp.arange(n) < (cfg.n_founders if cfg.n_founders > 0 else n)
     return State(
         key=ks[8], t=jnp.int32(0), terrain=terrain, height=height, cliff=generate_cliffs(height), plants=plants,
-        flora=flora, flora_patch=flora_patch, foul=jnp.zeros((g, g)),
+        flora=flora, flora_patch=flora_patch, foul=jnp.zeros((g, g)), urge=jnp.zeros(n),
         meat=jnp.zeros((g, g)), cooked=jnp.zeros((g, g)),
         wood=jnp.where(terrain == FOREST, cfg.wood_max * jax.random.uniform(ks[10], (g, g)), 0.0),
         stones=jnp.zeros((g, g)), minerals=generate_minerals(jax.random.fold_in(key, 99), terrain, cfg) + cv["surface_minerals"],
@@ -1121,13 +1126,14 @@ def action_mask(state: State, cfg: EnvConfig) -> jnp.ndarray:
         can_delve = jnp.zeros_like(can_eat)
     skills_ok = jnp.broadcast_to(jnp.asarray(cfg.skills), (n, N_SKILLS)) & jnp.any(can_move, axis=1)[:, None] \
         & ~below[:, None]                                            # the given skills know only the surface
+    can_relieve = (state.urge >= cfg.relieve_min) if cfg.excretion else jnp.zeros_like(can_eat)
     # Sleep needs sleep pressure (the body clock lowers the bar at night); asleep, one may sleep on
     can_sleep = state.asleep | (state.sleepiness >= jnp.where(is_night(state.t, cfg), cfg.sleep_onset_night,
                                                               cfg.sleep_onset))
     mask = jnp.concatenate([jnp.ones_like(can_eat)[:, None], can_move, can_grasp[:, None],
                             can_eat[:, None], can_drink[:, None], can_strike,
                             can_release[:, None], can_touch, can_select, can_place, can_mate[:, None],
-                            can_sleep[:, None], skills_ok, can_delve[:, None]],
+                            can_sleep[:, None], skills_ok, can_delve[:, None], can_relieve[:, None]],
                            axis=1)
     dead = jnp.zeros_like(mask).at[:, REST].set(True)
     # Asleep, one can only sleep on or wake up (REST); after collapsing from exhaustion, only sleep on
@@ -1135,7 +1141,7 @@ def action_mask(state: State, cfg: EnvConfig) -> jnp.ndarray:
     asleep_row = asleep_row.at[:, REST].set(~(state.collapsed & (state.sleepiness >= cfg.sleep_wake_block)))
     mask = jnp.where(state.asleep[:, None], asleep_row, mask)
     if cfg.downed:                                                   # down: lie, eat, drink, sleep, call out
-        keep = jnp.zeros(mask.shape[1], bool).at[jnp.array([REST, GRASP, EAT, DRINK, RELEASE, SLEEP])].set(True)
+        keep = jnp.zeros(mask.shape[1], bool).at[jnp.array([REST, GRASP, EAT, DRINK, RELEASE, SLEEP, RELIEVE])].set(True)
         mask = jnp.where((downed_of(state, cfg) & ~state.asleep)[:, None], mask & keep[None, :], mask)
     return jnp.where(state.alive[:, None], mask, dead)
 
@@ -1388,7 +1394,7 @@ def observe(state: State, cfg: EnvConfig) -> jnp.ndarray:
         state.scars, state.lasting_injury, state.sex.astype(jnp.float32),
         state.gestation / (cfg.gestation_years * cfg.ticks_per_bio_year),
         state.sleepiness, state.asleep.astype(jnp.float32),
-        state.below.astype(jnp.float32)], axis=-1)                                     # (N, 22)
+        state.below.astype(jnp.float32), state.urge], axis=-1)                         # (N, 23)
     own = jnp.concatenate([own, state.conditions], axis=-1)                          # + its conditions
     feats = jnp.concatenate([own, state.inv / cfg.inventory_cap,
                              jax.nn.one_hot(state.hand, N_MAT),
@@ -2349,12 +2355,29 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         & ~jnp.eye(n, dtype=bool) & alive0[None, :]
     attached_near = jnp.minimum((state.attachment * in_view).sum(1), 1.0)
     attached_away = jnp.minimum((state.attachment * (~in_view & alive0[None, :])).sum(1), 1.0)
+    # Excretion: the urge builds with what the body processes; relieved by choice, or past full anyway
+    if cfg.excretion:
+        made = cfg.urge_rate * (0.5 + state.hydration) * jnp.where(state.asleep, cfg.urge_sleep_mult, 1.0)
+        urge_now = jnp.where(alive0, state.urge + made, state.urge)
+        relieving = (a == RELIEVE) & alive0
+        if cfg.reproduction:
+            no_control = (state.age + state.birth_age) / cfg.ticks_per_bio_year < cfg.infant_continence_years
+        else:
+            no_control = jnp.zeros(n, bool)
+        soiled = alive0 & ~relieving & ((urge_now >= 1.0) | (no_control & (urge_now >= 0.5)))
+        relieved = jnp.where(relieving | soiled, jnp.minimum(urge_now, 1.0), 0.0)
+        urge = jnp.where(relieved > 0, 0.0, jnp.minimum(urge_now, 1.0))
+        urge_stress = cfg.urge_stress * jnp.clip((urge_now - 0.7) / 0.3, 0.0, 1.0) \
+            + jnp.where(soiled & ~no_control, cfg.soil_stress, 0.0)
+    else:
+        relieving = soiled = no_control = jnp.zeros(n, bool)
+        relieved, urge, urge_stress = jnp.zeros(n), state.urge, jnp.zeros(n)
     gain = fx.get("stress_gain", 1.0)
     stress_src = jnp.stack([                       # what raised stress this tick, by source (STRESS_SOURCES)
         gain * cfg.stress_from_damage * health_loss, gain * jnp.where(pred_near, cfg.stress_from_threat, 0.0),
         gain * cfg.stress_from_need * critical, cfg.loneliness_stress * geno.social_reward * lonely,
         cfg.attach_absence * attached_away, cfg.sleep_debt_stress * jnp.clip((state.sleepiness - 0.7) / 0.3, 0.0, 1.0),
-        gain * cfg.dark_stress * dark_now * ~sleeping], axis=-1) * jnp.ones((n, 1))
+        gain * cfg.dark_stress * dark_now * ~sleeping, urge_stress], axis=-1) * jnp.ones((n, 1))
     stress = state.stress * (cfg.stress_decay - cfg.social_buffering * (1.0 - lonely)
                              - cfg.attach_calm * attached_near) \
         + cfg.attach_absence * attached_away \
@@ -2362,7 +2385,7 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
                                         + jnp.where(pred_near, cfg.stress_from_threat, 0.0) + cfg.stress_from_need * critical) \
         + cfg.loneliness_stress * geno.social_reward * lonely \
         + cfg.sleep_debt_stress * jnp.clip((state.sleepiness - 0.7) / 0.3, 0.0, 1.0) \
-        + fx.get("stress_gain", 1.0) * cfg.dark_stress * dark_now * ~sleeping \
+        + fx.get("stress_gain", 1.0) * cfg.dark_stress * dark_now * ~sleeping + urge_stress \
         - jnp.where(sleeping, cfg.sleep_stress_relief * depth, 0.0)
     stress = jnp.clip(stress, 0.0, 1.0)
     pain_aversion = state.pain_aversion + geno.temperament_drift * cfg.trauma_rate * health_loss \
@@ -2619,9 +2642,14 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     # Camp fouling: waste builds where people are and fades with time, faster in rain
     if cfg.fouling:
         days = cfg.tick_minutes / 1440.0
-        here_now = _occupancy(pos_after, alive & ~below_after, g).astype(jnp.float32)
         fade = 0.5 ** (days / cfg.foul_half_life_days * jnp.where(raining, cfg.foul_rain_mult, 1.0))
-        foul = state.foul * fade + here_now * days / eco.cell_km2(cfg)
+        if cfg.excretion:                             # waste where each relieved itself (not below ground)
+            left = jnp.where(below_after, 0.0, relieved * cfg.waste_per_urge)
+            here_now = jnp.zeros((g, g)).at[pos_after[:, 0], pos_after[:, 1]].add(left)
+            foul = state.foul * fade + here_now / eco.cell_km2(cfg)
+        else:                                         # people's refuse wherever they are
+            here_now = _occupancy(pos_after, alive & ~below_after, g).astype(jnp.float32)
+            foul = state.foul * fade + here_now * days / eco.cell_km2(cfg)
     else:
         foul = state.foul
     forage_now = forage_grid(state._replace(plants=plants, flora=flora), cfg)
@@ -2769,16 +2797,16 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     # ---------------------------------------------------------- outcomes
     any_kill = jnp.any(kills, axis=-1)
     # Waking: a sleeper is woken by being struck, attacked, burned or touched, or wakes rested
-    disturbed = struck_by_agent | attacked | burned | jnp.any(touches, axis=0) | fell
+    disturbed = struck_by_agent | attacked | burned | jnp.any(touches, axis=0) | fell | (soiled & ~no_control)
     asleep = alive & sleeping & ~disturbed & (sleepiness > 0.0)
     collapsed = asleep & (collapse | state.collapsed)
     sleep_depth = jnp.where(asleep, sleep_depth, 0)
 
     outcome = jnp.select(
-        [~alive0, sleeping, resting, is_move & move_fail, is_move, winner, gathering, eating, drinking,
+        [~alive0, sleeping, relieving, resting, is_move & move_fail, is_move, winner, gathering, eating, drinking,
          any_kill, hit_agent, hit_pred | hit_large | hit_small, is_strike,
          releasing, is_touch, is_select, is_place, is_mate],
-        [OUT_NONE, OUT_SLEEP, OUT_REST, OUT_MOVE_FAILED, OUT_MOVE, OUT_GATHER, OUT_GATHER_LOST, OUT_EAT,
+        [OUT_NONE, OUT_SLEEP, OUT_RELIEVE, OUT_REST, OUT_MOVE_FAILED, OUT_MOVE, OUT_GATHER, OUT_GATHER_LOST, OUT_EAT,
          OUT_DRINK, OUT_KILL, OUT_STRIKE_AGENT, OUT_STRIKE_ANIMAL, OUT_STRIKE_MISS,
          OUT_RELEASE, OUT_TOUCH, OUT_SELECT, OUT_PLACE, OUT_MATE], OUT_NONE)
 
@@ -2815,7 +2843,7 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         cave_floor=cave_floor,
         below=jnp.where(alive0, below_after, state.below),
         small=small, large=large, predators=predators,
-        flora=flora, flora_patch=state.flora_patch, foul=foul,
+        flora=flora, flora_patch=state.flora_patch, foul=foul, urge=keep(urge, state.urge),
     )
     if cfg.reproduction:
         next_state, born = _give_birth(next_state, birthing, jax.random.fold_in(keys[0], 78), cfg)
@@ -2850,5 +2878,5 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         small_pos=state.small.pos, large_pos=state.large.pos,
         skill=jnp.where(alive0 & (chosen >= SEEK_WATER), chosen - SEEK_WATER + 1, 0).astype(jnp.int32), collapsed_now=collapse & ~state.asleep, mated=mated, conceived=conceive, gave_birth=birthing, born=born,
         nursed=nursing, genetic_reward=genetic, below=next_state.below, delved=delving, dark=dark_now > 0,
-        stress_from=stress_src, downed=downed_of(next_state, cfg))
+        stress_from=stress_src, downed=downed_of(next_state, cfg), relieved=relieving & alive0, soiled=soiled)
     return next_state, reward, done, info

@@ -438,6 +438,12 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
             if st is not None and bool(st.alive[i]):        # up again (not dead)
                 emit(i, "stood_up")
         mem["downed"] = now_down
+    if hasattr(info, "soiled"):                             # relieved itself, by choice or not
+        for i in np.flatnonzero(np.asarray(info.relieved) | np.asarray(info.soiled)):
+            r_, c_ = int(info.pos[i, 0]), int(info.pos[i, 1])
+            near_water = st is not None and bool(np.asarray(E.adjacent_to_water(st.terrain, np.array([[r_, c_]]), cfg))[0]) \
+                if cfg is not None else False
+            emit(i, "soiled" if bool(np.asarray(info.soiled)[i]) else "relieved", beside_water=near_water)
     for k in ("fires", "cooking"):                          # only recent ones can still be causes
         if len(mem.get(k, [])) > 200:
             mem[k] = mem[k][-200:]

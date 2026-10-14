@@ -158,18 +158,20 @@ def test_grazers_eat_greens_not_roots():
 
 
 # ---------------------------------------------------------------- camp fouling
-def test_waste_builds_where_people_stay_and_fades():
-    s = _calm(E.reset(jax.random.PRNGKey(7), CFG))
+def test_without_excretion_refuse_builds_where_people_stay_and_fades():
+    cfg = dataclasses.replace(CFG, excretion=False)
+    step = jax.jit(lambda st, a: E.step(st, a, cfg))
+    s = _calm(E.reset(jax.random.PRNGKey(7), cfg))
     r, c = _cell(s, E.GRASS)
     s = s._replace(pos=s.pos.at[0].set(jnp.array([r, c])).at[1].set(jnp.array([r, c])),
                    satiety=jnp.ones(2), hydration=jnp.ones(2))
     for _ in range(10):
-        s, *_ = STEP(s, jnp.array([E.REST, E.REST]))
+        s, *_ = step(s, jnp.array([E.REST, E.REST]))
     built = float(s.foul[r, c])
     assert np.isclose(built, 2 * 10 * (CFG.tick_minutes / 1440) / eco.cell_km2(CFG), rtol=0.05)
     gone = s._replace(alive=jnp.zeros(2, bool))
     for _ in range(5):
-        gone, *_ = STEP(gone, jnp.array([E.REST, E.REST]))
+        gone, *_ = step(gone, jnp.array([E.REST, E.REST]))
     assert float(gone.foul[r, c]) < built
 
 
@@ -197,3 +199,33 @@ def test_a_patch_feeds_everyone_gathering_it_but_loose_food_goes_to_one():
     out, _, _, info = STEP(s, jnp.array([E.GRASP, E.GRASP]))
     assert float(out.inv[0, E.PLANT]) > 0 and float(out.inv[1, E.PLANT]) > 0
     assert int(info.outcome[0]) == int(info.outcome[1]) == E.OUT_GATHER
+
+
+# ---------------------------------------------------------------- excretion
+def test_urge_builds_relief_leaves_waste_and_holding_too_long_soils():
+    s = _calm(E.reset(jax.random.PRNGKey(11), CFG))
+    r, c = _cell(s, E.GRASS)
+    s = s._replace(pos=s.pos.at[0].set(jnp.array([r, c])).at[1].set(jnp.array([(r + 6) % 16, c])),
+                   satiety=jnp.ones(2), hydration=jnp.ones(2), foul=jnp.zeros_like(s.foul))
+    assert not bool(E.action_mask(s, CFG)[0, E.RELIEVE])                  # nothing to go with
+    out, *_ = STEP(s, jnp.array([E.REST, E.REST]))
+    assert float(out.urge[0]) > 0                                        # it builds
+    full = s._replace(urge=jnp.full(2, 0.6))
+    assert bool(E.action_mask(full, CFG)[0, E.RELIEVE])
+    out, _, _, info = STEP(full, jnp.array([E.RELIEVE, E.REST]))
+    assert float(out.urge[0]) == 0.0 and bool(info.relieved[0]) and int(info.outcome[0]) == E.OUT_RELIEVE
+    assert float(out.foul[r, c]) > 0                                     # waste where it went
+    # held past full: it happens anyway, stressfully
+    burst = s._replace(urge=jnp.full(2, 0.999), stress=jnp.zeros(2))
+    out, _, _, info = STEP(burst, jnp.array([E.REST, E.REST]))
+    assert bool(info.soiled[0]) and float(out.urge[0]) == 0.0 and float(out.stress[0]) > 0.05
+    assert float(info.stress_from[0, E.STRESS_SOURCES.index("needing to relieve oneself")]) > 0
+
+
+def test_urge_is_seen_and_off_when_excretion_is_off():
+    s = _calm(E.reset(jax.random.PRNGKey(12), CFG))._replace(urge=jnp.array([0.42, 0.0]))
+    obs = np.asarray(E.observe(s, CFG))
+    body0 = CFG.view_size ** 2 * E.N_OBS_CHANNELS
+    assert np.isclose(obs[0, body0 + 22], 0.42)
+    off = dataclasses.replace(CFG, excretion=False)
+    assert not bool(E.action_mask(s._replace(urge=jnp.full(2, 0.9)), off)[0, E.RELIEVE])

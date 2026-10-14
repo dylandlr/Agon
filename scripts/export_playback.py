@@ -341,7 +341,7 @@ def build_frame(t, prev, state, a, info, evs, env_cfg, n_agents, minds=None):
                 "scars": round(float(s.scars[i]), 2), "lasting_injury": round(float(s.lasting_injury[i]), 2),
                 "stress": round(float(s.stress[i]), 2), "clothing": round(float(s.clothing[i]), 2),
                 "sw": [int(round(1e4 * float(v))) for v in sf[i]] if sf[i].max() > 5e-5 else 0,
-                "asleep": bool(s.asleep[i]), "sleepiness": round(float(s.sleepiness[i]), 2),
+                "asleep": bool(s.asleep[i]), "sleepiness": round(float(s.sleepiness[i]), 2), "urge": round(float(s.urge[i]), 2),
                 "existed": bool(s.existed[i]), "sex": "female" if int(s.sex[i]) == E.FEMALE else "male",
                 "pregnant": bool(s.gestation[i] > 0), "courting": bool(s.courting[i] > 0), "mother": int(s.mother[i]),
                 "below": bool(s.below[i]), "dark": bool(np.asarray(info.dark)[i]),

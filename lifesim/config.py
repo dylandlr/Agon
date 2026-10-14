@@ -163,6 +163,19 @@ class EnvConfig:
     # risks infection: the infection chance per drink is water_infection x (1 + foul / foul_ref, at
     # most foul_max_mult). It fades with time, faster in rain. (Why foragers move camp, besides food.)
     fouling: bool = False
+    # Excretion (on in the living world): an urge builds as the body processes food and water (more
+    # when well watered, less asleep at night), relieved by RELIEVE wherever one stands, which leaves
+    # waste there (the fouling above, which then comes only from this). Past full, it happens anyway:
+    # soiling oneself is stressful and wakes a sleeper. Infants have no control. Choosing where to go
+    # (away from the water one drinks) is left to learning.
+    excretion: bool = False
+    urge_rate: float = 0.06            # per tick at 30 minutes, x (0.5 + hydration): ~4-6 reliefs a day
+    urge_sleep_mult: float = 0.4       # made more slowly asleep (the body holds it at night)
+    relieve_min: float = 0.15          # nothing to go with less than this
+    urge_stress: float = 0.01          # stress per tick at full urge (from 0.7 up)
+    soil_stress: float = 0.08          # stress from soiling oneself (per time)
+    waste_per_urge: float = 0.3        # person-days of waste in a full urge
+    infant_continence_years: float = 2.5
     foul_ref: float = 50.0             # person-days per km^2 that double the risk from water nearby
     foul_max_mult: float = 20.0
     foul_half_life_days: float = 20.0
@@ -585,7 +598,7 @@ _PER_TICK_AMOUNT = (       # added or lost per tick: x k
     "sleep_pressure", "sleep_recovery", "sleep_energy", "sleep_stress_relief", "sleep_debt_stress",
     "attach_warmth", "attach_company", "attach_coparent", "attach_nurse", "attach_shared_threat",
     "attach_absence", "attach_calm", "dark_stress", "guano_rate", "evaporation", "rain_use", "rain_drink",
-    "snow_rate", "snow_melt", "move_cost", "graze_small", "graze_large", "graze_starve", "predator_starve")
+    "snow_rate", "snow_melt", "move_cost", "graze_small", "graze_large", "graze_starve", "predator_starve", "urge_rate", "urge_stress")
 _PER_TICK_CHANCE = (       # a chance each tick: 1 - (1 - p) ** k
     "contact_infection", "mosquito_infection", "spread_prob", "lightning_prob", "predator_prey_kill_prob",
     "predator_large_kill_prob", "small_prey_respawn", "large_prey_respawn", "predator_respawn",
@@ -631,5 +644,5 @@ def living_world(cfg: "EnvConfig", **kw) -> "EnvConfig":
     """The 'living' world: biomes, dynamic weather and a 3-year climate cycle, with the downed (too
     hurt to stand) and grazing animals whose numbers follow their food."""
     import dataclasses
-    kw = {"downed": True, "grazing": True, "clothing": True, "ecology": True, "fouling": True, **kw}       # living things: the downed, and grazers that eat the land
+    kw = {"downed": True, "grazing": True, "clothing": True, "ecology": True, "fouling": True, "excretion": True, **kw}       # living things: the downed, and grazers that eat the land
     return dataclasses.replace(cfg, biomes=True, dynamic_weather=True, climate_cycle_years=3.0, **kw)

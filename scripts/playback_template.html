@@ -1409,7 +1409,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       }
     }
     const did = a.act || "", wants = a.action || "";
-    const act = did === "eat" || wants === "eat" ? "eat" : did === "drink" || wants === "drink" ? "drink"
+    const act = did === "relieve" ? "relieve" : did === "eat" || wants === "eat" ? "eat" : did === "drink" || wants === "drink" ? "drink"
       : /^(gather|release|place)/.test(did) || wants === "grasp" || wants === "release" || /^place_/.test(wants) ? "reach"
       : did === "touch" || /^touch_/.test(wants) || did === "mate" ? "touch" : "";
     const ph = act ? (POSE.live && POSE.frac < 1 && !reduced ? Math.floor(POSE.frac * 4) % 2 : 1) : 0;
@@ -2649,7 +2649,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       drink: "drank", strike_miss: `struck at the air to the ${d}`, strike_animal: `struck an animal to the ${d}`,
       strike_agent: `struck someone to the ${d}`, kill: `made a kill to the ${d}`, release: `dropped ${mat(a.hand)}`,
       touch: `touched someone to the ${d}`, select: `took ${mat(a.hand)} in hand`, place: `placed ${mat(a.hand)} to the ${d}`,
-      sleep: a.asleep ? "fell asleep" : "lay down but did not sleep",
+      sleep: a.asleep ? "fell asleep" : "lay down but did not sleep", relieve: "relieved itself",
     };
     return by[a.act] || a.act.replace(/_/g, " ");
   }
@@ -2661,6 +2661,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     rest: "chose to rest", sleep: "chose to sleep", grasp: "reached to gather", eat: "chose to eat", drink: "went to drink",
     release: "chose to drop what it held", seek_water: "set off for water it remembered", seek_food: "went looking for food it remembered",
     flee: "fled", seek_shelter: "made for shelter", mate: "sought to mate", delve: "went to the cave mouth",
+    relieve: "squatted to relieve itself",
   };
   const intentPhrase = (w) => {
     if (INTENT[w]) return INTENT[w];
@@ -2678,7 +2679,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     let s = `${who} ${intentPhrase(a.action)}`;
     const did = actionPhrase(a);
     const same = (a.act === "rest" && /^(rest)$/.test(a.action)) || (a.act === "drink" && a.action === "drink") || (a.act === "eat" && a.action === "eat")
-      || (a.act === "sleep" && a.action === "sleep" && a.asleep);
+      || (a.act === "sleep" && a.action === "sleep" && a.asleep) || (a.act === "relieve" && a.action === "relieve");
     if (!same) s += a.act === "gather_lost" ? ", but lost the scramble to someone else" : a.act === "move_failed" ? `, but stumbled and stayed put` : `: it ${did}`;
     if (a.act === "sleep" && pa && !pa.asleep) s = `${who} lay down and fell asleep`;
     s += ` ${where}`;
@@ -2696,6 +2697,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     const why = [];
     if (needs.length) why.push(`${needs[0][0]} (${needs[0][0] === "hungry" ? "food" : needs[0][0] === "thirsty" ? "water" : "energy"} at ${pct(needs[0][1])})`);
     if ((a.sleepiness || 0) > 0.6) why.push(`sleepy (${pct(a.sleepiness)})`);
+    if ((a.urge || 0) > 0.6 && a.act !== "relieve") why.push(`needing to relieve itself (${pct(a.urge)})`);
     if (a.injury > 0.2) why.push(`injured (${pct(a.injury)})`);
     if (a.sick) why.push("sick");
     if ((a.temp ?? 0) < -0.4) why.push("cold"); else if ((a.temp ?? 0) > 0.5) why.push("overheated");
@@ -2723,6 +2725,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     held_off_predator: "held off a predator with others beside it", carried_salt_with_meat: "carried salt with its meat",
     made: "", mutation: "",
     freezing: "began freezing", overheating: "began overheating",
+    relieved: "relieved itself", soiled: "could not hold it any longer and soiled itself",
   };
   const describe = (e) => {
     if (e.agent < 0) {
@@ -2755,6 +2758,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
         .concat((e.conditions || []).map((c) => `${c} (neither parent had it)`));
       s = `${who(e.agent)} was born with a mutation: ${parts.join(", ")}`;
     }
+    if ((e.type === "relieved" || e.type === "soiled") && e.beside_water) s += " beside the water (fouling what others drink)";
     if (e.type === "took_food" && e.giver !== undefined) s = `${who(e.agent)} took food ${who(e.giver)} had left`;
     if ((e.type === "freezing" || e.type === "overheating") && e.air !== undefined) s += ` (air ${e.air} C)`;
     if (e.tool && ["gather", "kill", "strike_animal", "strike_agent", "ignite", "fed_fire"].includes(e.type)) s += ` (with ${e.tool.replace(/_/g, " ")})`;
@@ -3323,6 +3327,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       ["Health", pct(a.health)], ["Height", `${a.height} cm`], ["Weight", `${a.weight} kg`], ["Strength", a.strength],
       ["Food / water / energy", `${pct(a.food)} / ${pct(a.water)} / ${pct(a.energy)}`],
       ["Sleepiness", a.sleepiness !== undefined ? pct(a.sleepiness) : null],
+      ["Needs to relieve itself", a.urge !== undefined ? `${pct(a.urge)}${a.urge >= 0.7 ? " (pressing: stressful; at 100% it happens anyway)" : ""}` : null],
       ["Body temperature", a.temp !== undefined ? `${a.temp} (0 = comfortable)` : null],
       ["Injury", pct(a.injury)], ["Lasting injury", pct(a.lasting_injury || 0)], ["Scars", pct(a.scars || 0)],
       ["Sick", a.sick ? "yes" : "no"], ["Pregnant", a.pregnant ? "yes" : null], ["Courting", a.courting ? "yes: open to mating for a few ticks" : null],
@@ -3447,13 +3452,13 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     };
     const tickEvents = (fj, only = null) => fj.events.map((id) => evById.get(id))
       .filter((e) => e && (only === null || e.agent === only || (e.by || []).includes(only) || (e.victims || []).includes(only))
-        && !/^(gather|eat|drink|release|touch|move_failed|strike_animal|fell_asleep)$/.test(e.type))
+        && !/^(gather|eat|drink|release|touch|move_failed|strike_animal|fell_asleep|relieved)$/.test(e.type))
       .forEach((e) => add(describe(e), "ev " + (/^(death|predator_attack|struck_by_agent|downed|fall|infected|starving|parched|burned)$/.test(e.type) ? "danger" : ""), "", because(e)));
     const note = $("events-note");
     if (mode === "notable") {
       note.textContent = "Deaths, blows, births, illness, fires and other turning points over the last 12 hours, newest first, with their causes.";
       const recent = [];
-      for (let j = i; j >= Math.max(0, i - 24) && recent.length < 60; j--) F[j].events.forEach((id) => { const e = evById.get(id); if (e && !/^(gather|eat|drink|release|move_failed|fell_asleep|touch)$/.test(e.type)) recent.push(e); });
+      for (let j = i; j >= Math.max(0, i - 24) && recent.length < 60; j--) F[j].events.forEach((id) => { const e = evById.get(id); if (e && !/^(gather|eat|drink|release|move_failed|fell_asleep|touch|relieved)$/.test(e.type)) recent.push(e); });
       if (!recent.length) { list.innerHTML = '<li class="empty">Nothing notable in the last 12 hours.</li>'; return; }
       recent.forEach((e) => add(describe(e), "ev", e.time.slice(-5), because(e)));
       return;

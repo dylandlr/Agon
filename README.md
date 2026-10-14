@@ -1004,9 +1004,19 @@ unit of plant food in hand, `cfg.plant_food_value` of satiety, ~4,400 kcal):
   slowly. Grazing animals eat greens and loose food, not roots.
 - **What agents see:** for each cell in view, how well each kind would gather there (four
   channels), and waste; the old plants channel and the remembered map hold the best of these.
-- **Camp fouling:** waste builds where people stay (person-days per km^2) and fades (20-day
-  half-life, faster in rain). Drinking beside it multiplies the infection chance by
-  1 + waste / 50 (at most 20). Agents can see (smell) it.
+- **Excretion** (`EnvConfig.excretion`, on in the living world): an urge builds as the body
+  processes food and water (`urge_rate` x (0.5 + hydration); 40% of that asleep at night), about
+  four to six reliefs a day. `RELIEVE` (from 15% urge) empties it where one stands and leaves
+  that much waste there (a full urge is 0.3 person-days). Past 70% the urge is stressful (a new
+  stress source); at 100% it happens anyway, wherever one is: soiling oneself adds stress and
+  wakes a sleeper. Infants under 2.5 have no control (no stress). Agents feel their own urge (a
+  body feature) and see waste on the ground; where to go, and whether to keep it away from the
+  water the band drinks, is left to learning. The log records each relief and says when it was
+  beside water.
+- **Camp fouling:** waste lies where people relieved themselves (person-days per km^2; without
+  excretion, people's refuse wherever they stay) and fades (20-day half-life, faster in rain).
+  Drinking beside it multiplies the infection chance by 1 + waste / 50 (at most 20). Agents can
+  see (smell) it.
 - **Scale consequence (why the presets' map is now 250 x 250):** at 1-minute ticks a 32 x 32 map is about 4.6 km^2. Its plants make
   about 5,600 kcal a day (mean over the year; standing crop at most ~1.7 million kcal) against
   38,400 kcal a day for the 16 people of the "society" preset: plants alone cannot feed them
