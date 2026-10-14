@@ -36,7 +36,7 @@ import jax.numpy as jnp
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from export_playback import (TEMPLATE, build_frame, knowledge_snapshot, load_population,  # noqa: E402
+from export_playback import (page_html, build_frame, knowledge_snapshot, load_population,  # noqa: E402
                              make_thinker, mind_records, world_static)
 
 from lifesim import env as E  # noqa: E402
@@ -697,7 +697,7 @@ def main():
             data["nav"] = {"index": "index.html", "prev": f"chunk_{idx - 1:03d}.html" if idx > 0 else None,
                            "next": f"chunk_{idx + 1:03d}.html", "chunk": idx}
             (out_dir / f"chunk_{idx:03d}.html").write_text(
-                TEMPLATE.read_text().replace("/*__PLAYBACK_DATA__*/null", json.dumps(data, separators=(",", ":"))))
+                page_html(data))
         summ["births_so_far"] = len(births_log)
         if args.learn:
             u = max(learn_log["updates"], 1)

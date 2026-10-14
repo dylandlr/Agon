@@ -1102,7 +1102,37 @@ world, the exporter, viability and the benchmark; 30 is the calibration).
   the recording, close kin, kin, friend for attachment of 0.3 or more without blows, rival for blows
   without attachment). The downed lie with blood beside them and a red cross above; "is down" is a
   letter.
-  **People are pawns in RimWorld's manner with our own make** (`pawnSprite`): a large round head on a
+  **People are drawn from one body model** (`scripts/body_model.js`, inlined into the page): the map
+  sprite, the figure lying down, the colonist bar, the inspector's front/side/back strip and its anatomy
+  figure, and the character creator (`scripts/character_creator.html`) all render the same rig, so they
+  always agree. The rig is built from what the simulation tracks (height, weight, build, strength, age,
+  sex, pregnancy, injury, clothing; skin, hair and beard from the genes and years), bounded to human
+  ranges (stature 45-215 cm, BMI 13-40, frame 0.8-1.25):
+  - *Segment lengths* are shares of stature (adult shares after Drillis & Contini, as tabulated in
+    Winter, *Biomechanics and Motor Control of Human Movement*): head 0.130, neck 0.052, upper arm
+    0.186, forearm 0.146, hand 0.108, thigh 0.245, shank 0.246, foot height 0.039, foot length 0.152;
+    the trunk is what remains. Head share follows growth (1/4 at birth, 1/5 at 2, 1/6 at 6, 1/7 at 12,
+    0.13 adult) and hip-joint height too (0.36 at birth to 0.53 adult).
+  - *Breadths*: shoulders 0.259 and hips 0.191 of stature, scaled by frame, sex (broader shoulders in
+    men past 13, wider hips in women), body mass (BMI) and strength; a belly when pregnant or heavy.
+  - *Poses* are joint angles (trunk lean; shoulder flexion and abduction; elbow; hip; knee). Walking
+    follows the sagittal gait curves of normal walking (hip +30 to -10 degrees, knee 15 in loading and 60
+    in swing, arms counter-swinging) by the tick's progress in eight frames; eating, drinking (a crouch),
+    reaching (a stoop to the ground), touching and striking are poses with a phase. A new action is a new
+    pose, not new art.
+  - *Rendering*: limbs are capsules, the trunk a tapered body, the head an ellipse, projected to front,
+    side or back and drawn far-to-near; every pixel knows which part it belongs to, so the inspector's
+    regions are the parts themselves. Clothing covers parts by how much the person wears. The one
+    stylisation is the head, drawn 1.55 times its measured size about the chin so faces read at map size
+    (the same for everyone; the creator can show true proportions), and no limb is drawn under 2 pixels
+    wide. At map scale 175 cm is 34 sprite pixels; the inspector renders the same rig at three times the
+    resolution (not scaled up), with the segment measurements in cm.
+  - `node tools/test_body_model.js` checks proportions, bounds, growth, poses (feet on the ground, inside
+    the canvas) and the part labels; `node tools/body_sheet.js out.png` draws a sheet of people in every
+    view and pose. The earlier hand-drawn figures remain behind `BODY_STYLE` ("pawn", "measured",
+    "colony").
+  The pixel look is now the default (the painted look is a toggle).
+  **Before the body model, people were pawns** (`pawnSprite`): a large round head on a
   simple rounded torso with arms alongside (a thin dark line between) and two legs, a two-dot face, the
   world's ink weight, flat colour with one light and one dark side; dressed in the hides the simulation
   says each wears (none, a loin wrap, a one-shoulder tunic to mid-thigh with a sinew cord in their
@@ -1326,7 +1356,8 @@ lifespans exist), and parallel or multi-tick actions.
 The code lives at [github.com/dylandlr/agon](https://github.com/dylandlr/agon). Work goes on a branch
 and into `main` by pull request; every push to a pull request runs CI (`.github/workflows/ci.yml`):
 
-- **Syntax:** every Python file byte-compiles, and the playback page's script parses (`tools/check_playback.py`).
+- **Syntax:** every Python file byte-compiles, the playback page's script parses, and the body model parses
+  and passes its tests (`tools/check_playback.py`).
 - **Tests:** the whole suite on CPU JAX with pinned versions (`requirements-ci.txt`), in four shards run
   side by side (`tools/ci_shard.py`), each with `pytest -n auto`.
 
