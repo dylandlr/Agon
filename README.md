@@ -1068,6 +1068,19 @@ world, the exporter, viability and the benchmark; 30 is the calibration).
   snow; footprints stay in snow for about two game hours. Animals likewise. **Cadence:** every ambient
   tile (swaying grass, water sparkles) shares one world frame at 1 Hz in the order rest, lean, rest,
   lean the other way; people breathe (a half-pixel rise) at under 1 Hz; only fire and torches flicker fast.
+- **The ground answers back.** People and animals stand *in* the grass: a few blades are drawn over
+  their feet, swaying with the world's frame and pushed the way they walk. Tall grass lies flat where
+  someone stands; a bush shakes when someone brushes through its cell. Footprints stay in snow (about 2
+  game hours), wet sand (1 hour) and marsh mud (1.5 hours, filling with water), set along the way they
+  went. Ground that keeps being trodden (people, and large animals at half weight, over the last two
+  game days; about six hours of treading wears it) turns to bare, flattened earth, so paths and camps
+  show. Drinking sends rings across the water; gathering flicks up bits of leaf and stem.
+- **Animals at real size**, on the people's scale (175 cm = 33 sprite pixels), from each species'
+  shoulder height and head-and-body length: wolf 80/130 cm, boar 90/150, deer 120/200, cave lion
+  120/210, cave bear 130/250, wild horse 135/210, aurochs 175/290, woolly mammoth 300/440, crocodile
+  about 4 m long; body depth, leg length and leg thickness follow per-species shares. Small animals
+  (rabbit, fowl, tortoise, fish, bat, snake) are drawn no smaller than a legibility floor (a 14-pixel
+  body), so they are larger than life; everything from a wolf up is true to scale.
 - **Depth and line of sight.** Trees, animals and people are drawn as one scene sorted by where each
   stands (each row of trees on its own strip), so a tree hides whoever stands behind it. Where a tree or
   a big animal (mammoth, aurochs, horse, bear) hides someone, the hidden part of them shows through as a
