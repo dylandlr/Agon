@@ -31,8 +31,67 @@ TEMPLATE = Path(__file__).with_name("playback_template.html")
 BODY_MODEL = Path(__file__).with_name("body_model.js")
 
 
+SLOW_FIELDS = ("plants", "flora", "clouds", "snow", "air_map", "bugs_map")
+
+
+def thin_fields(data) -> None:
+    """Per-cell fields (one character per cell) on every frame would make a RimWorld-sized map's page
+    hundreds of MB, so they are kept on every k-th frame only (at least every half hour of game time
+    on small maps; about one field-set per 4,096 cells' worth of frames on big ones). The player
+    carries each one forward to the frames between."""
+    frames, g = data.get("frames", []), int(data.get("grid", 32))
+    tick = float((data.get("consts") or {}).get("tick_minutes", 30.0))
+    k = max(1, round(30.0 / tick), -(-g * g // 4096))
+    data["field_every"] = k
+    for i, f in enumerate(frames):
+        if i % k:
+            for key in SLOW_FIELDS:
+                f.pop(key, None)
+    # Lists of cells that change little from tick to tick (wood lying, minerals, hives, mounds) are
+    # stored whole on those frames and as changes in between: "<key>~": [added or changed, removed]
+    ident = {"minerals": 3}
+    for key in DIFF_FIELDS:
+        prev = None
+        for i, f in enumerate(frames):
+            cur = f.get(key)
+            if cur is None:
+                continue
+            n = ident.get(key, 2)
+            if i % k == 0 or prev is None:
+                prev = {tuple(e[:n]): e for e in cur}
+                continue
+            now = {tuple(e[:n]): e for e in cur}
+            add = [e for kk, e in now.items() if prev.get(kk) != e]
+            gone = [list(kk) for kk in prev if kk not in now]
+            del f[key]
+            if add or gone:
+                f[key + "~"] = [add, gone]
+            prev = now
+    # what each agent remembers of the map: mostly unseen (0), so runs are written "d(count)"
+    for snap in data.get("knowledge") or []:
+        for field in ("rec", "plants"):
+            snap[field] = [rle(x) for x in snap[field]]
+    data["rle"] = True
+
+
+DIFF_FIELDS = ("wood", "minerals", "honey", "grubs")
+
+
+def rle(text: str) -> str:
+    """Runs of five or more of one digit as '<digit>(<count>)' (the player expands them)."""
+    out, i = [], 0
+    while i < len(text):
+        j = i
+        while j < len(text) and text[j] == text[i]:
+            j += 1
+        out.append(f"{text[i]}({j - i})" if j - i >= 5 else text[i] * (j - i))
+        i = j
+    return "".join(out)
+
+
 def page_html(data) -> str:
     """The playback page with its data and the body model inlined (one self-contained file)."""
+    thin_fields(data)
     return (TEMPLATE.read_text().replace("/*__BODY_MODEL__*/", BODY_MODEL.read_text())
             .replace("/*__PLAYBACK_DATA__*/null", json.dumps(data, separators=(",", ":"))))
 from lifesim import conditions as _cond  # noqa: E402

@@ -423,10 +423,10 @@ part of felt well-being.
 ## Running the experiments (Colab or HPRC)
 
 `scripts/experiment.py` runs the thesis experiments with the "society" preset
-(`lifesim/presets.py`: 16 slots, 8 founders, reproduction, survival reward, 32 x 32 world,
+(`lifesim/presets.py`: 16 slots, 8 founders, reproduction, survival reward, a RimWorld-sized 250 x 250 world
+(16.7 km across at 1-minute ticks, 280 km^2; it was 32 x 32 until the plant ecology showed 4.6 km^2 cannot feed 16),
 192-tick rollouts, caveman slate, living world, world model), identically on any machine.
-The "tribe" preset (64 slots, 24 founders, 48 x 48) is for culture at a larger scale, at about
-4.5x the compute.
+The "tribe" preset (64 slots, 24 founders, 300 x 300, 400 km^2) is for culture at a larger scale.
 
 - `validate`: the preset; without sleep-consolidated learning; the blank slate; without the world
   model; each followed by a 10-year continuous world.
@@ -1007,12 +1007,16 @@ unit of plant food in hand, `cfg.plant_food_value` of satiety, ~4,400 kcal):
 - **Camp fouling:** waste builds where people stay (person-days per km^2) and fades (20-day
   half-life, faster in rain). Drinking beside it multiplies the infection chance by
   1 + waste / 50 (at most 20). Agents can see (smell) it.
-- **Scale consequence:** at 1-minute ticks the 32 x 32 map is about 4.6 km^2. Its plants make
+- **Scale consequence (why the presets' map is now 250 x 250):** at 1-minute ticks a 32 x 32 map is about 4.6 km^2. Its plants make
   about 5,600 kcal a day (mean over the year; standing crop at most ~1.7 million kcal) against
   38,400 kcal a day for the 16 people of the "society" preset: plants alone cannot feed them
   there, which is the real arithmetic of a band that size in a village-sized area. At 5-minute
   ticks the same grid is 114 km^2 (~140,000 kcal a day); at 30-minute ticks 4,096 km^2 (~5
-  million kcal a day), plentiful but spread out, and any one cell is eaten out in weeks.
+  million kcal a day), plentiful but spread out, and any one cell is eaten out in weeks. The
+  presets now use RimWorld's default map size, 250 x 250: at 1-minute ticks 280 km^2 and about
+  340,000 kcal a day of plant food, nine times what 16 people need. Scripted competent foragers
+  on the old 32 x 32 map all starved within 12 days; on it with the old fixed-rate plants they
+  did not, because those plants made ~500 times the realistic amount per km^2.
 - The figures are order-of-magnitude estimates in the range reported for foragers'
   environments (return rates and population densities, e.g. Kelly, *The Lifeways of
   Hunter-Gatherers*, 2013), chosen so a forest supports roughly 0.2-0.5 people per km^2
@@ -1079,7 +1083,7 @@ world, the exporter, viability and the benchmark; 30 is the calibration).
   finer tick means more and shorter acts, as in a colony sim. Hard-coded rates in `env.py` go through
   `_k(cfg)`; the recorder's causal windows and every analysis read the world's own day length.
 - **Space** follows from one step per tick at walking pace: a cell is 67 m at 1-minute ticks, so a
-  32 x 32 map is a ~2 km village area, not a region. View radius 5 is ~335 m.
+  the presets' 250 x 250 map is 16.7 km across (280 km^2), a band's home range. View radius 5 is ~335 m.
 - **Learning:** gamma, gae_lambda, the patience gene and consolidation are given per 30 minutes and
   converted (`MAConfig.tick_scale`). A day (1,440 steps) no longer fits in a rollout, so sleep
   consolidation switches to a **pending change** (`consolidation="auto"` picks it whenever ticks are shorter than 30 minutes): each update computes the

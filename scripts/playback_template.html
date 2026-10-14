@@ -50,6 +50,8 @@ canvas.map {
   background: #000;
 }
 .mapwrap { position: relative; overflow: hidden; }
+#minimap { position: absolute; right: 8px; bottom: 44px; width: 150px; height: 150px; border: 2px solid #203036; border-radius: 3px;
+  image-rendering: pixelated; cursor: crosshair; box-shadow: 0 2px 8px rgba(0,0,0,.35); z-index: 3; }
 .mapwrap canvas.map { transform-origin: 0 0; will-change: transform; }
 .mapwrap.zoomed canvas.map { cursor: grab; }
 .mapwrap.dragging canvas.map { cursor: grabbing; }
@@ -387,12 +389,51 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     });
   }
   const G = DATA.grid, F = DATA.frames;
+  // The exporter keeps per-cell fields on every k-th frame and slowly changing lists as changes in
+  // between (scripts/export_playback.py thin_fields); rebuild every frame here.
+  for (let i = 1; i < F.length; i++) {
+    for (const key of ["plants", "flora", "clouds", "snow", "air_map", "bugs_map"]) if (F[i][key] === undefined && F[i - 1][key] !== undefined) F[i][key] = F[i - 1][key];
+    for (const key of ["wood", "minerals", "honey", "grubs"]) {
+      if (F[i][key] !== undefined || F[i - 1][key] === undefined) continue;
+      const d = F[i][key + "~"];
+      if (!d) { F[i][key] = F[i - 1][key]; continue; }
+      const n = key === "minerals" ? 3 : 2, id = (e) => e.slice(0, n).join(",");
+      const m = new Map(F[i - 1][key].map((e) => [id(e), e]));
+      d[1].forEach((e) => m.delete(id(e))); d[0].forEach((e) => m.set(id(e), e));
+      F[i][key] = [...m.values()]; delete F[i][key + "~"];
+    }
+  }
+  if (DATA.rle) (DATA.knowledge || []).forEach((snap) => ["rec", "plants"].forEach((fld) => {
+    snap[fld] = snap[fld].map((x) => x.replace(/(\d)\((\d+)\)/g, (_, ch, n) => ch.repeat(+n))); }));
   const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const $ = (id) => document.getElementById(id);
   const map = $("map"), ctx = map.getContext("2d");
   const xrayCv = document.createElement("canvas"), xg = xrayCv.getContext("2d"), maskCv = document.createElement("canvas"), mg = maskCv.getContext("2d");
   const pixelScale = (fn) => { ctx.save(); ctx.imageSmoothingEnabled = false; ctx.scale(T / P, T / P); fn(); ctx.restore(); };
-  map.width = G * T; map.height = G * T;
+  // ---------- the camera: the map canvas shows a window of the world, viewN() cells across from
+  // (camR, camC), so RimWorld-sized maps (250 x 250) draw only what is in view. Everything is drawn in
+  // world coordinates under the camera's translation.
+  const VIEW_LEVELS = G <= 48 ? [G, Math.ceil(G / 1.5), Math.ceil(G / 2), Math.ceil(G / 3)] : [96, 64, 44, 30, 20];
+  let zi = G <= 48 ? 0 : 2, camR = 0, camC = 0, follow = false, camReady = false;   // camReady: playback state exists
+  let VR0 = 0, VR1 = G, VC0 = 0, VC1 = G;
+  const viewN = () => Math.min(G, VIEW_LEVELS[zi]);
+  map.width = viewN() * T; map.height = viewN() * T;
+  function camClamp() { const n = viewN(); camR = Math.max(0, Math.min(G - n, camR)); camC = Math.max(0, Math.min(G - n, camC)); }
+  function camBegin(i, frac) {                       // every frame: follow, size, what is in view, the translation
+    if (follow && selected !== null && F[i] && F[i].agents[selected] && typeof placeOf === "function") {
+      const [r, c] = placeOf(F[i].agents[selected], selected, i, frac, i > 0 ? F[i - 1] : null), n = viewN();
+      camR = r + 0.5 - n / 2; camC = c + 0.5 - n / 2;
+    }
+    const n = viewN(); if (map.width !== n * T) { map.width = n * T; map.height = n * T; }
+    camClamp();
+    VR0 = Math.max(0, Math.floor(camR) - 3); VR1 = Math.min(G, Math.ceil(camR + n) + 3);
+    VC0 = Math.max(0, Math.floor(camC) - 2); VC1 = Math.min(G, Math.ceil(camC + n) + 2);
+    ctx.setTransform(1, 0, 0, 1, -Math.round(camC * P) * (T / P), -Math.round(camR * P) * (T / P));
+  }
+  const cellOfEvent = (ev) => { const b = map.getBoundingClientRect(), n = viewN();
+    return [Math.floor(camR + (ev.clientY - b.top) / b.height * n), Math.floor(camC + (ev.clientX - b.left) / b.width * n)]; };
+  const blitBase = (cv, unit) => ctx.drawImage(cv, VC0 * unit, VR0 * unit, (VC1 - VC0) * unit, (VR1 - VR0) * unit,
+                                               VC0 * unit, VR0 * unit, (VC1 - VC0) * unit, (VR1 - VR0) * unit);
   ctx.imageSmoothingEnabled = true;
   if (DATA.nav) {
     const nav = document.createElement("p");
@@ -445,7 +486,10 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   // and the things that do not move (trees, boulders, cave mouths, reeds), each inked and shadowed
   const GROUND = ["#5a7a43", "#4a6a3b", "#77736b", "#2e5274", "#bba57a", "#a7afab", "#46603f", "#77736b"];
   const terr = (r, c) => (r < 0 || c < 0 || r >= G || c >= G ? -1 : +DATA.terrain[r * G + c]);
-  const base = document.createElement("canvas"); base.width = G * T; base.height = G * T;
+  let base = null;                                  // the painted look's ground, built when first shown
+  function paintedBase() {
+  if (base) return base;
+  base = document.createElement("canvas"); base.width = G * T; base.height = G * T;
   const b = base.getContext("2d");
   for (let r = 0; r < G; r++) for (let c = 0; c < G; c++) { b.fillStyle = GROUND[terr(r, c)]; b.fillRect(c * T, r * T, T, T); }
   {                                                   // soften borders between kinds of ground
@@ -506,6 +550,8 @@ const DATA = /*__PLAYBACK_DATA__*/null;
           line(g, [[x, y + 0.12], [x + 0.02, y - 0.06]], "#6f8a3e", 0.025); ell(g, x + 0.02, y - 0.07, 0.015, 0.035, "#5a3a22", null); }
       }
     });
+  }
+  return base;
   }
 
   function biomeLegend() {
@@ -1725,14 +1771,28 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   // Each row of trees has its own strip (two rows above its own, for the tall ones), so trees take
   // their place in the y-sorted scene: whoever stands behind a tree is hidden by it.
   const TREE_UP = 2;
-  const treeRows = Array.from({ length: G }, () => null);
+  // Strips are built when a row first comes into view (a 250 x 250 map would need ~190 MB for all of
+  // them), and the least recently drawn are let go past a few hundred.
+  const treeRows = Array.from({ length: G }, () => null), hasTrees = Array.from({ length: G }, (_, r) => {
+    for (let c = 0; c < G; c++) if (tAt(r, c) === 1) return true; return false; });
+  const treeUse = new Map();
   const treeCtx = (r) => {
     if (!treeRows[r]) { const cv = document.createElement("canvas"); cv.width = G * P; cv.height = (TREE_UP + 1) * P; treeRows[r] = cv; }
     const g = treeRows[r].getContext("2d"); g.setTransform(1, 0, 0, 1, 0, -(r - TREE_UP) * P); return g;
   };
   const CROWN = new Map();
-  {
-  for (let r = 0; r < G; r++) for (let c = 0; c < G; c++) {
+  const stripBlit = (g, cv, y0) => {                  // only the part of a row's strip that is in view
+    const x0 = Math.max(0, (VC0 - 1) * P), w = Math.min(cv.width - x0, (VC1 - VC0 + 2) * P);
+    if (w > 0) g.drawImage(cv, x0, 0, w, cv.height, x0, y0, w, cv.height); };
+  function treeRow(r) {
+    if (r < 0 || r >= G || !hasTrees[r]) return null;
+    treeUse.delete(r); treeUse.set(r, true);
+    if (treeUse.size > 3 * VIEW_LEVELS[0] + 24) { const old = treeUse.keys().next().value; treeUse.delete(old); treeRows[old] = null; }
+    if (!treeRows[r]) buildTreeRow(r);
+    return treeRows[r];
+  }
+  function buildTreeRow(r) {
+  for (let c = 0; c < G; c++) {
     if (tAt(r, c) !== 1) continue;
     const pb = treeCtx(r);
     const x = c * P, y = r * P, h = (i) => hash(r, c, i + 900);
@@ -1775,15 +1835,15 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       const p = fp && fp.agents[k]; if (p && (p.r !== a.r || p.c !== a.c)) THROUGH.add(a.r * G + a.c); });
     for (const grp of ["small", "large", "pred"]) ((fi && fi[grp]) || []).forEach(([r, c, , b]) => { if (!b) OCC.add(r * G + c); });
     // water sparkles that come and go with the world's frame
-    if (!reduced) for (let r = 0; r < G; r++) for (let c = 0; c < G; c++) if (DATA.terrain[r * G + c] === "3" && hash(r, c, 77 + wf) < 0.22)
+    if (!reduced) for (let r = VR0; r < VR1; r++) for (let c = VC0; c < VC1; c++) if (DATA.terrain[r * G + c] === "3" && hash(r, c, 77 + wf) < 0.22)
       px(ctx, c * P + Math.floor(hash(c, r, wf) * P), r * P + 4 + Math.floor(hash(r, c, 99 + wf) * 10), "#d8f4ee");
-    if (f.snow) for (let r = 0; r < G; r++) for (let c = 0; c < G; c++) {
+    if (f.snow) for (let r = VR0; r < VR1; r++) for (let c = VC0; c < VC1; c++) {
       const v = +f.snow[r * G + c];
       if (v > 0) { ctx.fillStyle = `rgba(245, 248, 255, ${0.14 + 0.08 * v})`; ctx.fillRect(c * P, r * P, P, P); }
     }
     // tall grass swaying in the wind, and rain rings on water where it rains
     const sway = wf === 1 ? 1 : wf === 2 ? -1 : 0;
-    for (let r = 0; r < G; r++) for (let c = 0; c < G; c++) {
+    for (let r = VR0; r < VR1; r++) for (let c = VC0; c < VC1; c++) {
       const t = DATA.terrain[r * G + c];
       if ((t === "0" || t === "6") && hash(r, c, 401) < 0.18) {
         const x = c * P + 2 + Math.floor(hash(r, c, 402) * 11), y = c % 2 ? r * P + 9 : r * P + 4, pal = t === "0" ? PAL.grass : PAL.marsh;
@@ -1796,7 +1856,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       }
     }
     // food plants: a sprig, a bush, a bush in berry as they fill (in woods the berries hang in the trees)
-    if (f.flora) { pixFlora(f); } else for (let r = 0; r < G; r++) for (let c = 0; c < G; c++) {
+    if (f.flora) { pixFlora(f); } else for (let r = VR0; r < VR1; r++) for (let c = VC0; c < VC1; c++) {
       const v = +f.plants[r * G + c];
       if (!v || DATA.terrain[r * G + c] === "1") continue;
       const shake = !reduced && THROUGH.has(r * G + c) ? (flick % 2 ? 1 : -1) * (POSE.frac < 0.9 ? 1 : 0) : 0;   // brushed past
@@ -1831,7 +1891,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   // leaves of a tuber plant. In woods the canopy is drawn above; these are what lies or grows below it.
   function pixFlora(f) {
     const fl = f.flora;
-    for (let r = 0; r < G; r++) for (let c = 0; c < G; c++) {
+    for (let r = VR0; r < VR1; r++) for (let c = VC0; c < VC1; c++) {
       const i = r * G + c, q = [+fl[4 * i], +fl[4 * i + 1], +fl[4 * i + 2], +fl[4 * i + 3]];
       if (DATA.terrain[i] === "3" || DATA.terrain[i] === "7") continue;
       const shake = !reduced && THROUGH.has(i) ? (flick % 2 ? 1 : -1) * (POSE.frac < 0.9 ? 1 : 0) : 0;
@@ -1854,7 +1914,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     const scene = [];
     for (const [grp, dk] of [["small", 0], ["large", 4], ["pred", 9]]) {
       const raw = (F[POSE.i] && F[POSE.i][grp]) || [], mvs = animalMoves(POSE.i, grp);
-      raw.forEach(([r, c, k, b], j) => { if ((b || 0) === 0) {
+      raw.forEach(([r, c, k, b], j) => { if ((b || 0) === 0 && r >= VR0 - 2 && r < VR1 + 2 && c >= VC0 - 2 && c < VC1 + 2) {
         const mv = mvs[j];
         if (!asScene) { pixAnimal(r, c, k ?? dk, ctx, mv); return; }
         let rr = r;
@@ -1900,7 +1960,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   function buildCaveBase() {                          // painted: inked tunnels cut into dark rock
     const cv = document.createElement("canvas"); cv.width = G * T; cv.height = G * T;
     const g = cv.getContext("2d");
-    g.drawImage(base, 0, 0);                          // the land above, a faint ghost to keep one's bearings
+    g.drawImage(paintedBase(), 0, 0);                 // the land above, a faint ghost to keep one's bearings
     g.fillStyle = "rgba(14, 11, 9, 0.9)"; g.fillRect(0, 0, cv.width, cv.height);
     for (let r = 0; r < G; r++) for (let c = 0; c < G; c++) {
       const u = caveAt(r, c);
@@ -2000,7 +2060,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   }
   function drawCaveFrame(i, flick, frac) {
     const f = F[i], prev = F[i - 1];
-    if (ART === "pixel") { if (!cavePix) cavePix = buildCavePix(); ctx.save(); ctx.imageSmoothingEnabled = false; ctx.drawImage(cavePix, 0, 0, G * T, G * T); ctx.restore(); }
+    if (ART === "pixel") { if (!cavePix) cavePix = buildCavePix(); ctx.save(); ctx.imageSmoothingEnabled = false; pixelScale(() => blitBase(cavePix, P)); ctx.restore(); }
     else { if (!caveBase) caveBase = buildCaveBase(); ctx.drawImage(caveBase, 0, 0); }
     // what lies on the cave floor: ore and crystal in the walls, and whatever was left or killed here
     const nb = DATA.n_base_mat || 7, names = DATA.mat_names || [];
@@ -2039,16 +2099,18 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     });
     f.agents.forEach((a) => { if (a.below && a.alive && a.msg.some((m) => m > 0)) { if (ART === "pixel") { ctx.save(); ctx.imageSmoothingEnabled = false; ctx.scale(T / P, T / P); pixSpeech(a); ctx.restore(); } else drawSpeech(a, a.r, a.c); } });
     // darkness, broken by burning branches, by daylight at the mouths and, dimly, by what one feels
-    if (!caveDark) { caveDark = document.createElement("canvas"); caveDark.width = map.width; caveDark.height = map.height; }
+    if (!caveDark || caveDark.width !== map.width) { caveDark = document.createElement("canvas"); caveDark.width = map.width; caveDark.height = map.height; }
     const oc = caveDark.getContext("2d");
+    oc.setTransform(1, 0, 0, 1, 0, 0);
     oc.globalCompositeOperation = "source-over"; oc.clearRect(0, 0, caveDark.width, caveDark.height);
     oc.fillStyle = "rgba(4, 3, 2, 0.38)"; oc.fillRect(0, 0, caveDark.width, caveDark.height);
     oc.globalCompositeOperation = "destination-out";
+    oc.setTransform(ctx.getTransform());
     const hole = (r, c, rad, a0) => { const x = c * T + T / 2, y = r * T + T / 2, gr = oc.createRadialGradient(x, y, T * 0.2, x, y, rad);
       gr.addColorStop(0, `rgba(0,0,0,${a0})`); gr.addColorStop(1, "rgba(0,0,0,0)"); oc.fillStyle = gr; oc.fillRect(x - rad, y - rad, 2 * rad, 2 * rad); };
     f.agents.forEach((a, k) => { if (a.below && a.alive && at[k]) hole(at[k][0], at[k][1], a.torch ? (CAVES.torch_light + 0.7) * T : 1.4 * T, a.torch ? 0.95 : 0.55); });
     if (!f.night) (CAVES.mouths || []).forEach(([r, c]) => hole(r, c, 1.8 * T, 0.8));
-    ctx.drawImage(caveDark, 0, 0);
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(caveDark, 0, 0); ctx.restore();
     f.agents.forEach((a, k) => { if (a.below && a.alive && at[k]) nameTag(k, at[k][0], at[k][1], f.t); });
     drawMotes(true);
     if (selectedTile !== null) { ctx.strokeStyle = "#cf9cf2"; ctx.lineWidth = 2; ctx.strokeRect(selectedTile[1] * T - 1, selectedTile[0] * T - 1, T + 2, T + 2); }
@@ -2082,7 +2144,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
 
   // ---------- things on the ground
   function drawGround(f) {
-    for (let r = 0; r < G; r++) for (let c = 0; c < G; c++) {
+    for (let r = VR0; r < VR1; r++) for (let c = VC0; c < VC1; c++) {
       const v = +f.plants[r * G + c];
       if (v > 0) cellDraw(ctx, r, c, (g) => {          // edible plants: a low leafy patch; a full one bears berries
         const x = 0.25 + 0.5 * hash(r, c, 71), y = 0.3 + 0.5 * hash(r, c, 72);
@@ -2282,7 +2344,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   const rgba = (c, a) => `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${a})`;
   const gradientCss = (stops, lo, hi) => `linear-gradient(90deg, ${stops.map(([v, c]) => `${rgba(c, 1)} ${Math.round(100 * (v - lo) / (hi - lo))}%`).join(", ")})`;
   const cell = (r, c, col) => { ctx.fillStyle = col; ctx.fillRect(c * T, r * T, T, T); };
-  const dim = (a = 0.55) => { ctx.fillStyle = `rgba(10, 12, 22, ${a})`; ctx.fillRect(0, 0, map.width, map.height); };
+  const dim = (a = 0.55) => { ctx.fillStyle = `rgba(10, 12, 22, ${a})`; ctx.fillRect(VC0 * T, VR0 * T, (VC1 - VC0) * T, (VR1 - VR0) * T); };
   function trailCounts(i, span = 48) {
     const n = new Float32Array(G * G);
     for (let j = Math.max(0, i - span); j <= i; j++) F[j].agents.forEach((a) => { if (a.alive) n[a.r * G + a.c] += 1; });
@@ -2297,10 +2359,10 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     if (overlay === "temperature") {
       dim(0.35);
       if (!f.air_map) return;
-      for (let r = 0; r < G; r++) for (let c = 0; c < G; c++) cell(r, c, rgba(ramp(TEMP_STOPS, airAt(f, r, c)), 0.72));
+      for (let r = VR0; r < VR1; r++) for (let c = VC0; c < VC1; c++) cell(r, c, rgba(ramp(TEMP_STOPS, airAt(f, r, c)), 0.72));
     } else if (overlay === "food") {
       dim();
-      for (let r = 0; r < G; r++) for (let c = 0; c < G; c++) {
+      for (let r = VR0; r < VR1; r++) for (let c = VC0; c < VC1; c++) {
         const v = +f.plants[r * G + c];
         if (v > 0) cell(r, c, rgba([110, 200, 80], 0.22 + 0.22 * v));
       }
@@ -2316,7 +2378,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       });
     } else if (overlay === "danger") {
       dim(0.5);
-      if (f.bugs_map) for (let r = 0; r < G; r++) for (let c = 0; c < G; c++) {
+      if (f.bugs_map) for (let r = VR0; r < VR1; r++) for (let c = VC0; c < VC1; c++) {
         const v = +f.bugs_map[r * G + c];
         if (v > 0) cell(r, c, rgba([150, 90, 220], 0.07 * v));
       }
@@ -2338,17 +2400,17 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     } else if (overlay === "elevation") {
       const h = DATA.height_map, cl = DATA.cliff_map;
       if (!h) return;
-      for (let r = 0; r < G; r++) for (let c = 0; c < G; c++) {
+      for (let r = VR0; r < VR1; r++) for (let c = VC0; c < VC1; c++) {
         const v = +h[r * G + c] / 9;
         cell(r, c, rgba(ramp([[0, [40, 52, 70]], [0.5, [120, 130, 120]], [1, [235, 230, 210]]], v), 0.85));
       }
       ctx.fillStyle = "rgba(20, 20, 20, 0.55)";
-      for (let r = 0; r < G; r++) for (let c = 0; c < G; c++) {      // contour lines between height steps
+      for (let r = VR0; r < VR1; r++) for (let c = VC0; c < VC1; c++) {      // contour lines between height steps
         const v = h[r * G + c];
         if (c + 1 < G && h[r * G + c + 1] !== v) ctx.fillRect((c + 1) * T - 1, r * T, 1, T);
         if (r + 1 < G && h[(r + 1) * G + c] !== v) ctx.fillRect(c * T, (r + 1) * T - 1, T, 1);
       }
-      if (cl) for (let r = 0; r < G; r++) for (let c = 0; c < G; c++) if (+cl[r * G + c] >= 4) {
+      if (cl) for (let r = VR0; r < VR1; r++) for (let c = VC0; c < VC1; c++) if (+cl[r * G + c] >= 4) {
         ctx.strokeStyle = "rgba(255, 120, 60, 0.9)"; ctx.lineWidth = 1; ctx.strokeRect(c * T + 1.5, r * T + 1.5, T - 3, T - 3);
       }
     } else if (overlay === "trails") {
@@ -2363,7 +2425,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       const snap = knowledgeOf(selected, f.t);
       if (!snap) { dim(0.6); return; }
       const rec = snap.rec[selected], pl = snap.plants[selected];
-      for (let r = 0; r < G; r++) for (let c = 0; c < G; c++) {
+      for (let r = VR0; r < VR1; r++) for (let c = VC0; c < VC1; c++) {
         const fresh = +rec[r * G + c] / 9;
         cell(r, c, `rgba(8, 10, 20, ${fresh > 0 ? 0.55 * (1 - fresh) : 0.85})`);
         const p = +pl[r * G + c];
@@ -2405,19 +2467,21 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     return null;
   }
   function drawFrame(i, flick, frac = 1) {
+    camBegin(i, frac);
+    if (typeof drawMini === "function" && camReady) drawMini(i);
     POSE.i = i; POSE.frac = frac; POSE.live = true;
     if (CAVES && LAYER === "caves") { drawCaveFrame(i, flick, frac); POSE.live = false; return; }
     const f0 = F[i], f = surfaceView(f0), fp = i > 0 ? surfaceView(F[i - 1]) : null;
-    if (ART === "pixel") pixelScale(() => { ctx.drawImage(pixBase, 0, 0); pixGround(f, flick); });
+    if (ART === "pixel") pixelScale(() => { blitBase(pixBase, P); pixGround(f, flick); });
     else {
-      ctx.drawImage(base, 0, 0);
+      paintedBase(); blitBase(base, T);
       // water: slow light ripples
-      for (let r = 0; r < G; r++) for (let c = 0; c < G; c++) if (DATA.terrain[r * G + c] === "3") {
+      for (let r = VR0; r < VR1; r++) for (let c = VC0; c < VC1; c++) if (DATA.terrain[r * G + c] === "3") {
         const o = ((r * 7 + c * 3 + (reduced ? 0 : flick)) % 6) / 6;
         cellDraw(ctx, r, c, (g) => curve(g, [0.15 + 0.3 * o, 0.3 + 0.4 * hash(r, c, 2)], [0.35 + 0.3 * o, 0.24 + 0.4 * hash(r, c, 2)], [0.55 + 0.3 * o, 0.3 + 0.4 * hash(r, c, 2)], "rgba(190, 220, 240, 0.28)", 0.035));
       }
       // snow lying on the ground
-      if (f.snow) for (let r = 0; r < G; r++) for (let c = 0; c < G; c++) {
+      if (f.snow) for (let r = VR0; r < VR1; r++) for (let c = VC0; c < VC1; c++) {
         const v = +f.snow[r * G + c];
         if (v > 0) { ctx.fillStyle = `rgba(245, 248, 255, ${0.14 + 0.08 * v})`; ctx.fillRect(c * T, r * T, T, T); }
       }
@@ -2455,15 +2519,15 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       // canopy cutout (RuneScape, Stardew Valley): trees in front of the selected person thin out round them
       const selA = selected !== null && f.agents[selected] && f.agents[selected].alive && !f.agents[selected].below && at[selected] ? at[selected] : null;
       const cut = selA ? { x: selA[1] * P + 8, y: selA[0] * P + 8, key: selA[0] * P + 15 } : null;
-      for (let r = 0; r < G; r++) if (treeRows[r]) scene.push([r * P + 14, () => pixelScale(() => {
+      for (let r = VR0; r < Math.min(G, VR1 + TREE_UP); r++) if (treeRow(r)) scene.push([r * P + 14, () => pixelScale(() => {
         const y0 = (r - TREE_UP) * P;
         if (cut && r * P + 14 > cut.key && r * P - cut.key < (TREE_UP + 1) * P) {
           ctx.save(); ctx.beginPath(); ctx.rect(0, y0, G * P, treeRows[r].height); ctx.arc(cut.x, cut.y, 13, 0, TAU, true); ctx.clip();
-          ctx.drawImage(treeRows[r], 0, y0); ctx.restore();                    // the strip with a hole round them
+          stripBlit(ctx, treeRows[r], y0); ctx.restore();                    // the strip with a hole round them
           ctx.save(); ctx.beginPath(); ctx.arc(cut.x, cut.y, 13, 0, TAU); ctx.clip(); ctx.globalAlpha = 0.35;
-          ctx.drawImage(treeRows[r], 0, y0); ctx.restore();                    // and faint inside it
-        } else ctx.drawImage(treeRows[r], 0, y0);
-        for (let c = 0; c < G; c++) { const key = r * G + c, cr = CROWN.get(key); if (!cr) continue;
+          stripBlit(ctx, treeRows[r], y0); ctx.restore();                    // and faint inside it
+        } else stripBlit(ctx, treeRows[r], y0);
+        for (let c = VC0; c < VC1; c++) { const key = r * G + c, cr = CROWN.get(key); if (!cr) continue;
           const v = +f.plants[key]; for (let j = 0; j < v; j++) px(ctx, cr[0] + Math.floor(hash(key, j, 5) * cr[2]), cr[1] + 2 * j, "#e0434e"); }
       })]);
       f.agents.forEach((a, k) => { if (a.existed !== false) scene.push([at[k][0] * P + 15 + (a.alive && !a.asleep && !a.downed ? 0.01 : 0), agentDraw(a, k)]); });
@@ -2474,12 +2538,12 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       f.agents.forEach((a, k) => {
         if (a.existed === false || !a.alive || a.below) return;
         const ka = at[k][0] * P + 15, r0 = Math.floor(at[k][0]);
-        const trees = []; for (let r = r0; r <= Math.min(G - 1, r0 + TREE_UP + 1); r++) if (treeRows[r] && r * P + 14 > ka) trees.push(r);
+        const trees = []; for (let r = r0; r <= Math.min(G - 1, r0 + TREE_UP + 1); r++) if (treeRow(r) && r * P + 14 > ka) trees.push(r);
         const beasts = scene.filter(([key, , occ]) => occ && key > ka && Math.abs(occ.r - at[k][0]) < 3);
         if (!trees.length && !beasts.length) return;
         mg.setTransform(1, 0, 0, 1, 0, 0); mg.clearRect(0, 0, maskCv.width, maskCv.height);
         mg.setTransform(tf); mg.scale(T / P, T / P); mg.imageSmoothingEnabled = false;
-        trees.forEach((r) => mg.drawImage(treeRows[r], 0, (r - TREE_UP) * P));
+        trees.forEach((r) => stripBlit(mg, treeRows[r], (r - TREE_UP) * P));
         const sm = SHADOW_MODE; SHADOW_MODE = 2; beasts.forEach(([, , occ]) => occ.on(mg)); SHADOW_MODE = sm;
         xg.setTransform(1, 0, 0, 1, 0, 0); xg.clearRect(0, 0, xrayCv.width, xrayCv.height); xg.setTransform(tf);
         XRAY = true; drawAgent(a, DATA.agents[k], at[k][0], at[k][1], xg, k); XRAY = false;
@@ -2510,7 +2574,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     }));
     f.agents.forEach((a) => { if (a.alive && a.msg.some((m) => m > 0)) { if (ART === "pixel") pixelScale(() => pixSpeech(a)); else drawSpeech(a, a.r, a.c); } });
     // clouds: shadows where thick; rain or snow falling where thicker (rain_threshold = 5 of 9)
-    if (f.clouds && overlay === "none") for (let r = 0; r < G; r++) for (let c = 0; c < G; c++) {
+    if (f.clouds && overlay === "none") for (let r = VR0; r < VR1; r++) for (let c = VC0; c < VC1; c++) {
       const v = +f.clouds[r * G + c];
       if (v >= 3) { ctx.fillStyle = `rgba(22, 26, 44, ${0.035 * v})`; ctx.fillRect(c * T, r * T, T, T); }
       if (v >= 5) {
@@ -3555,7 +3619,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     const flickA = reduced ? 1 : 0.85 + 0.15 * Math.sin(now * 9);
     f.fire.forEach(([r, c]) => glow(r, c, T * 2.6, (0.12 + 0.3 * L) * flickA));
     f.agents.forEach((a) => { if (a.alive && a.torch && !a.below) glow(a.r, a.c, T * 1.6, (0.08 + 0.25 * L) * flickA); });
-    if (L > 0.3 && !reduced) for (let r = 0; r < G; r++) for (let c = 0; c < G; c++) {
+    if (L > 0.3 && !reduced) for (let r = VR0; r < VR1; r++) for (let c = VC0; c < VC1; c++) {
       const t = DATA.terrain[r * G + c];
       if ((t !== "1" && t !== "6") || hash(r, c, 610) > 0.1) continue;
       const ph = hash(r, c, 611) * 6.28, on = Math.sin(now * 2.2 + ph) > 0.2;
@@ -3571,8 +3635,9 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     const L = LIGHT[i] ?? (f.night ? 1 : 0);
     if (L <= 0.01 && overlay === "none") return;
     if (overlay !== "none") return;
-    if (!shadeCv) { shadeCv = document.createElement("canvas"); shadeCv.width = map.width; shadeCv.height = map.height; }
+    if (!shadeCv || shadeCv.width !== map.width) { shadeCv = document.createElement("canvas"); shadeCv.width = map.width; shadeCv.height = map.height; }
     const oc = shadeCv.getContext("2d");
+    oc.setTransform(1, 0, 0, 1, 0, 0);
     oc.globalCompositeOperation = "source-over"; oc.clearRect(0, 0, shadeCv.width, shadeCv.height);
     const dusk = 1 - Math.abs(2 * L - 1);                               // 1 at the turn of the light
     // the pixel look grades night toward violet (multiplied), the painted look shades toward blue
@@ -3580,13 +3645,16 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     oc.fillRect(0, 0, shadeCv.width, shadeCv.height);
     if (dusk > 0.05) { oc.fillStyle = `rgba(255, 130, 60, ${0.14 * dusk})`; oc.fillRect(0, 0, shadeCv.width, shadeCv.height); }
     oc.globalCompositeOperation = "destination-out";
+    oc.setTransform(ctx.getTransform());                // the glows sit in the world, under the camera
     const glow = (r, c, rad) => { const gr = oc.createRadialGradient(c * T + T / 2, r * T + T / 2, T / 3, c * T + T / 2, r * T + T / 2, rad);
       gr.addColorStop(0, "rgba(0,0,0,0.9)"); gr.addColorStop(1, "rgba(0,0,0,0)"); oc.fillStyle = gr; oc.fillRect(c * T + T / 2 - rad, r * T + T / 2 - rad, 2 * rad, 2 * rad); };
     f.fire.forEach(([r, c]) => glow(r, c, T * 2.8));
     f.agents.forEach((a) => { if (a.alive && a.torch && !a.below) glow(a.r, a.c, T * 1.8); });
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
     if (ART === "pixel") { ctx.save(); ctx.globalCompositeOperation = "multiply"; ctx.drawImage(shadeCv, 0, 0); ctx.restore();
       ctx.save(); ctx.globalAlpha = 0.35 * L; ctx.drawImage(shadeCv, 0, 0); ctx.restore(); }
     else ctx.drawImage(shadeCv, 0, 0);
+    ctx.restore();
   }
   // the portrait bar over the map, and letters down its side
   const colBar = $("colonists"), letterBox = $("letters");
@@ -3658,48 +3726,81 @@ const DATA = /*__PLAYBACK_DATA__*/null;
 
   // ---------- camera: zoom (1x, 2x, 3x: at 3x a tile is about the size of Mudborne's on screen),
   // drag to pan, wheel or -/= to zoom about the pointer, and Follow to keep the selected person centred
-  const wrap = map.parentElement, ZOOMS = [1, 1.5, 2, 3];
-  let zi = 0, panX = 0, panY = 0, follow = false, drag = null, dragged = false;
+  const wrap = map.parentElement;
+  let drag = null, dragged = false;
   function applyCam() {
-    const z = ZOOMS[zi], W = wrap.clientWidth, H = wrap.clientHeight;
-    panX = Math.min(0, Math.max(W - W * z, panX)); panY = Math.min(0, Math.max(H - H * z, panY));
-    if (z === 1) { panX = 0; panY = 0; }
-    map.style.transform = z === 1 ? "" : `translate(${panX}px, ${panY}px) scale(${z})`;
-    map.style.imageRendering = ART === "pixel" || z > 1.4 ? "pixelated" : "";
-    wrap.classList.toggle("zoomed", z > 1);
-    $("zoom-lv").textContent = `${z}\u00d7`;
+    camClamp();
+    map.style.transform = "";
+    map.style.imageRendering = ART === "pixel" || viewN() < G ? "pixelated" : "";
+    wrap.classList.toggle("zoomed", viewN() < G);
+    $("zoom-lv").textContent = G <= 48 ? `${(G / viewN()).toFixed(1).replace(/\.0$/, "")}\u00d7` : `${viewN()} cells`;
+    if (camReady) drawFrame(cur, flick, playing ? acc : 1);
   }
   function zoomTo(nz, cx, cy) {                                   // cx, cy: the point to keep still (in wrap px)
-    const W = wrap.clientWidth, H = wrap.clientHeight, oz = ZOOMS[zi];
-    cx = cx ?? W / 2; cy = cy ?? H / 2;
-    const ux = (cx - panX) / oz, uy = (cy - panY) / oz;           // the unzoomed point under the cursor
-    zi = Math.max(0, Math.min(ZOOMS.length - 1, nz));
-    const z = ZOOMS[zi]; panX = cx - ux * z; panY = cy - uy * z;
-    applyCam(); if (follow) centreOnSelected();
+    const b = map.getBoundingClientRect(), n0 = viewN();
+    const fx = cx === undefined ? 0.5 : cx / b.width, fy = cy === undefined ? 0.5 : cy / b.height;
+    const wr = camR + fy * n0, wc = camC + fx * n0;                // the world point under the cursor
+    zi = Math.max(0, Math.min(VIEW_LEVELS.length - 1, nz));
+    const n = viewN(); camR = wr - fy * n; camC = wc - fx * n;
+    applyCam();
   }
   function centreOnSelected() {
     if (selected === null || !F[cur] || !F[cur].agents[selected]) return;
-    const a = F[cur].agents[selected], z = ZOOMS[zi], W = wrap.clientWidth, H = wrap.clientHeight;
-    panX = W / 2 - (a.c + 0.5) / G * W * z; panY = H / 2 - (a.r + 0.5) / G * H * z; applyCam();
+    const a = F[cur].agents[selected], n = viewN();
+    camR = a.r + 0.5 - n / 2; camC = a.c + 0.5 - n / 2; camClamp();
   }
+  function centreOnBand() {                                       // start where the people are
+    const al = F[0].agents.filter((a) => a.alive && a.existed !== false);
+    if (!al.length) return;
+    const n = viewN();
+    camR = al.reduce((t, a) => t + a.r, 0) / al.length + 0.5 - n / 2; camC = al.reduce((t, a) => t + a.c, 0) / al.length + 0.5 - n / 2; camClamp();
+  }
+  centreOnBand();
   $("zoom-in").addEventListener("click", () => zoomTo(zi + 1));
   $("zoom-out").addEventListener("click", () => zoomTo(zi - 1));
-  $("follow").addEventListener("click", () => { follow = !follow; $("follow").setAttribute("aria-pressed", String(follow)); if (follow && zi === 0) zoomTo(2); centreOnSelected(); });
-  wrap.addEventListener("wheel", (ev) => { if (!ev.ctrlKey && !ev.metaKey) { ev.preventDefault(); const b = wrap.getBoundingClientRect(); zoomTo(zi + (ev.deltaY < 0 ? 1 : -1), ev.clientX - b.left, ev.clientY - b.top); } }, { passive: false });
-  map.addEventListener("mousedown", (ev) => { if (ZOOMS[zi] > 1) { drag = [ev.clientX, ev.clientY, panX, panY]; dragged = false; } });
+  $("follow").addEventListener("click", () => { follow = !follow; $("follow").setAttribute("aria-pressed", String(follow)); if (follow && viewN() === G) zoomTo(Math.min(2, VIEW_LEVELS.length - 1)); centreOnSelected(); applyCam(); });
+  wrap.addEventListener("wheel", (ev) => { if (!ev.ctrlKey && !ev.metaKey) { ev.preventDefault(); const b = map.getBoundingClientRect(); zoomTo(zi + (ev.deltaY < 0 ? 1 : -1), ev.clientX - b.left, ev.clientY - b.top); } }, { passive: false });
+  map.addEventListener("mousedown", (ev) => { if (viewN() < G) { drag = [ev.clientX, ev.clientY, camR, camC]; dragged = false; } });
   window.addEventListener("mousemove", (ev) => {
     if (!drag) return;
-    const dx = ev.clientX - drag[0], dy = ev.clientY - drag[1];
+    const dx = ev.clientX - drag[0], dy = ev.clientY - drag[1], b = map.getBoundingClientRect(), n = viewN();
     if (Math.abs(dx) + Math.abs(dy) > 4) { dragged = true; wrap.classList.add("dragging"); if (follow) { follow = false; $("follow").setAttribute("aria-pressed", "false"); } }
-    panX = drag[2] + dx; panY = drag[3] + dy; applyCam();
+    camR = drag[2] - dy / b.height * n; camC = drag[3] - dx / b.width * n; applyCam();
   });
   window.addEventListener("mouseup", () => { drag = null; wrap.classList.remove("dragging"); });
   map.addEventListener("click", (ev) => { if (dragged) { ev.stopImmediatePropagation(); dragged = false; } }, true);
   window.addEventListener("resize", applyCam);
+  // the overview (RimWorld's world view in miniature): the whole map, what the camera shows, and where
+  // everyone is; click or drag on it to move the camera. Shown whenever the camera shows part of the map.
+  const mini = document.createElement("canvas"); mini.id = "minimap"; mini.width = G; mini.height = G;
+  mini.title = "The whole map: the box is what the view shows. Click to look there.";
+  wrap.appendChild(mini);
+  const miniBase = document.createElement("canvas"); miniBase.width = G; miniBase.height = G;
+  { const mg2 = miniBase.getContext("2d"), PIXG = ["#5f8f6c", "#4c7a62", "#7d6f80", "#1f9e9e", "#cdb491", "#c9d3cf", "#5a7d66", "#2a2622"];
+    for (let r = 0; r < G; r++) for (let c = 0; c < G; c++) { mg2.fillStyle = PIXG[+DATA.terrain[r * G + c]] || "#555"; mg2.fillRect(c, r, 1, 1); } }
+  function drawMini(i) {
+    mini.hidden = viewN() >= G;
+    if (mini.hidden) return;
+    const g2 = mini.getContext("2d"), n = viewN();
+    g2.drawImage(miniBase, 0, 0);
+    (F[i] ? F[i].agents : []).forEach((a, k) => { if (!a.alive || a.existed === false) return;
+      g2.fillStyle = k === selected ? "#fff1d6" : hexOf(agentColour(DATA.agents[k])); g2.fillRect(a.c - 1, a.r - 1, 3, 3); });
+    g2.strokeStyle = "#fff1d6"; g2.lineWidth = Math.max(1, G / 120); g2.strokeRect(camC, camR, n, n);
+  }
+  let miniDrag = false;
+  const miniGo = (ev) => { const b = mini.getBoundingClientRect(), n = viewN();
+    camR = (ev.clientY - b.top) / b.height * G - n / 2; camC = (ev.clientX - b.left) / b.width * G - n / 2;
+    if (follow) { follow = false; $("follow").setAttribute("aria-pressed", "false"); }
+    applyCam(); };
+  mini.addEventListener("mousedown", (ev) => { ev.stopPropagation(); miniDrag = true; miniGo(ev); });
+  window.addEventListener("mousemove", (ev) => { if (miniDrag) miniGo(ev); });
+  window.addEventListener("mouseup", () => { miniDrag = false; });
+  mini.addEventListener("click", (ev) => ev.stopPropagation());
 
   // ---------- playback
   const scrub = $("scrub"); scrub.max = F.length - 1;
   let cur = 0, playing = false, flick = 0, last = 0, acc = 0;
+  camReady = true;
   let followBelow = null, prevShown = -1, lastSide = 0;
   const show = (i) => { cur = Math.max(0, Math.min(F.length - 1, i)); scrub.value = cur;
     if (CAVES) {
@@ -3806,15 +3907,13 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   map.addEventListener("mousemove", (ev) => {
     const tip = $("tip");
     {
-      const bx = map.getBoundingClientRect();
-      const c = Math.floor((ev.clientX - bx.left) / bx.width * G), r = Math.floor((ev.clientY - bx.top) / bx.height * G);
+      const [r, c] = cellOfEvent(ev);
       const here = (F[cur].agents || []).findIndex((a) => a.alive && a.existed !== false && a.r === r && a.c === c && (!CAVES || !!a.below === (LAYER === "caves")));
       const h = here >= 0 ? here : null;
       if (h !== hovered) { hovered = h; drawFrame(cur, flick, playing ? acc : 1); }
     }
     if (!$("web").checked) {
-      const bx = map.getBoundingClientRect();
-      const c = Math.floor((ev.clientX - bx.left) / bx.width * G), r = Math.floor((ev.clientY - bx.top) / bx.height * G);
+      const [r, c] = cellOfEvent(ev);
       const inMap = r >= 0 && c >= 0 && r < G && c < G;
       const v = !inMap ? null : CAVES && LAYER === "caves" ? caveValue(F[cur], r, c) : overlay !== "none" ? overlayValue(F[cur], r, c) : null;
       if (!v) { tip.hidden = true; return; }
@@ -3825,7 +3924,8 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       return;
     }
     const box = map.getBoundingClientRect();
-    const tie = tieAt((ev.clientX - box.left) / box.width * map.width, (ev.clientY - box.top) / box.height * map.height);
+    const tie = tieAt((ev.clientX - box.left) / box.width * map.width + Math.round(camC * P) * (T / P),
+                      (ev.clientY - box.top) / box.height * map.height + Math.round(camR * P) * (T / P));
     if (!tie) { tip.hidden = true; return; }
     tip.innerHTML = tieCard(tie);
     tip.hidden = false;
@@ -3848,8 +3948,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     pickRegion(ev);
   });
   map.addEventListener("click", (ev) => {
-    const box = map.getBoundingClientRect();
-    const c = Math.floor((ev.clientX - box.left) / box.width * G), r = Math.floor((ev.clientY - box.top) / box.height * G);
+    const [r, c] = cellOfEvent(ev);
     const here = F[cur].agents.map((a, k) => [a, k]).filter(([a]) => a.existed !== false && a.r === r && a.c === c
       && (!CAVES || !!a.below === (LAYER === "caves")));
     const pick = here.find(([a]) => a.alive) || here[0];
