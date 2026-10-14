@@ -694,6 +694,16 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     const [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
     return "#" + [r, g, b].map((v) => Math.round((v + m) * 255).toString(16).padStart(2, "0")).join(""); };
   const toward = (h, target, k) => { let d = ((target - h + 540) % 360) - 180; return (h + d * k + 360) % 360; };
+  // skin: shade by darkening along the skin's own hue, a little less saturated (skin shadows go brown,
+  // not red or violet: a hue-shifted ramp made bodies look raw)
+  function fleshRamp(base) {
+    const [h, s, l] = hsl(base), hh = toward(h, 28, 0.3);
+    return [hex(hh, s * 0.9, l + 0.07), base, hex(hh, s * 0.85, l - 0.09), hex(hh, s * 0.7, l - 0.2)];
+  }
+  function hairRamp(base) {                           // hair: lighter and darker in its own hue
+    const [h, s, l] = hsl(base);
+    return [hex(h, s * 0.9, l + 0.1), base, hex(h, s, l - 0.09), hex(h, s, l - 0.2)];
+  }
   function skinRamp(base) {                                           // [light, mid, shade, deep]
     const [h, s, l] = hsl(base);
     return [hex(toward(h, 50, 0.15), s * 0.95, l + 0.11), base, hex(toward(h, 275, 0.12), Math.min(1, s * 1.05 + 0.05), l - 0.12),
@@ -923,7 +933,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   const LEG_SHARE = [[0, 0.38], [6, 0.44], [18, 0.47]];
   function bodySprite(o) {
     const key = ["B", o.k, o.sk, o.hr, o.tex, o.hairLen > 8, o.beard, o.sex, o.preg, o.hq, o.bq, o.fq, o.mq, o.yq, o.iq, o.cq,
-                 o.gq, o.wq, o.tint, o.held, o.face, o.step, o.strike, o.act || "", o.ph || 0].join("|");
+                 o.gq, o.wq, o.tint, o.held, o.face, o.step, o.strike, o.act || "", o.ph || 0, o.style || BODY_STYLE].join("|");
     const Wc = 28, Hc = 40;
     return fineSprite(key, Wc, Hc, (q) => {
       const buf = Array.from({ length: Hc }, () => Array(Wc).fill("."));
@@ -933,7 +943,9 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       const years = o.yq, adult = years >= 13;
       const stature = Math.max(0.33, Math.min(1.15, o.hq / 175));
       const figH = Math.round(33 * stature);
-      const headF = Math.max(0.3, Math.min(0.44, 0.15 + 1.15 * lerpTab(HEAD_SHARE, years)));
+      const colony = (o.style || BODY_STYLE) === "colony";      // colony: fuller limbs, a bigger head, legs joined at the top
+      const headF = colony ? Math.max(0.36, Math.min(0.5, 0.21 + 1.15 * lerpTab(HEAD_SHARE, years)))
+                           : Math.max(0.3, Math.min(0.44, 0.15 + 1.15 * lerpTab(HEAD_SHARE, years)));
       const headH = Math.max(6, Math.round(figH * headF)), headW = Math.max(6, Math.round(headH * 0.92));
       const legH = Math.max(2, Math.round(figH * lerpTab(LEG_SHARE, years) * 0.8));
       const torsoH = Math.max(3, figH - headH - legH + 2);                           // the head overlaps the neck by 2
@@ -951,11 +963,13 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       const bob = o.step === 1 || o.step === 3 ? 1 : 0;
       const Y = (y) => y - bob;
       // legs: two columns; the lifted one a pixel shorter; in profile they part as it walks
-      const legW = Math.max(2, Math.round(hip * (side ? 0.6 : 0.42)));
+      const legW = colony ? Math.max(3, Math.round(hip * (side ? 0.75 : 0.5))) : Math.max(2, Math.round(hip * (side ? 0.6 : 0.42)));
       const lifted = (n) => (o.step === 1 && n === 0) || (o.step === 3 && n === 1) ? 1 : 0;
       const legCol = (lx, n) => { for (let y = crotch; y <= feet - lifted(n); y++) for (let x = 0; x < legW; x++)
         set(lx + x, Y(y) + lifted(n) * 0, x === legW - 1 ? "d" : "S"); set(lx, Y(feet - lifted(n)), "D"); set(lx + legW - 1, Y(feet - lifted(n)), "D"); };
       if (side) { const sp = o.step === 1 ? 2 : o.step === 3 ? -2 : 0; legCol(Math.round(cx - legW / 2 - sp), 1); legCol(Math.round(cx - legW / 2 + sp), 0); }
+      else if (colony) { legCol(Math.round(cx - legW), 0); legCol(Math.round(cx), 1);           // one mass, parted below the knee
+        for (let y = crotch + Math.round(legH * 0.45); y < feet; y++) set(Math.round(cx) - 0.5, Y(y), "d"); }
       else { const gap = hip >= 7 ? 1 : 0; legCol(Math.round(cx - gap / 2 - legW), 0); legCol(Math.round(cx + gap / 2), 1); }
       // torso: shoulders to waist to hips, rounded at the shoulders; a belly when pregnant
       for (let y = neck; y <= crotch; y++) {
@@ -971,7 +985,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
           else if (Math.abs(y - by) <= 1) { let x0 = 0; while (x0 < Wc && at(x0, Y(y)) === ".") x0++; let x1 = Wc - 1; while (x1 > 0 && at(x1, Y(y)) === ".") x1--;
             if (x1 > x0) { set(x0 - 1, Y(y), "s"); set(x1 + 1, Y(y), "d"); } } } }
       // arms: thin, from the shoulders to mid-thigh, swinging against the legs; one raised to strike
-      const armW = Math.max(1, Math.round(sh * (side ? 0.3 : 0.17))), armL = Math.round(figH * 0.36);
+      const armW = colony ? Math.max(2, Math.round(sh * (side ? 0.38 : 0.26))) : Math.max(1, Math.round(sh * (side ? 0.3 : 0.17))), armL = Math.round(figH * 0.36);
       const sw = o.step === 1 ? 1 : o.step === 3 ? -1 : 0;
       const armCol = (ax, y0, len) => { for (let y = y0; y < y0 + len; y++) for (let x = 0; x < armW; x++) set(ax + x, Y(y), y >= y0 + len - 2 || (armW > 1 && x === armW - 1) ? "d" : "S"); };
       const late = [], lset = (x, y, ch) => late.push([x, y, ch]);     // drawn after the head (a hand at the mouth)
@@ -1064,7 +1078,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       // yellows when sick, blues when cold, flushes when overheated
       const tintTo = { sick: "#a8b070", cold: "#8ea4cc", hot: "#e0705a" }[o.tint];
       late.forEach(([x, y, ch]) => set(x, y, ch));
-      const SK = skinRamp(tintTo ? mixHex(o.sk, tintTo, { sick: 0.2, cold: 0.15, hot: 0.18 }[o.tint]) : o.sk), HR = skinRamp(mixHex(o.hr, "#cfcfcf", o.gq));
+      const SK = fleshRamp(tintTo ? mixHex(o.sk, tintTo, { sick: 0.2, cold: 0.15, hot: 0.18 }[o.tint]) : o.sk), HR = hairRamp(mixHex(o.hr, "#cfcfcf", o.gq));
       const ITEM = { wood: ["#8a5a36", "#5a3b26"], stone: ["#9a94a4", "#6c6678"], plant: ["#6fae50", "#3f7f3e"], raw_meat: ["#d0484a", "#8a2a2a"],
         cooked_meat: ["#b07040", "#6a4020"], honey: ["#f0b030", "#b07a16"], grubs: ["#f0e6c8", "#c8b890"] }[o.held] || ["#8aa0b8", "#5a6a80"];
       const C = { s: SK[0], S: SK[1], d: SK[2], D: SK[3], h: HR[0], H: HR[1], k: HR[3], E: "#1c2229", R: "#8a2a2a", C: mixHex(SK[0], "#ffffff", 0.35),
@@ -1076,6 +1090,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   // tree or a big animal stands in front of someone, the hidden part of them shows as a faint fill with
   // a light outline in their own colour, and only there; what can be seen is drawn as it is.
   let XRAY = false, GRAB = null, FACE_OVERRIDE = null;
+  let BODY_STYLE = "measured";                        // measured | colony (see bodySprite)
   const BOX = new WeakMap();
   function opaqueBox(s) {                              // the bounding box of a sprite's drawn pixels
     let b = BOX.get(s); if (b) return b;
@@ -1110,7 +1125,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       const s = fineSprite(`lieB|${k}|${dead}|${sk}|${hr}|${col}|${L.tex}`, 30, 14, (q) => {
         // lying on its side, in the standing figure's style: the rounded body, the round head, eyes shut
         const grey = (c) => (dead ? mixHex(c, "#9a9a9a", 0.75) : c);
-        const SK = skinRamp(grey(sk)), HR = skinRamp(grey(hr)), AP = SK;     // no clothes: the body is skin
+        const SK = fleshRamp(grey(sk)), HR = hairRamp(grey(hr)), AP = SK;     // no clothes: the body is skin
         for (let y = 0; y < 8; y++) for (let x = 0; x < 16; x++) {           // body, head to the right
           const inset = (y === 0 || y === 7 ? 2 : y === 1 || y === 6 ? 1 : 0); if (x < inset || x >= 16 - inset) continue;
           px(q, x + 2, y + 4, y >= 6 ? AP[2] : y <= 1 ? AP[0] : AP[1]);
