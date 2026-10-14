@@ -147,6 +147,13 @@ class EnvConfig:
     # Down (RimWorld's "downed"): past these one cannot stand. One lies where one fell and can only
     # rest, sleep, call out, drink if water is beside one, and pick up and eat what is on one's own
     # cell: others decide whether to bring food, keep watch, or finish one off. Off by default.
+    # Clothing (very basic): each founder starts with hides covering some share of the body, from
+    # clothing_min to all of it, different for each; babies are born bare. It keeps heat in when it is
+    # colder than comfort (body temperature drifts toward the cold more slowly: x 1 + insulation x
+    # coverage). It does not wear out and cannot yet be made, so children born in a run stay bare.
+    clothing: bool = False
+    clothing_min: float = 0.1
+    clothing_insulation: float = 0.8
     downed: bool = False
     downed_health: float = 0.2      # health below this
     downed_injury: float = 0.8      # or injury at or above this (bleeding hard)
@@ -604,5 +611,5 @@ def living_world(cfg: "EnvConfig", **kw) -> "EnvConfig":
     """The 'living' world: biomes, dynamic weather and a 3-year climate cycle, with the downed (too
     hurt to stand) and grazing animals whose numbers follow their food."""
     import dataclasses
-    kw = {"downed": True, "grazing": True, **kw}       # living things: the downed, and grazers that eat the land
+    kw = {"downed": True, "grazing": True, "clothing": True, **kw}       # living things: the downed, and grazers that eat the land
     return dataclasses.replace(cfg, biomes=True, dynamic_weather=True, climate_cycle_years=3.0, **kw)

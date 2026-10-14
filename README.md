@@ -963,6 +963,13 @@ both off in the base config):
   crash in prey is a lean time for wolves. RimWorld's wild animals do not breed at all (they wander in
   at the map edge); this is closer to a real food web.
 
+**Clothing** (`EnvConfig.clothing`, on in the living world; `--no-clothing` for the ablation): very
+basic. Each founder starts with hides covering a different share of the body (from `clothing_min`, 0.1,
+to all of it); babies are born bare. Clothing keeps heat in when it is colder than comfort: body
+temperature drifts toward the cold more slowly, by 1 + 0.8 x coverage. It does not wear out and cannot
+yet be made, so children born in a run stay bare (making clothes from hides is the natural next step).
+Exported per agent as `clothing`; the playback dresses each person by it.
+
 ## Caves: the underground layer
 
 `--world living --underground` (training; `EnvConfig.underground`, off by default, so every
@@ -1095,8 +1102,12 @@ world, the exporter, viability and the benchmark; 30 is the calibration).
   the recording, close kin, kin, friend for attachment of 0.3 or more without blows, rival for blows
   without attachment). The downed lie with blood beside them and a red cross above; "is down" is a
   letter.
-  **People are measured bodies** drawn in a colony-sim manner (a large head on a simple figure, a
-  two-dot face, a thin ink line), at twice the world's pixel density, sized from what the simulation
+  **People are pawns in RimWorld's manner with our own make** (`pawnSprite`): a large round head on a
+  simple rounded torso with arms alongside (a thin dark line between) and two legs, a two-dot face, the
+  world's ink weight, flat colour with one light and one dark side; dressed in the hides the simulation
+  says each wears (none, a loin wrap, a one-shoulder tunic to mid-thigh with a sinew cord in their
+  colour, or a long robe with sleeves and foot wraps; mottled grain, a stitched seam, a ragged hem). They
+  are drawn at twice the world's pixel density, sized from what the simulation
   tracks and kept within human bounds (`bodySprite`): figure height from height in cm (175 cm = 33
   sprite pixels; bounded 0.33-1.15 of that); head share of stature from growth curves (1/4 at birth,
   1/5 at 2, 1/6 at 6, 1/7 at 12, 1/7.5 adult), drawn larger by one fixed rule for everyone (0.15 +

@@ -268,7 +268,7 @@ def build_frame(t, prev, state, a, info, evs, env_cfg, n_agents, minds=None):
                 "energy": round(float(s.energy[i]), 2), "temp": round(float(s.body_temp[i]), 2),
                 "injury": round(float(s.injury[i]), 2), "sick": bool(s.infection[i] > 0),
                 "scars": round(float(s.scars[i]), 2), "lasting_injury": round(float(s.lasting_injury[i]), 2),
-                "stress": round(float(s.stress[i]), 2),
+                "stress": round(float(s.stress[i]), 2), "clothing": round(float(s.clothing[i]), 2),
                 "sw": [int(round(1e4 * float(v))) for v in sf[i]] if sf[i].max() > 5e-5 else 0,
                 "asleep": bool(s.asleep[i]), "sleepiness": round(float(s.sleepiness[i]), 2),
                 "existed": bool(s.existed[i]), "sex": "female" if int(s.sex[i]) == E.FEMALE else "male",
@@ -389,7 +389,8 @@ def main():
         env_cfg = with_time_scale(env_cfg, h.get("days_per_year", 40), h.get("days_per_bio_year", 1.0))
         if h.get("world") == "living":
             env_cfg = living_world(env_cfg, underground=bool(h.get("underground", False)),
-                                   downed=bool(h.get("downed", False)), grazing=bool(h.get("grazing", False)))
+                                   downed=bool(h.get("downed", False)), grazing=bool(h.get("grazing", False)),
+                                   clothing=bool(h.get("clothing", False)))
         if h.get("reproduction"):
             env_cfg = with_reproduction(env_cfg, n_founders=h.get("founders") or None)
     elif args.world == "living":

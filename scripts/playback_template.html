@@ -1086,11 +1086,167 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       for (let y = 0; y < Hc; y++) for (let x = 0; x < Wc; x++) { const ch = buf[y][x]; if (C[ch]) px(q, x, y, C[ch]); }
     }, o.sel, 1);
   }
+  // ---------- people as colony-sim pawns (RimWorld's manner, our own make): a large round head set on
+  // one rounded body (arms are part of it, shown by a shading line, with small round hands at the
+  // sides; legs show only as a parting low down; two small feet below that shuffle when walking), a
+  // bold ink line, flat colour with one light and one dark side. Our twist: it is pixel art at the
+  // world's ink weight, sized from the simulation's own measures (height, body mass, frame, age, sex),
+  // dressed in the hides the simulation says one wears (none, a loin wrap, a tunic, a long robe with
+  // foot wraps), with a two-dot face, and posed by what one is doing.
+  const HIDE_TONES = ["#8a6a4a", "#7a5a3e", "#9a7a56", "#6e5440", "#a08868", "#5e4a3a"];
+  function pawnSprite(o) {
+    const key = ["W", o.k, o.sk, o.hr, o.tex, o.hairLen > 8, o.beard, o.sex, o.preg, o.hq, o.bq, o.fq, o.yq, o.iq,
+                 o.gq, o.wq, o.tint, o.held, o.cl, o.face, o.step, o.strike, o.act || "", o.ph || 0].join("|");
+    const Wc = 30, Hc = 42;
+    return fineSprite(key, Wc, Hc, (q) => {
+      const buf = Array.from({ length: Hc }, () => Array(Wc).fill("."));
+      const set = (x, y, ch) => { x = Math.round(x); y = Math.round(y); if (x >= 0 && x < Wc && y >= 0 && y < Hc) buf[y][x] = ch; };
+      const at = (x, y) => { x = Math.round(x); y = Math.round(y); return x >= 0 && x < Wc && y >= 0 && y < Hc ? buf[y][x] : "."; };
+      const f = o.face === 2 ? "e" : o.face === 1 ? "n" : "s", side = f === "e";
+      const years = o.yq, adult = years >= 13;
+      const stature = Math.max(0.33, Math.min(1.15, o.hq / 175)), figH = Math.round(34 * stature);
+      // the head: real share of stature by age, drawn larger by one fixed rule for everyone (bounded)
+      const headF = Math.max(0.3, Math.min(0.46, 0.17 + 1.15 * lerpTab(HEAD_SHARE, years)));
+      const headH = Math.max(7, Math.round(figH * headF)), headW = Math.round(headH * 0.94) + (side ? -1 : 0);
+      const legH = Math.max(3, Math.round(figH * lerpTab(LEG_SHARE, years) * 0.82));
+      const bmi = Math.max(14, Math.min(38, o.bq)), bulk = 1 + 0.55 * (bmi / 22 - 1);
+      let sh = Math.max(0.19, Math.min(0.36, 0.27 * Math.sqrt(o.fq) * bulk * (o.sex === "male" && adult ? 1.07 : 0.95))) * figH;
+      let hip = sh * (o.sex === "female" && adult ? 1.05 : 0.88);
+      if (side) { sh *= 0.62; hip *= 0.62; }
+      const cx = 14.5, feet = Hc - 1;
+      const sq = o.act === "drink" ? Math.round(legH * 0.45) : o.act === "reach" ? (o.ph ? 4 : 3) : 0;   // crouch, stoop
+      const bob = o.step === 1 || o.step === 3 ? 1 : 0;
+      const Y = (y) => y - bob;
+      const crotch = feet - legH + sq, bodyTop = feet - figH + headH - 2 + sq, bodyBot = crotch, bodyH = bodyBot - bodyTop + 1;
+      const headTop = bodyTop - headH + 3;
+      const late = [];
+      // legs: two, a pixel apart, the lifted one shorter; in profile they part with the stride
+      const legW = Math.max(2, Math.round(hip * (side ? 0.62 : 0.42)));
+      const lift = (n) => (o.step === 1 && n === 0) || (o.step === 3 && n === 1) ? 1 : 0;
+      const legCol = (lx, n) => { const bottom = feet - 1 - lift(n);
+        for (let y = crotch; y <= bottom; y++) for (let x = 0; x < legW; x++) set(lx + x, Y(y), x === legW - 1 ? "d" : "S");
+        for (let x = -1; x < legW; x++) set(lx + x + (side ? 1 : 0), Y(bottom + 1), "F"); };
+      if (side) { const sp = o.step === 1 ? 2 : o.step === 3 ? -2 : 0; legCol(Math.round(cx - legW / 2 - sp), 1); legCol(Math.round(cx - legW / 2 + sp), 0); }
+      else { legCol(Math.round(cx - legW - 0.5), 0); legCol(Math.round(cx + 0.5), 1); }
+      // torso: shoulders to hips, rounded at the shoulders; a belly when pregnant
+      const waist = Math.min(sh, hip) * (0.86 + 0.2 * Math.max(0, bmi / 22 - 1));
+      for (let y = bodyTop; y <= bodyBot; y++) {
+        const t = (y - bodyTop) / Math.max(1, bodyH - 1);
+        let w = t < 0.5 ? sh + (waist - sh) * (t / 0.5) : waist + (hip - waist) * ((t - 0.5) / 0.5);
+        if (o.preg && !side && t > 0.4 && t < 0.85) w += 1.5;
+        const inset = y === bodyTop ? 2 : y === bodyTop + 1 ? 1 : 0;
+        const x0 = Math.round(cx - w / 2 + inset), x1 = Math.round(cx + w / 2 - inset) - 1;
+        for (let x = x0; x <= x1; x++) set(x, Y(y), x <= x0 && t < 0.5 ? "s" : x >= x1 ? "d" : "S");
+      }
+      if (o.preg && side) { const by = Math.round(bodyTop + bodyH * 0.62);
+        for (let y = by - 2; y <= by + 2; y++) for (let x = 0; x < 3 - Math.abs(y - by); x++) set(Math.round(cx + sh / 2) + x, Y(y), x >= 2 - Math.abs(y - by) ? "d" : "S"); }
+      // clothing (o.cl): a loin wrap; a hide tunic over one shoulder to mid-thigh; a long robe to the
+      // shins with sleeves and foot wraps. Hide has a mottled grain, a stitched seam and a ragged hem.
+      const wrap = o.cl > 0.05, tunic = o.cl >= 0.35, robe = o.cl >= 0.7;
+      const grain = (x, y) => hash(x * 3 + o.k, y * 7, 31) < 0.18;
+      const hidePix = (x, y, edge) => set(x, y, edge ? "m" : grain(x, y) ? "x" : "L");
+      if (wrap) {
+        const top = robe ? bodyTop : tunic ? bodyTop : Math.round(bodyBot - bodyH * 0.22);
+        const bot = robe ? feet - 3 : tunic ? crotch + Math.round(legH * 0.35) : crotch + 1;
+        for (let y = top; y <= bot; y++) {
+          const t = (y - bodyTop) / Math.max(1, bodyH - 1);
+          if (tunic && !robe && !side && f === "s") { const diag = bodyTop + Math.round(((cx + sh / 2) - 0) * 0); }
+          let x0 = Wc, x1 = -1;
+          for (let x = 0; x < Wc; x++) if (at(x, Y(y)) !== ".") { x0 = Math.min(x0, x); x1 = Math.max(x1, x); }
+          if (y > crotch) { const flare = robe ? Math.round((y - crotch) * 0.25) : 1; x0 = Math.round(cx - hip / 2) - flare; x1 = Math.round(cx + hip / 2) - 1 + flare; }
+          if (x1 < x0) continue;
+          // one-shoulder tunic: the neckline runs from the left shoulder down to under the right arm
+          const skip = tunic && !robe && !side && y - bodyTop < 4 ? (f === "s" ? (x) => x > x0 + (y - bodyTop) * 2 + 2 : (x) => x < x1 - (y - bodyTop) * 2 - 2) : () => false;
+          const ragged = y === bot ? (x) => hash(x, o.k, 41) < 0.35 : () => false;
+          for (let x = x0; x <= x1; x++) { if (skip(x) || ragged(x)) continue; hidePix(x, Y(y), x === x1 || y === bot); }
+        }
+        if (tunic) for (let y = top + 2; y <= bot - 1; y += 2) set(Math.round(cx + (f === "n" ? 1 : -1) * sh * 0.3), Y(y), "m");   // a stitched seam
+      }
+      if (robe) for (let y = feet - 1; y <= feet; y++) for (let x = 0; x < Wc; x++) if (at(x, Y(y)) === "F") set(x, Y(y), "G");   // foot wraps
+      if (tunic && !side) { const by = Math.round(bodyTop + bodyH * 0.7);                  // a sinew cord at the waist, in one's colour
+        for (let x = 0; x < Wc; x++) if ("Lxm".includes(at(x, Y(by)))) set(x, Y(by), x % 3 ? "B" : "b"); }
+      // arms: alongside the body, a thin dark line between, hands at mid-thigh; posed by the action
+      const sw = o.step === 1 ? 1 : o.step === 3 ? -1 : 0;
+      const armW = Math.max(2, Math.round(sh * (side ? 0.4 : 0.2))), armL = Math.round(figH * 0.36);
+      const sleeve = (y, y0) => robe && y - y0 < armL * 0.5;
+      const armCol = (ax, y0, len, innerLeft) => { for (let y = y0; y < y0 + len; y++) {
+        for (let x = 0; x < armW; x++) set(ax + x, Y(y), y >= y0 + len - 2 ? (sleeve(y, y0) ? "m" : "d") : sleeve(y, y0) ? (grain(ax + x, y) ? "x" : "L") : x === armW - 1 ? "d" : "S");
+        if (innerLeft !== undefined && figH >= 26) { const ix = innerLeft ? ax + armW : ax - 1; if (at(ix, Y(y)) !== ".") set(ix, Y(y), "K"); } } };
+      const mouthY = Math.round(headTop + headH * 0.72), hand = (x, y) => { set(x, y, "S"); set(x + 1, y, "S"); set(x, y + 1, "d"); set(x + 1, y + 1, "d"); };
+      if (side) {
+        const ax = Math.round(cx - armW / 2);
+        if (o.strike) for (let x = 0; x < armL; x++) { set(ax + 1 + x, Y(bodyTop + 2), "S"); set(ax + 1 + x, Y(bodyTop + 3), "d"); }
+        else if (o.act === "eat" && o.ph) for (let y = mouthY; y <= bodyTop + 4; y++) late.push([ax + 2, Y(y), "S"], [ax + 3, Y(y), "d"], [ax + 1, Y(y), "K"]);
+        else if (o.act === "eat") for (let x = 0; x < 4; x++) { set(ax + 1 + x, Y(bodyTop + 4), "S"); set(ax + 1 + x, Y(bodyTop + 5), "d"); }
+        else if (o.act === "reach" || o.act === "drink") { const fx = Math.round(cx + sh / 2) + 2;
+          for (let x = ax; x <= fx; x++) { set(x, Y(bodyTop + 2), "S"); set(x, Y(bodyTop + 3), "d"); }
+          for (let y = bodyTop + 2; y <= feet - (o.ph ? 0 : 2); y++) { set(fx, Y(y), "S"); set(fx + 1, Y(y), "d"); } }
+        else if (o.act === "touch") for (let x = 0; x < (o.ph ? armL : armL - 2); x++) { set(ax + 1 + x, Y(bodyTop + 4), "S"); set(ax + 1 + x, Y(bodyTop + 5), "d"); }
+        else armCol(ax + sw, bodyTop + 1, armL, false);
+      } else {
+        const lx = Math.round(cx - sh / 2) - armW + 1, rx = Math.round(cx + sh / 2) - 1, s2 = f === "s" ? sw : -sw;
+        if (o.strike) { armCol(lx, bodyTop + 1, armL, true); for (let y = headTop - 1; y <= bodyTop + 2; y++) { set(rx, Y(y), "S"); set(rx + 1, Y(y), "d"); } }
+        else if (o.act === "eat") { armCol(lx, bodyTop + 1, armL, true);
+          if (o.ph) { const fx = Math.round(cx + 1); for (let y = mouthY - 1; y < bodyTop + 5; y++) { late.push([fx - 1, Y(y), "K"], [fx, Y(y), "S"], [fx + 1, Y(y), "d"], [fx + 2, Y(y), "K"]); }
+            for (let x = fx + 2; x <= rx + 1; x++) late.push([x, Y(bodyTop + 4), "S"], [x, Y(bodyTop + 5), "K"]); }
+          else armCol(rx, bodyTop + 1, Math.round(armL * 0.6), false); }
+        else if (o.act === "reach" || o.act === "drink") { armCol(lx, bodyTop + 1, feet - bodyTop - 2 - (o.ph ? 0 : 2), true); armCol(rx, bodyTop + 1, feet - bodyTop - 2 - (o.ph ? 2 : 0), false); }
+        else if (o.act === "touch") { armCol(lx, bodyTop + 1, armL, true); for (let x = 0; x < (o.ph ? armL - 2 : armL - 4); x++) { set(rx + x, Y(bodyTop + 3), "S"); set(rx + x, Y(bodyTop + 4), "d"); } }
+        else { armCol(lx, bodyTop + 1 - s2, armL, true); armCol(rx, bodyTop + 1 + s2, armL, false); }
+      }
+      // what is in hand, at the right hand
+      if (o.held) { const hx = side ? Math.round(cx + 1) : Math.round(cx + sh / 2) + armW - 1, hy = bodyTop + armL - 1;
+        if (o.held === "wood") for (let i = 0; i < 7; i++) set(hx + 1, Y(hy - i), i === 6 ? "J" : "I");
+        else { set(hx + 1, Y(hy), "I"); set(hx + 2, Y(hy), "I"); set(hx + 1, Y(hy + 1), "J"); set(hx + 2, Y(hy + 1), "J"); } }
+      // wounds on bare skin (at most three), ribs when thin
+      const nW = Math.min(3, Math.round(o.iq * 4));
+      for (let i = 0; i < nW; i++) { const wy = Math.round(bodyTop + 3 + i * 2), wx = Math.round(cx - 1 + (i % 2 ? 2 : -1)); if ("sSd".includes(at(wx, Y(wy)))) set(wx, Y(wy), "R"); }
+      if (o.wq < 0.88 && f !== "n") for (let i = 0; i < 2; i++) { const y = bodyTop + 3 + i * 2; for (let x = Math.round(cx - sh / 2) + 2; x < Math.round(cx + sh / 2) - 2; x++) if (at(x, Y(y)) === "S") set(x, Y(y), "d"); }
+      // head: big and round, lit from the upper left; a nose in profile
+      const hcx = cx + (side ? 1 : 0), hcy = headTop + headH / 2 - 0.5, rx = headW / 2, ry = headH / 2;
+      const inHead = (x, y, gx = 0, gy = 0) => (((x - hcx) / (rx + gx)) ** 2 + ((y - hcy) / (ry + gy)) ** 2) <= 1;
+      for (let y = headTop - 3; y < headTop + headH + 2; y++) for (let x = 0; x < Wc; x++) if (inHead(x, y)) {
+        const t = 0.55 * (x - hcx) / rx + 0.45 * (y - hcy) / ry; set(x, Y(y), t < -0.5 ? "s" : t > 0.45 ? "d" : "S"); }
+      if (side) set(Math.round(hcx + rx + 0.4), Y(Math.round(hcy + 1)), "S");
+      const curly = o.tex >= 2, long = o.hairLen > 8 && !curly;
+      for (let y = headTop - 4; y < headTop + headH + 1; y++) for (let x = 0; x < Wc; x++) {
+        const dx = (x - hcx) / rx, dy = (y - hcy) / ry, gg = curly ? 1.2 + 0.5 * ((x + y) % 2) : 0.7;
+        if (!inHead(x, y, gg, gg)) continue;
+        let hair;
+        if (f === "n") hair = dy < 0.55 || (long && Math.abs(dx) < 0.95);
+        else if (side) hair = dy < -0.2 || (dx < -0.15 && dy < 0.5) || (long && dx < -0.35);
+        else hair = dy < -0.25 + (x % 3 === 0 ? 0.12 : 0) || (long && Math.abs(dx) > 0.78 && dy < 0.85);
+        if (!hair) continue;
+        const t = 0.55 * dx + 0.45 * dy; set(x, Y(y), curly && (x * 7 + y * 3) % 5 === 0 ? "k" : t < -0.5 ? "hl" : t > 0.35 ? "k" : "H");
+      }
+      if (long && f === "n") for (let y = Math.round(hcy + ry); y < Math.min(bodyTop + Math.round(bodyH * 0.35), Hc); y++)
+        for (let x = Math.round(hcx - rx * 0.7); x <= Math.round(hcx + rx * 0.6); x++) if (at(x, Y(y)) !== ".") set(x, Y(y), x % 3 === 1 ? "k" : "H");
+      const ey = Math.round(hcy + ry * 0.2);
+      if (f === "s") { const ex = Math.max(1.5, rx * 0.38); [hcx - ex, hcx + ex - 1].forEach((x) => { set(x, Y(ey), "E"); set(x, Y(ey + 1), "E"); }); }
+      else if (side) { set(hcx + rx * 0.5, Y(ey), "E"); set(hcx + rx * 0.5, Y(ey + 1), "E"); }
+      if (o.beard && f !== "n") for (let y = headTop; y < headTop + headH + 3; y++) for (let x = 0; x < Wc; x++) {
+        const dx = (x - hcx) / rx, dy = (y - hcy) / ry, full = o.beard > 1;
+        if (!inHead(x, y, 0, full ? 1.0 : 0.2) || dy < (full ? 0.5 : 0.66) || (side ? dx < 0 : Math.abs(dx) > (full ? 0.72 : 0.6))) continue;
+        set(x, Y(y), inHead(x, y + 1, 0, full ? 1.0 : 0.2) ? "H" : "k");
+      }
+      late.forEach(([x, y, ch]) => set(x, y, ch));
+      // colour
+      const tintTo = { sick: "#a8b070", cold: "#8ea4cc", hot: "#e0705a" }[o.tint];
+      const SK = fleshRamp(tintTo ? mixHex(o.sk, tintTo, { sick: 0.2, cold: 0.15, hot: 0.18 }[o.tint]) : o.sk);
+      const HR = hairRamp(mixHex(o.hr, "#cfcfcf", o.gq)), HD = hairRamp(HIDE_TONES[o.k % HIDE_TONES.length]), BD = hairRamp(o.col || "#c04040");
+      const ITEM = { wood: ["#8a5a36", "#5a3b26"], stone: ["#9a94a4", "#6c6678"], plant: ["#6fae50", "#3f7f3e"], raw_meat: ["#d0484a", "#8a2a2a"],
+        cooked_meat: ["#b07040", "#6a4020"], honey: ["#f0b030", "#b07a16"], grubs: ["#f0e6c8", "#c8b890"] }[o.held] || ["#8aa0b8", "#5a6a80"];
+      const C = { s: SK[0], S: SK[1], d: SK[2], F: SK[3], h1: SK[1], h2: SK[2], hl: HR[0], H: HR[1], k: HR[3], E: "#1c2229", R: "#8a2a2a",
+                  l: HD[0], L: HD[1], m: HD[2], x: mixHex(HD[1], HD[2], 0.6), G: HD[3], B: BD[1], b: BD[0], I: ITEM[0], J: ITEM[1],
+                  K: mixHex(SK[3], INKP, 0.5) };
+      for (let y = 0; y < Hc; y++) for (let x = 0; x < Wc; x++) { const ch = buf[y][x]; if (C[ch]) px(q, x, y, C[ch]); }
+    }, o.sel, 2);
+  }
   // ---------- seen through what hides them (RuneScape's character silhouettes, Hades, Diablo III): where a
   // tree or a big animal stands in front of someone, the hidden part of them shows as a faint fill with
   // a light outline in their own colour, and only there; what can be seen is drawn as it is.
   let XRAY = false, GRAB = null, FACE_OVERRIDE = null;
-  let BODY_STYLE = "measured";                        // measured | colony (see bodySprite)
+  let BODY_STYLE = "pawn";                            // pawn (pawnSprite) | measured | colony (bodySprite)
   const BOX = new WeakMap();
   function opaqueBox(s) {                              // the bounding box of a sprite's drawn pixels
     let b = BOX.get(s); if (b) return b;
@@ -1122,10 +1278,11 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     const blit = (s, ax, ay) => g.drawImage(s, ax, ay, s.width / 2, s.height / 2);   // sprite pixels at half an art pixel
     if (!a.alive || a.asleep || a.downed) {          // lying down: asleep, down, or dead (grey, eyes closed as crosses)
       const dead = !a.alive;
-      const s = fineSprite(`lieB|${k}|${dead}|${sk}|${hr}|${col}|${L.tex}`, 30, 14, (q) => {
+      const s = fineSprite(`lieB|${k}|${dead}|${sk}|${hr}|${col}|${L.tex}|${(a.clothing || 0) >= 0.35}`, 30, 14, (q) => {
         // lying on its side, in the standing figure's style: the rounded body, the round head, eyes shut
         const grey = (c) => (dead ? mixHex(c, "#9a9a9a", 0.75) : c);
-        const SK = fleshRamp(grey(sk)), HR = hairRamp(grey(hr)), AP = SK;     // no clothes: the body is skin
+        const SK = fleshRamp(grey(sk)), HR = hairRamp(grey(hr)),
+          AP = (a.clothing || 0) >= 0.35 ? hairRamp(grey(HIDE_TONES[k % HIDE_TONES.length])) : SK;   // a tunic or robe, else bare
         for (let y = 0; y < 8; y++) for (let x = 0; x < 16; x++) {           // body, head to the right
           const inset = (y === 0 || y === 7 ? 2 : y === 1 || y === 6 ? 1 : 0); if (x < inset || x >= 16 - inset) continue;
           px(q, x + 2, y + 4, y >= 6 ? AP[2] : y <= 1 ? AP[0] : AP[1]);
@@ -1174,8 +1331,9 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       wq: Math.round(((a.weight || 60) / (a.ideal_kg || a.weight || 60)) * 20) / 20,
       tint: a.sick ? "sick" : (a.temp ?? 0) < -0.5 ? "cold" : (a.temp ?? 0) > 0.6 ? "hot" : "",
       held: a.hand && a.carrying && (a.carrying[a.hand] || 0) > 0.05 ? a.hand : "",
+      cl: Math.round((a.clothing || 0) * 20) / 20, col,
       face: face === 3 ? 2 : face, step: act ? 0 : step, strike, sel, act, ph };
-    let s = bodySprite(body);
+    let s = BODY_STYLE === "pawn" ? pawnSprite(body) : bodySprite(body);
     if (face === 3) { const mk = "M|" + s.width + "|" + Object.values(body).join("|");
       let m = SPR.get(mk); if (!m) { m = mirror(s); SPR.set(mk, m); } s = m; }
     if (GRAB) { GRAB.s = s; return; }                // a portrait asked for this sprite
@@ -3574,7 +3732,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   }
   show(0);
   window.__agonDrawAt = (i, frac) => drawFrame(i, flick, frac);       // for checking poses in tests
-  window.__agonSprite = (o) => bodySprite(o);
+  window.__agonSprite = (o) => (o.style === "measured" || o.style === "colony" ? bodySprite(o) : pawnSprite(o));
   window.__agonFauna = (n, step = 0) => smallSprite(n, PIX_SPRITE[n] || "#888", step);   // for size sheets                          // for sprite sheets
   window.__agonHover = (k) => { hovered = k; };                         // for checking the hover outline
   requestAnimationFrame((ts) => { last = ts; loop(ts); });

@@ -93,6 +93,9 @@ def main():
     ap.add_argument("--grazing", action=argparse.BooleanOptionalAction, default=True,
                     help="with --world living: animals eat plants and their numbers follow food; predators "
                          "get hungry (EnvConfig.grazing); --no-grazing for the ablation")
+    ap.add_argument("--clothing", action=argparse.BooleanOptionalAction, default=True,
+                    help="with --world living: founders start with hides covering some of the body (different "
+                         "for each), babies are born bare; it keeps heat in (EnvConfig.clothing)")
     ap.add_argument("--archetypes", default="",
                     help="temperament profiles for the first founders, e.g. tyrant:1,saint:1 (lifesim/archetypes.py)")
     ap.add_argument("--world-model", action=argparse.BooleanOptionalAction, default=False,
@@ -130,7 +133,8 @@ def main():
                         skills=args.slate == "caveman", saint_rate=args.saint_rate,
                         archetypes=archetypes.parse(args.archetypes))
     if args.world == "living":
-        env_cfg = living_world(env_cfg, underground=args.underground, downed=args.downed, grazing=args.grazing)
+        env_cfg = living_world(env_cfg, underground=args.underground, downed=args.downed, grazing=args.grazing,
+                               clothing=args.clothing)
     elif args.underground:
         raise SystemExit("--underground needs --world living (the cave mouths are a biome)")
     env_cfg = with_time_scale(env_cfg, args.days_per_year, args.days_per_bio_year)
