@@ -2670,32 +2670,72 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     return (w || "did nothing").replace(/_/g, " ");
   };
   const KCAL = () => (DATA.consts && DATA.consts.plant_unit_kcal) || 4375;
+  // What an act was aimed at: the cell it was directed to (from where the person stood before the
+  // tick) and what was there then: a person, an animal (by species), water, rock, a tree, the ground.
+  const STEP_DIR = { n: [-1, 0], ne: [-1, 1], e: [0, 1], se: [1, 1], s: [1, 0], sw: [1, -1], w: [0, -1], nw: [-1, -1] };
+  const DIR_WORD = { n: "north", ne: "northeast", e: "east", se: "southeast", s: "south", sw: "southwest", w: "west", nw: "northwest" };
+  function whatIsAt(fp, r, c, k) {
+    if (r < 0 || c < 0 || r >= G || c >= G) return "the edge of the world";
+    const out = [];
+    (fp ? fp.agents : []).forEach((b, j) => { if (j !== k && b.alive && b.r === r && b.c === c) out.push(mention(j)); });
+    for (const grp of ["pred", "large", "small"]) ((fp && fp[grp]) || []).forEach(([ar, ac, sp, below]) => {
+      if (ar === r && ac === c && !below) out.push(`a ${((DATA.fauna || [])[sp] || {}).name || grp}`); });
+    const t = TERRAIN_NAMES_ALL[+DATA.terrain[r * G + c]] || "ground";
+    return out.length ? `${out.join(" and ")} (on ${t})` : t === "water" ? "open water" : t === "rock" ? "bare rock" : `empty ${t}`;
+  }
   function narrateAgent(a, pa, k, fj) {
+    const j = F.indexOf(fj), fp = j > 0 ? F[j - 1] : null;
     const age = a.age !== undefined ? `${Math.floor(a.age)}-year-old ` : "";
     const who = `${mention(k)} (${age}${a.sex || "person"})`;
-    const terr = TERRAIN_NAMES_ALL[+DATA.terrain[a.r * G + a.c]] || "ground";
-    const where = `${a.below ? "underground at " : `on ${terr} at `}${placeTok(a.r, a.c)}`;
-    if (a.asleep && pa && pa.asleep) return `${who} slept ${where}${a.sleepiness !== undefined ? ` (sleepiness ${pct(a.sleepiness)})` : ""}.`;
-    let s = `${who} ${intentPhrase(a.action)}`;
-    const did = actionPhrase(a);
-    const same = (a.act === "rest" && /^(rest)$/.test(a.action)) || (a.act === "drink" && a.action === "drink") || (a.act === "eat" && a.action === "eat")
-      || (a.act === "sleep" && a.action === "sleep" && a.asleep) || (a.act === "relieve" && a.action === "relieve");
-    if (!same) s += a.act === "gather_lost" ? ", but lost the scramble to someone else" : a.act === "move_failed" ? `, but stumbled and stayed put` : `: it ${did}`;
-    if (a.act === "sleep" && pa && !pa.asleep) s = `${who} lay down and fell asleep`;
-    s += ` ${where}`;
-    // amounts: what came into the hand or went into the body
+    const terrAt = (r, c) => TERRAIN_NAMES_ALL[+DATA.terrain[r * G + c]] || "ground";
+    const from = pa ? [pa.r, pa.c] : [a.r, a.c];
+    const here = `${a.below ? "underground at " : `on ${terrAt(a.r, a.c)} at `}${placeTok(a.r, a.c)}`;
+    if (a.asleep && pa && pa.asleep) return `${who} slept ${here}${a.sleepiness !== undefined ? ` (sleepiness ${pct(a.sleepiness)})` : ""}.`;
+    const evs = (fj.events || []).map((id) => evById.get(id)).filter((e) => e && e.agent === k);
+    const ev = (type) => evs.find((e) => e.type === type);
+    const m = /_(n|ne|e|se|s|sw|w|nw)$/.exec(a.action || "");
+    const dir = m ? m[1] : null, tgt = dir ? [from[0] + STEP_DIR[dir][0], from[1] + STEP_DIR[dir][1]] : null;
+    const aim = tgt ? ` toward ${DIR_WORD[dir]}, at ${placeTok(tgt[0], tgt[1])}, where there was ${whatIsAt(fp, tgt[0], tgt[1], k)}` : "";
+    s = `${who} ${intentPhrase(a.action)}`;
+    // what it did, and what that was directed at
+    const got = pa ? Object.entries(a.carrying || {}).map(([mm, v]) => [mm, v - ((pa.carrying || {})[mm] || 0)]) : [];
+    const gained = got.filter(([, d]) => d > 0.005), spent = got.filter(([, d]) => d < -0.005);
+    const kcal = (mm, d) => (mm === "plant" ? ` (about ${Math.round(Math.abs(d) * KCAL())} kcal)` : "");
+    let did;
+    switch (a.act) {
+      case "move": did = `walked from ${placeTok(from[0], from[1])} to ${placeTok(a.r, a.c)} (${terrAt(a.r, a.c)})`; break;
+      case "move_failed": did = `tried to walk${aim}, but stumbled and stayed at ${placeTok(a.r, a.c)}`; break;
+      case "gather": { const e = ev("gather"); did = `gathered ${gained.map(([mm, d]) => `${d.toFixed(2)} ${e && e.kind && mm === "plant" ? e.kind : mat(mm)}${kcal(mm, d)}`).join(" and ") || (e ? `${e.amount} ${e.kind || e.what}` : mat(a.hand))} at ${placeTok(a.r, a.c)}${e && e.tool ? ` with ${e.tool.replace(/_/g, " ")}` : ""}`; break; }
+      case "gather_lost": did = `reached for food at ${placeTok(a.r, a.c)} but someone else got it first`; break;
+      case "eat": did = `ate ${spent.map(([mm, d]) => `${(-d).toFixed(2)} ${mat(mm)}${kcal(mm, d)}`).join(" and ") || mat(a.hand)}`; break;
+      case "drink": { const w = Object.values(STEP_DIR).map(([dr, dc]) => [a.r + dr, a.c + dc]).find(([r, c]) => r >= 0 && c >= 0 && r < G && c < G && DATA.terrain[r * G + c] === "3");
+        did = `drank${w ? ` from the water at ${placeTok(w[0], w[1])}` : terrAt(a.r, a.c) === "marsh" ? " from the marsh it stood in" : ""}`; break; }
+      case "strike_agent": { const e = ev("strike_agent"); did = `struck ${e && e.victims ? e.victims.map(mention).join(" and ") : "someone"}${aim}${e && e.tool ? ` with ${e.tool.replace(/_/g, " ")}` : " bare-handed"}`; break; }
+      case "strike_animal": did = `struck${aim}`; break;
+      case "kill": { const e = ev("kill"); did = `killed ${e ? `a ${(e.species || e.animal || "").replace(/_/g, " ")}` : "an animal"}${aim}`; break; }
+      case "strike_miss": did = `struck${aim}, hitting nothing`; break;
+      case "touch": { const e = ev("touch"); did = `touched ${e && e.targets && e.targets.length ? e.targets.map(mention).join(" and ") : "someone"}${aim}`; break; }
+      case "select": did = `took ${mat(a.hand)} in hand`; break;
+      case "release": did = `dropped ${spent.map(([mm, d]) => `${(-d).toFixed(2)} ${mat(mm)}`).join(" and ") || mat(a.hand)} at ${placeTok(a.r, a.c)}`; break;
+      case "place": did = `placed ${spent.map(([mm, d]) => `${(-d).toFixed(2)} ${mat(mm)}`).join(" and ") || mat(a.hand)}${aim}`; break;
+      case "mate": { const partner = fj.agents.findIndex((b, q) => q !== k && b.alive && Math.max(Math.abs(b.r - a.r), Math.abs(b.c - a.c)) <= 1 && b.act === "mate");
+        did = `mated${partner >= 0 ? ` with ${mention(partner)}` : ""}`; break; }
+      case "relieve": { const e = ev("relieved"); did = `relieved itself at ${placeTok(a.r, a.c)}${e && e.beside_water ? ", beside the water" : ""}`; break; }
+      case "sleep": did = a.asleep ? `lay down and fell asleep ${here}` : `lay down ${here} but did not sleep`; break;
+      case "rest": did = /^seek_|^flee$/.test(a.action) ? `stayed put ${here} (nowhere it knew to go)` : `rested ${here}`; break;
+      default: did = `${actionPhrase(a)} ${here}`;
+    }
+    s += `, and ${did}`;
+    if (ev("soiled")) s += `; it could not hold it and soiled itself${ev("soiled").beside_water ? " beside the water" : ""}`;
     if (pa) {
-      const got = Object.entries(a.carrying || {}).map(([m, v]) => [m, v - ((pa.carrying || {})[m] || 0)]).filter(([, d]) => d > 0.005);
-      if (a.act === "gather" && got.length) s += `, gathering ${got.map(([m, d]) => `${d.toFixed(2)} ${mat(m)}${m === "plant" ? ` (about ${Math.round(d * KCAL())} kcal)` : ""}`).join(" and ")}`;
       const delta = [["food", a.food - pa.food], ["water", a.water - pa.water], ["energy", a.energy - pa.energy], ["health", a.health - pa.health]]
         .filter(([, d]) => Math.abs(d) >= 0.01).map(([n, d]) => `${n} ${d > 0 ? "+" : ""}${Math.round(d * 100)}%`);
       if (delta.length) s += ` (${delta.join(", ")})`;
     }
     s += ".";
-    // why: the most pressing need, and what hurts
-    const needs = [["hungry", a.food], ["thirsty", a.water], ["tired", a.energy]].filter(([, v]) => v < 0.5).sort((x, y) => x[1] - y[1]);
+    const needs = [["hungry", a.food, "food"], ["thirsty", a.water, "water"], ["tired", a.energy, "energy"]].filter(([, v]) => v < 0.5).sort((x, y) => x[1] - y[1]);
     const why = [];
-    if (needs.length) why.push(`${needs[0][0]} (${needs[0][0] === "hungry" ? "food" : needs[0][0] === "thirsty" ? "water" : "energy"} at ${pct(needs[0][1])})`);
+    if (needs.length) why.push(`${needs[0][0]} (${needs[0][2]} at ${pct(needs[0][1])})`);
     if ((a.sleepiness || 0) > 0.6) why.push(`sleepy (${pct(a.sleepiness)})`);
     if ((a.urge || 0) > 0.6 && a.act !== "relieve") why.push(`needing to relieve itself (${pct(a.urge)})`);
     if (a.injury > 0.2) why.push(`injured (${pct(a.injury)})`);
@@ -2704,11 +2744,12 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     if (a.downed) why.push("down and unable to stand");
     if ((a.stress || 0) > 0.6) { const src = stressTop(k, fj); why.push(`stressed ${pct(a.stress)}${src ? `, mostly by ${src}` : ""}`); }
     if (why.length) s += ` It was ${why.join(", ")}.`;
-    const beside = fj.agents.map((b, j) => [b, j]).filter(([b, j]) => j !== k && b.alive && !!b.below === !!a.below && Math.max(Math.abs(b.r - a.r), Math.abs(b.c - a.c)) <= 1);
-    if (beside.length) s += ` Beside it: ${beside.map(([, j]) => mention(j)).join(", ")}.`;
-    if (a.hand && (a.carrying || {})[a.hand] > 0.05 && a.act !== "gather") s += ` Holding ${mat(a.hand)}${a.torch ? " (burning)" : ""}.`;
+    const beside = fj.agents.map((b, q) => [b, q]).filter(([b, q]) => q !== k && b.alive && !!b.below === !!a.below && Math.max(Math.abs(b.r - a.r), Math.abs(b.c - a.c)) <= 1);
+    if (beside.length) s += ` Beside it: ${beside.map(([, q]) => mention(q)).join(", ")}.`;
+    if (a.hand && (a.carrying || {})[a.hand] > 0.05 && !/^(gather|select|eat)$/.test(a.act)) s += ` Holding ${((a.carrying || {})[a.hand]).toFixed(2)} ${mat(a.hand)}${a.torch ? " (burning)" : ""}.`;
     return s;
   }
+
 
   const PHRASE = {
     gather: "picked up", gather_lost: "lost a scramble for food", eat: "ate", drink: "drank",
@@ -3453,7 +3494,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     const tickEvents = (fj, only = null) => fj.events.map((id) => evById.get(id))
       .filter((e) => e && (only === null || e.agent === only || (e.by || []).includes(only) || (e.victims || []).includes(only))
         && !/^(gather|eat|drink|release|touch|move_failed|strike_animal|fell_asleep|relieved)$/.test(e.type))
-      .forEach((e) => add(describe(e), "ev " + (/^(death|predator_attack|struck_by_agent|downed|fall|infected|starving|parched|burned)$/.test(e.type) ? "danger" : ""), "", because(e)));
+      .forEach((e) => add(describe(e) + (e.pos ? ` at ${placeTok(e.pos[0], e.pos[1])}` : ""), "ev " + (/^(death|predator_attack|struck_by_agent|downed|fall|infected|starving|parched|burned|soiled)$/.test(e.type) ? "danger" : ""), (e.time || "").slice(-5), because(e)));
     const note = $("events-note");
     if (mode === "notable") {
       note.textContent = "Deaths, blows, births, illness, fires and other turning points over the last 12 hours, newest first, with their causes.";
@@ -3485,8 +3526,8 @@ const DATA = /*__PLAYBACK_DATA__*/null;
         add(`${g.named_by.map((s) => mention(s)).join(" and ")} began calling #${g.agent} "${g.name}" (${g.message.join("-")})`, "social"));
       fj.agents.forEach((a, k) => {
         if (!a.was_alive) return;
-        if (!a.alive) { add(`${mention(k)} died.`, "danger"); return; }
-        add(narrateAgent(a, fp && fp.agents[k], k, fj), CAT(a));
+        if (!a.alive) { add(`${mention(k)} died ${a.below ? "underground" : `on ${TERRAIN_NAMES_ALL[+DATA.terrain[a.r * G + a.c]] || "the ground"}`} at ${placeTok(a.r, a.c)}.`, "danger", fj.time.slice(-5)); return; }
+        add(narrateAgent(a, fp && fp.agents[k], k, fj), CAT(a), fj.time.slice(-5));
         if (a.said) {
           const heard = a.heard_by.length ? a.heard_by.map((h) => mention(h)).join(", ") : "no one";
           add(`${mention(k)} said "${a.said}" (${a.msg.filter((x) => x > 0).join("-")}), heard by ${heard}.`, "social");

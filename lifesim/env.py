@@ -325,6 +325,7 @@ class StepInfo(NamedTuple):
     stress_from: jnp.ndarray           # (N, 8) stress gained this tick by source (STRESS_SOURCES)
     downed: jnp.ndarray                # (N,) bool: down after this tick (EnvConfig.downed)
     relieved: jnp.ndarray              # (N,) bool: relieved itself by choice (EnvConfig.excretion)
+    gathered_kind: jnp.ndarray         # (N,) int: plant food gathered: ecology.KINDS index, 4 loose, -1 none
     soiled: jnp.ndarray                # (N,) bool: could not hold it any longer
 
 
@@ -2113,6 +2114,7 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
                          jnp.minimum(jnp.minimum(loose_here, cfg.gather_amount), room), take)
         take = jnp.where(foraging, jnp.minimum(want * share, room), take)
         winner = winner | (foraging & (take > 0))                         # (for the record: gathered, not lost)
+        took_kind = jnp.where(foraging & (take > 0), kind, jnp.where((grab == PLANT) & from_loose & (take > 0), 4, -1))
     take = jnp.where(pull_branch, jnp.minimum(1.0, room), take)
     # Robbing a hive: the bees sting, unless smoke (a fire's heat here) has calmed them
     stung = (take > 0) & (grab == HONEY) & state.hive[r0, c0] & (heat0[r0, c0] <= 0)
@@ -2878,5 +2880,6 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         small_pos=state.small.pos, large_pos=state.large.pos,
         skill=jnp.where(alive0 & (chosen >= SEEK_WATER), chosen - SEEK_WATER + 1, 0).astype(jnp.int32), collapsed_now=collapse & ~state.asleep, mated=mated, conceived=conceive, gave_birth=birthing, born=born,
         nursed=nursing, genetic_reward=genetic, below=next_state.below, delved=delving, dark=dark_now > 0,
-        stress_from=stress_src, downed=downed_of(next_state, cfg), relieved=relieving & alive0, soiled=soiled)
+        stress_from=stress_src, downed=downed_of(next_state, cfg), relieved=relieving & alive0, soiled=soiled,
+        gathered_kind=took_kind if cfg.ecology else jnp.full(n, -1, jnp.int32))
     return next_state, reward, done, info

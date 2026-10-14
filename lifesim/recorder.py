@@ -234,6 +234,9 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
             if what.get("what") == "honey" and pv is not None and cfg is not None and bool(pv.hive[p_i[0], p_i[1]]):
                 calm = float(np.asarray(E.fire_heat(pv.fire, cfg))[p_i[0], p_i[1]]) > 0
                 what.update(from_hive=True, smoke=calm)
+            if hasattr(info, "gathered_kind") and int(np.asarray(info.gathered_kind)[i]) >= 0:
+                kk = int(np.asarray(info.gathered_kind)[i])
+                what["kind"] = ("greens", "fruit", "nuts", "roots", "dropped food")[kk]
             emit(i, "gather", amount=round(float(info.gathered[i]), 4), **tool(i), **what)
         elif code == E.OUT_STRIKE_AGENT:
             victims = np.flatnonzero(hits[i]).tolist()
