@@ -135,8 +135,14 @@ def scripted_policy(cfg: EnvConfig, knowledge: str = "full"):
         a = jnp.where(state.hydration < 0.25, go_water, a)
         # alone, flee; with a companion beside, stand together (predators rarely attack a pair)
         a = jnp.where(danger & (d_near > 1), E.FLEE if cfg.skills else E.REST, a)
+        # relieve oneself before it is pressing, away from the water (beside it only if it cannot wait)
+        if cfg.excretion:
+            beside_water = mask[:, E.DRINK]
+            a = jnp.where(~danger & (((state.urge > 0.6) & ~beside_water) | (state.urge > 0.9)), E.RELIEVE, a)
         # asleep: sleep on until rested and day (or woken by danger or need)
         wake = (~night & (state.sleepiness < 0.2)) | (danger & (d_near > 1)) | pressing
+        if cfg.excretion:
+            wake = wake | (state.urge > 0.9)
         a = jnp.where(state.asleep, jnp.where(wake, E.REST, E.SLEEP), a)
         ok = mask[idx, a]
         return jnp.where(ok, a, E.REST).astype(jnp.int32)
