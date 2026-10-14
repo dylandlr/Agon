@@ -1110,6 +1110,13 @@ world, the exporter, viability and the benchmark; 30 is the calibration).
   their colour (a marker, not clothing). They face the way they last stepped, struck, touched or placed
   (front, back, and profile both ways), walk in a four-frame cycle while a tick plays (arms swinging
   against the legs), and raise or thrust an arm to strike.
+  **What they are doing shows in the body**, read from each tick's action and outcome, in two frames
+  while the tick plays (held still when paused): eating brings a hand to the mouth; drinking is a
+  crouch with the arms down to the water; picking up or putting down is a stoop with a hand to the
+  ground; touching (and mating) reaches an arm out; striking raises or thrusts a fist; walking is the
+  four-frame step. Arms that cross the body are inked so they read against it. The colonist bar shows
+  each person's own sprite as a head-and-shoulders bust (the whole head, never cut off), and the
+  inspector shows their map sprite front, side and back, as it is drawn now.
 - **Animals** are drawn at the same density as people, each species its own build and marks (antlers,
   horns, tusks, manes, spots, a mammoth's trunk), facing the way they went, gliding between cells and
   stepping as they go (bats flap, fish swim, snakes wave). An animal's previous cell is the nearest of its
