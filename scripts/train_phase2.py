@@ -146,10 +146,10 @@ def main():
     if args.world == "living":
         env_cfg = living_world(env_cfg, underground=args.underground, downed=args.downed, grazing=args.grazing,
                                clothing=args.clothing, ecology=args.ecology, fouling=args.fouling)
-    import dataclasses as _dc
-    env_cfg = _dc.replace(env_cfg, language_mode=args.language, writing=args.writing)
     elif args.underground:
         raise SystemExit("--underground needs --world living (the cave mouths are a biome)")
+    import dataclasses as _dc
+    env_cfg = _dc.replace(env_cfg, language_mode=args.language, writing=args.writing)
     env_cfg = with_time_scale(env_cfg, args.days_per_year, args.days_per_bio_year)
     if args.reproduction:
         env_cfg = with_reproduction(env_cfg, n_founders=args.founders or None)
