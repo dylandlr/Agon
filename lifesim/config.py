@@ -170,13 +170,21 @@ class EnvConfig:
     # (away from the water one drinks) is left to learning.
     # Language (lifesim/env.py LEXICON): "emergent" (symbols mean nothing given) or "grounded" (a
     # defined lexicon; phrases about water and food with a direction are understood by listeners and
-    # put into their remembered maps). writing: WRITE scratches one's message into the ground, read
-    # by anyone beside it (scratched in earth it lasts mark_days, cut in rock mark_days_rock).
+    # put into their remembered maps). writing: WRITE puts one's message on what is here, read by
+    # anyone beside it, if one holds the means (lifesim/env.py write_means): an edge (sharpness >=
+    # write_edge; on stone a point of hardness >= write_hard) or a pigment (ochre, coal), and a surface
+    # (wood lying here, which makes a sign, a loose stone, a rock face, a tree's bark; not bare
+    # ground). Cut in wood or bark it lasts mark_days, in stone mark_days_rock; drawn in pigment
+    # mark_days_paint (weather wears it off).
     language_mode: str = "emergent"
     writing: bool = False
     heard_recency: float = 0.6         # how fresh a heard place is in one's map (seen is 1)
-    mark_days: float = 20.0
+    mark_days: float = 90.0
     mark_days_rock: float = 365.0
+    mark_days_paint: float = 30.0
+    write_edge: float = 0.5            # flint 0.8, obsidian 1.0, quartz 0.6, copper 0.6; a plain stone 0.2 is not enough
+    write_hard: float = 0.7            # the point's hardness needed to cut stone (flint 1.0, obsidian 0.7, quartz 0.9)
+    sign_min: float = 0.5              # how much wood (or stone) lying here makes a surface to write on
     excretion: bool = False
     urge_rate: float = 0.06            # per tick at 30 minutes, x (0.5 + hydration): ~4-6 reliefs a day
     urge_sleep_mult: float = 0.4       # made more slowly asleep (the body holds it at night)

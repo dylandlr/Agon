@@ -330,13 +330,27 @@ you, many. A message is up to four words (MSG_LEN 4, VOCAB 32 in both modes).
   carries no built-in effect: what it comes to mean is up to the listeners.
 - **Nothing is enforced:** what to say, when, to whom, and whom to believe is learned. A speaker
   can be wrong or lie; listeners can learn whom to trust (they hear who spoke).
-- **Writing** (`--writing`): `WRITE` scratches one's message (this tick's, else the last) into the
-  ground where one stands. Anyone beside it reads it (the inscription is in their senses, and is
+- **Writing** (`--writing`): `WRITE` puts one's message (this tick's, else the last) on whatever is
+  where one stands. Anyone beside it reads it (the inscription is in their senses, and is
   understood as speech is), and everyone sees from afar that something is written there.
-  Scratched in earth it lasts 20 days; cut in rock, a year.
-- **Playback:** speech and inscriptions show in the agents' script (32 glyphs); in grounded
-  worlds the **Translate** button switches bubbles, the log and the tile inspector to English
-  ("Water far to the east."). Inscriptions show as scratched stones on the map.
+  - **It needs means.** The writer must hold either an edge (sharpness at least 0.5: flint,
+    obsidian, quartz, copper; a plain stone is not enough) or a pigment (ochre, coal).
+  - **It needs something that takes a mark:** a piece of wood lying there, a loose stone, a rock
+    face, or a tree's bark. Bare earth, sand, snow and water take none.
+  - **Cutting rock or stone needs a hard point** (hardness at least 0.7), so copper can cut wood
+    but not rock. Bark can be cut but not painted.
+  - **How long a mark lasts:** cut in wood or bark, 90 days; in stone, a year; drawn in pigment, 30
+    days.
+  - **A mark goes with its surface.** Carry off or burn the wood and the writing is gone.
+- **Signs are not an action.** Put a piece of wood down somewhere, cut a message into it, and it
+  stands there as a sign. Whether agents ever do that on purpose, where, and what they write on
+  it is left to learning.
+- **Playback:** on the map, speech shows by default as a small dark tag of the symbols said, so
+  the scene stays visible. The **Translate** button (**Text boxes** in emergent worlds) switches
+  to white boxes with the words, in English where the language is grounded. The log and the
+  inspectors always give the sound and, where grounded, the English. Writing is drawn small, on
+  what it is on: a board on a stake (a sign), a marked pebble, strokes on rock, a notch in bark,
+  ochre red when painted. What it says is in the tile inspector.
 
 ## The core experiment: group reward, counters, comparison
 

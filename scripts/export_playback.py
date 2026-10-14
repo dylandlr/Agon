@@ -382,8 +382,10 @@ def build_frame(t, prev, state, a, info, evs, env_cfg, n_agents, minds=None):
         # minerals lying on the ground: [row, column, mineral index, amount]
         "minerals": [[int(r), int(c), int(k), round(float(s.minerals[r, c, k]), 1)]
                      for r, c, k in zip(*np.nonzero(s.minerals > 0.05))],
-        # inscriptions: [row, column, symbol, symbol, ...] (env.LEXICON words in grounded mode)
-        **({"marks": [[int(r), int(c), *[int(v) for v in s.marks[r, c]]] for r, c in zip(*np.nonzero(np.asarray(s.marks).any(-1)))]}
+        # inscriptions: [row, column, 4 symbols (env.LEXICON words in grounded mode), what it is on]
+        # (env.SURF_*: 1 wood, a sign; 2 a stone; 3 rock; 4 bark; + 8 when drawn in pigment)
+        **({"marks": [[int(r), int(c), *[int(v) for v in s.marks[r, c]], int(s.mark_kind[r, c])]
+                      for r, c in zip(*np.nonzero(np.asarray(s.marks).any(-1)))]}
            if env_cfg.writing else {}),
         "plants": "".join(str(min(3, int(round(float(v) * (3.0 / env_cfg.plant_max if env_cfg.ecology else 1.0)))))
                           for v in np.asarray(E.forage_grid(s, env_cfg)).reshape(-1)),

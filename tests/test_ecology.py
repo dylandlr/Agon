@@ -262,8 +262,50 @@ def test_a_phrase_about_water_puts_the_place_in_listeners_maps():
     assert float(out.mind_map[1, place[0], place[1], 0]) == 0.0
 
 
+FLINT = E.MIN0 + E.mn.IDX["flint"]
+
+
+def _with_tool(s, k=0, mat=None, amount=1.0):
+    mat = FLINT if mat is None else mat
+    return s._replace(inv=s.inv.at[k, mat].set(amount), hand=s.hand.at[k].set(mat))
+
+
+def _board(s, r, c, wood=1.0):                                        # a piece of wood lying here, nothing else
+    return s._replace(wood=s.wood.at[r, c].set(wood), stones=s.stones.at[r, c].set(0.0),
+                      terrain=s.terrain.at[r, c].set(E.GRASS))
+
+
+def test_writing_needs_a_tool_and_something_to_write_on():
+    s = _two(E.reset(jax.random.PRNGKey(22), LANG), a=(5, 5), b=(12, 12))
+    bare = s._replace(wood=s.wood.at[5, 5].set(0.0), stones=s.stones.at[5, 5].set(0.0), terrain=s.terrain.at[5, 5].set(E.GRASS))
+    can = lambda st: bool(E.action_mask(st, LANG)[0, E.WRITE])
+    assert not can(_board(s, 5, 5))                                  # wood to write on, nothing to write with
+    assert not can(_with_tool(bare))                                 # an edge, but bare earth takes no mark
+    assert can(_with_tool(_board(s, 5, 5)))                          # flint on wood: a sign
+    assert not can(_with_tool(_board(s, 5, 5), mat=E.STONE))         # a plain stone has no edge
+    rock = _with_tool(bare._replace(terrain=bare.terrain.at[5, 5].set(E.ROCK)))
+    assert can(rock)                                                 # flint is hard enough to cut rock
+    copper = E.MIN0 + E.mn.IDX["copper"]
+    assert can(_with_tool(_board(s, 5, 5), mat=copper)) and not can(_with_tool(rock, mat=copper))   # soft metal: wood, not rock
+    ochre = E.MIN0 + E.mn.IDX["ochre"]
+    assert can(_with_tool(rock, mat=ochre))                          # pigment draws on rock
+    forest = bare._replace(terrain=bare.terrain.at[5, 5].set(E.FOREST))
+    assert can(_with_tool(forest)) and not can(_with_tool(forest, mat=ochre))   # bark is cut, not painted
+    # the WRITE action without the means does nothing
+    out, _, _, info = LSTEP(_with_tool(bare), jnp.array([E.WRITE, E.REST]), jnp.stack([_phrase("water", "here"), _phrase()]))
+    assert not bool(jnp.any(out.marks[5, 5] > 0))
+
+
+def test_a_sign_goes_with_its_wood():
+    s = _with_tool(_board(_two(E.reset(jax.random.PRNGKey(23), LANG), a=(5, 5), b=(12, 12)), 5, 5))
+    out, _, _, info = LSTEP(s, jnp.array([E.WRITE, E.REST]), jnp.stack([_phrase("water", "east"), _phrase()]))
+    assert int(info.outcome[0]) == E.OUT_WRITE and int(out.mark_kind[5, 5]) == E.SURF_WOOD
+    taken, *_ = LSTEP(out._replace(wood=out.wood.at[5, 5].set(0.0)), jnp.array([E.REST, E.REST]), jnp.zeros((2, E.MSG_LEN), jnp.int32))
+    assert not bool(jnp.any(taken.marks[5, 5] > 0)) and int(taken.mark_kind[5, 5]) == 0
+
+
 def test_writing_leaves_an_inscription_that_others_read_and_that_fades():
-    s = _two(E.reset(jax.random.PRNGKey(21), LANG), a=(5, 5), b=(12, 12))
+    s = _with_tool(_board(_two(E.reset(jax.random.PRNGKey(21), LANG), a=(5, 5), b=(12, 12)), 5, 5))
     msg = jnp.stack([_phrase("food", "south", "far"), _phrase()])
     out, _, _, info = LSTEP(s, jnp.array([E.WRITE, E.REST]), msg)
     assert int(info.outcome[0]) == E.OUT_WRITE and list(np.asarray(out.marks[5, 5])) == list(np.asarray(msg[0]))
@@ -274,8 +316,7 @@ def test_writing_leaves_an_inscription_that_others_read_and_that_fades():
     after, *_ = LSTEP(reader, jnp.array([E.REST, E.REST]), jnp.zeros((2, E.MSG_LEN), jnp.int32))
     far = 2 * LANG.view_radius                                           # out of the reader's sight
     assert float(after.mind_map[1, min(15, 5 + far), 5, 1]) == 1.0
-    # scratched in earth, it is gone after mark_days
+    # cut in wood, it is gone after mark_days
     old = out._replace(t=out.t + int(LANG.mark_days * LANG.day_length) + 2)
-    if int(old.terrain[5, 5]) != E.ROCK:
-        gone, *_ = LSTEP(old, jnp.array([E.REST, E.REST]), jnp.zeros((2, E.MSG_LEN), jnp.int32))
-        assert not bool(jnp.any(gone.marks[5, 5] > 0))
+    gone, *_ = LSTEP(old, jnp.array([E.REST, E.REST]), jnp.zeros((2, E.MSG_LEN), jnp.int32))
+    assert not bool(jnp.any(gone.marks[5, 5] > 0))

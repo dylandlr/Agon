@@ -688,7 +688,10 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   const GROUNDED = !!LEX && (DATA.consts || {}).language_mode === "grounded";
   const SYLL = ["", "ka", "lo", "mi", "ta", "ru", "se", "no", "va", "pi", "de", "zu", "ha", "yo", "be", "ni",
                 "go", "fe", "ri", "mu", "sa", "te", "wo", "la", "ki", "po", "du", "ne", "si", "bo", "ja", "re"];
-  let TRANSLATE = GROUNDED && (() => { try { return localStorage.getItem("agon-translate") !== "0"; } catch (e) { return true; } })();
+  // On the map, speech shows as its symbols by default; BOXES (the Text boxes button) shows white boxes
+  // with the words instead, in English where the language is grounded. The log and the inspector
+  // always give both the sound and, where grounded, the English.
+  let BOXES = (() => { try { return localStorage.getItem("agon-boxes") === "1"; } catch (e) { return false; } })();
   const THINGS = ["water", "food", "meat", "fire", "wood", "stone", "shelter", "predator", "prey", "waste"];
   const DIRW = ["north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest"];
   function glossOf(msg) {                            // a grounded phrase in plain English
@@ -706,7 +709,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   const spokenOf = (msg) => { const x = msg.filter((m) => m > 0).map((m) => SYLL[m] || "").join(""); return x ? x[0].toUpperCase() + x.slice(1) : ""; };
   function sayText(msg) {                            // how a message reads in the log
     const sound = spokenOf(msg), sym = msg.filter((m) => m > 0).join("-");
-    if (GROUNDED && TRANSLATE) return `"${glossOf(msg)}" (${msg.filter((m) => m > 0).map((m) => LEX[m]).join(" ")})`;
+    if (GROUNDED) return `"${sound}" ("${glossOf(msg)}")`;
     return `"${sound}" (${sym})`;
   }
   const drawGlyph = (g, sym, x, y, s) => { g.fillStyle = "#1b2038"; for (let i = 0; i < 9; i++) if ((GLYPH[sym] >> i) & 1) g.fillRect(x + (i % 3) * s, y + Math.floor(i / 3) * s, s * 0.9, s * 0.9); };
@@ -839,9 +842,9 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     g.fillRect(Math.round(cx - w / 2 + 1), y, w - 2, 1); g.fillRect(Math.round(cx - w / 2), y + 1, w, 1); g.fillRect(Math.round(cx - w / 2 + 1), y + 2, w - 2, 1);
   };
   // People are drawn at twice the world's pixel density (one sprite pixel = half an art pixel), so a
-  // face, hair, beads, hands and feet fit; their ink outline is two of those pixels, the same weight
-  // as the world's one-pixel ink, so they sit in the world rather than on it.
-  function fineSprite(key, w, h, draw, ring = null, ol = 2) {      // ol: ink outline width in sprite pixels
+  // face, hair, beads, hands and feet fit. Their ink outline is one of those pixels: enough to part a
+  // figure from the ground, thin enough not to hide what it is (a thicker one swallowed small bodies).
+  function fineSprite(key, w, h, draw, ring = null, ol = 1) {      // ol: ink outline width in sprite pixels
     const ck = "F|" + key + "|" + (ring || "") + "|" + ol;
     let c = SPR.get(ck);
     if (c) return c;
@@ -852,7 +855,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     c = document.createElement("canvas"); c.width = w + 2 * pad; c.height = h + 2 * pad;
     const g = c.getContext("2d");
     const ringAt = [];
-    for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) { const d = Math.hypot(dx, dy); if (d > ol + 0.2 && d <= ol + 2.2) ringAt.push([dx, dy]); }
+    for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) { const d = Math.hypot(dx, dy); if (d > ol + 0.2 && d <= ol + 1.5) ringAt.push([dx, dy]); }
     if (ring) { const rs = sil(ring); ringAt.forEach(([dx, dy]) => g.drawImage(rs, pad + dx, pad + dy)); }
     const os = sil(INKP);
     for (let dy = -ol; dy <= ol; dy++) for (let dx = -ol; dx <= ol; dx++) if ((dx || dy) && Math.hypot(dx, dy) <= ol + 0.5) g.drawImage(os, pad + dx, pad + dy);
@@ -1505,7 +1508,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   }
   function modelSprite(m, o, sel) {
     const sc = o.scale || 1, key = ["BM", JSON.stringify(m), o.view, o.action || "rest", o.phase || 0, o.seed || 0, sc, o.eyesClosed ? 1 : 0].join("|");
-    return fineSprite(key, Math.round(40 * sc), Math.round(50 * sc), (q) => modelPixels(m, o, q), sel, 2);
+    return fineSprite(key, Math.round(40 * sc), Math.round(50 * sc), (q) => modelPixels(m, o, q), sel, 1);
   }
   function modelLying(m, k, dead, sel) {             // the same body on its side, head to the right, eyes shut
     const key = ["BMlie", JSON.stringify(m), dead ? 1 : 0].join("|");
@@ -1514,7 +1517,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     let x0 = r.width, x1 = -1, y0 = r.height, y1 = -1;
     for (let y = 0; y < r.height; y++) for (let x = 0; x < r.width; x++) if (r.slot[y * r.width + x]) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
     // turned a quarter: the standing figure's top becomes the right, its front the bottom
-    return fineSprite(key, y1 - y0 + 1, x1 - x0 + 1, (q) => modelPixels(m, o, q, 0, 0, (x, y) => [y1 - y, x1 - x]), sel, 2);
+    return fineSprite(key, y1 - y0 + 1, x1 - x0 + 1, (q) => modelPixels(m, o, q, 0, 0, (x, y) => [y1 - y, x1 - x]), sel, 1);
   }
   // ---------- seen through what hides them (RuneScape's character silhouettes, Hades, Diablo III): where a
   // tree or a big animal stands in front of someone, the hidden part of them shows as a faint fill with
@@ -1649,17 +1652,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       px(g, tx - 1, y - 1 + bob, "#e8742a", 4, 4); px(g, tx + f2 * 0.5, y - 3 + bob, "#f5c542", 2, 3); px(g, tx + 0.5, y + bob, "#fff1b0", 1, 1); }
     if (a.health < 0.35) { px(g, x + 1, y - 2, INKP, 4, 3); px(g, x + 1.5, y - 1.5, "#e04848", 3, 2); }
   }
-  function drawSpeech(a, r, c) {
-    if (GROUNDED && TRANSLATE) { cellDraw(ctx, r, c, (g) => { const t = glossOf(a.msg); if (!t) return; g.font = "bold 0.26px sans-serif";
-      const w = g.measureText(t).width + 0.16; roundRect(g, 0.5 - w / 2, -0.78, w, 0.38, 0.1); g.fillStyle = "#f4f1e4"; g.fill(); g.lineWidth = LW * 0.8; g.strokeStyle = INK; g.stroke();
-      g.fillStyle = "#1b2038"; g.textBaseline = "middle"; g.fillText(t, 0.5 - w / 2 + 0.08, -0.59); }); return; }
-    cellDraw(ctx, r, c, (g) => {
-      const syms = a.msg.filter((m) => m > 0), w = 0.12 + syms.length * 0.3;
-      roundRect(g, 0.5 - w / 2, -0.78, w, 0.38, 0.1); g.fillStyle = "#f4f1e4"; g.fill(); g.lineWidth = LW * 0.8; g.strokeStyle = INK; g.stroke();
-      g.beginPath(); g.moveTo(0.45, -0.41); g.lineTo(0.5, -0.3); g.lineTo(0.56, -0.41); g.closePath(); g.fillStyle = "#f4f1e4"; g.fill();
-      syms.forEach((m, j) => drawGlyph(g, m, 0.5 - w / 2 + 0.08 + j * 0.3, -0.71, 0.075));
-    });
-  }
+
   // animals: at the same density as people (half an art pixel), facing the way they last went, gliding
   // between cells and stepping as they go; each species its own build and marks
   // Animals at their real size, on the same scale as people (175 cm = 33 sprite pixels): shoulder
@@ -2054,12 +2047,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       px(ctx, x + 1, y + 1, "#3f7f3e", w - 2, 3); px(ctx, x + 1, y + 1, "#6fae50", 2, 1);
       if (v === 3) { px(ctx, x + 2, y + 2, "#e0434e"); px(ctx, x + 4, y + 1, "#e0434e"); }
     }
-    (f.marks || []).forEach(([r, c, ...syms]) => {    // inscriptions: a flat stone scratched with the script
-      if (r < VR0 || r >= VR1 || c < VC0 || c >= VC1) return;
-      const x = c * P + 2, y = r * P + 9, n = syms.filter((m) => m > 0).length, w = 2 + 4 * n;
-      px(ctx, x - 1, y - 1, INKP, w + 2, 6); px(ctx, x, y, "#b9b2a2", w, 4); px(ctx, x, y + 3, "#8d8678", w, 1);
-      let j = 0; syms.forEach((m) => { if (m > 0) { for (let i = 0; i < 9; i++) if ((GLYPH[m] >> i) & 1) px(ctx, x + 1 + j * 4 + (i % 3), y + Math.floor(i / 3), "#4a4438"); j++; } });
-    });
+    drawMarks(f);
     (f.foul || []).forEach(([r, c, v]) => {           // where people have stayed: trodden dirt, refuse, flies
       if (v < 2) return;
       for (let k = 0; k < Math.min(4, v - 1); k++) { const x = c * P + 2 + Math.floor(hash(r, c, 90 + k) * 11), y = r * P + 3 + Math.floor(hash(r, c, 95 + k) * 10);
@@ -2135,17 +2123,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       }
     }
   }
-  function pixSpeech(a) {
-    if (GROUNDED && TRANSLATE) {                     // translated: the words, in a bubble sized to them
-      const t = glossOf(a.msg); if (!t) return;
-      ctx.save(); ctx.font = "bold 5px sans-serif"; const tw = Math.ceil(ctx.measureText(t).width), x = a.c * P + 7 - tw / 2 - 2, y = a.r * P - 14;
-      px(ctx, x - 1, y - 1, INKP, tw + 6, 9); px(ctx, x, y, "#f3efe2", tw + 4, 7); px(ctx, a.c * P + 6, y + 8, INKP, 3, 1); px(ctx, a.c * P + 7, y + 7, "#f3efe2");
-      ctx.fillStyle = "#1b2038"; ctx.textBaseline = "top"; ctx.fillText(t, x + 2, y + 1); ctx.restore(); return;
-    }
-    const x = a.c * P, y = a.r * P, n = a.msg.filter((m) => m > 0).length, w = 2 + 4 * Math.max(n, 1);
-    px(ctx, x + 7 - w / 2 - 1, y - 12, INKP, w + 2, 7); px(ctx, x + 7 - w / 2, y - 11, "#f3efe2", w, 5); px(ctx, x + 6, y - 5, INKP, 3, 1); px(ctx, x + 7, y - 6, "#f3efe2");
-    let j = 0; a.msg.forEach((m) => { if (m > 0) { pixGlyph(m, x + 7 - w / 2 + 1 + j * 4, y - 10); j++; } });
-  }
+
 
   // ---------- the cave layer (worlds with caves): the tunnels, and who is in them
   const CAVES = DATA.caves || null;
@@ -2340,6 +2318,29 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     drawFrame(cur, flick);
   }
 
+  // ---------- writing, small, on what it is written on (art pixels; both looks): a board on a stake
+  // where it is cut in wood lying there (a sign), a scratched pebble, a few cut strokes on a rock
+  // face, a pale notch in a tree's bark; drawn in pigment, the strokes are ochre red. What it says is
+  // in the tile inspector and on hover, not on the map.
+  const MARK_KIND = (e) => (e.length > 6 ? e[6] : 3);            // older recordings: scratched in the ground
+  function drawMarks(f) {
+    (f.marks || []).forEach((e) => {
+      const [r, c] = e; if (r < VR0 || r >= VR1 || c < VC0 || c >= VC1) return;
+      const kind = MARK_KIND(e), on = kind % 8, paint = kind >= 8, ink = paint ? "#a8432c" : "#3a3128";
+      const x = c * P + 3 + Math.floor(hash(r, c, 61) * 6), y = r * P + 4 + Math.floor(hash(r, c, 62) * 5);
+      if (on === 1) {                                    // a sign: a stake and a small board
+        px(ctx, x + 2, y + 3, INKP, 1, 5); px(ctx, x, y, INKP, 6, 4); px(ctx, x + 0.5, y + 0.5, "#a77b4f", 5, 3);
+        px(ctx, x + 1, y + 1.5, ink, 1, 0.5); px(ctx, x + 2.5, y + 1.5, ink, 1.5, 0.5); px(ctx, x + 1.5, y + 2.5, ink, 2, 0.5);
+      } else if (on === 2) {                             // a pebble with strokes on it
+        px(ctx, x, y + 3, INKP, 4, 3); px(ctx, x + 0.5, y + 3.5, "#b9b2a2", 3, 2); px(ctx, x + 1, y + 4, ink, 2, 0.5);
+      } else if (on === 4) {                             // a notch in bark
+        px(ctx, x + 1, y + 1, "#d8c49a", 1.5, 3); px(ctx, x + 1.5, y + 2, ink, 0.5, 1);
+      } else {                                           // strokes on a rock face (or, in old recordings, the ground)
+        for (let q = 0; q < 3; q++) px(ctx, x + q * 1.5, y + 2 + (q % 2) * 0.5, ink, 0.5, 2);
+        px(ctx, x, y + 4.5, ink, 4, 0.5);
+      }
+    });
+  }
   // ---------- things on the ground
   function drawGround(f) {
     for (let r = VR0; r < VR1; r++) for (let c = VC0; c < VC1; c++) {
@@ -2686,7 +2687,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
         if (v > 0) { ctx.fillStyle = `rgba(245, 248, 255, ${0.14 + 0.08 * v})`; ctx.fillRect(c * T, r * T, T, T); }
       }
       drawGround(f);
-      if (!reduced) pixelScale(() => bedPrints(i, f));
+      pixelScale(() => { if (!reduced) bedPrints(i, f); drawMarks(f); });
     }
     drawOverlay(f, i);
     GROUND_FRAME = f;
@@ -3412,7 +3413,9 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     html += "<h3>On it now</h3>" + row([
       ["Plants", terr === 3 ? null : f.flora ? (DATA.consts.flora_kinds || []).map((nm, k) => `${nm} ${f.flora[4 * idx + k]}/9`).join(", ")
         + " (how well each would gather here; dropped food counts too)" : `${+f.plants[idx]} of 3`],
-      ["Written here", (() => { const m = (f.marks || []).find(([rr, cc]) => rr === r && cc === c); return m ? (GROUNDED && TRANSLATE ? `"${glossOf(m.slice(2))}"` : `"${spokenOf(m.slice(2))}" (${m.slice(2).filter((x) => x > 0).join("-")})`) + " scratched into the ground" : null; })()],
+      ["Written here", (() => { const m = (f.marks || []).find(([rr, cc]) => rr === r && cc === c); if (!m) return null;
+        const kind = MARK_KIND(m), on = ["", "on a piece of wood (a sign)", "on a stone", "on the rock", "in a tree's bark"][kind % 8] || "here";
+        return `${sayText(m.slice(2, 6))} ${kind >= 8 ? "drawn in ochre" : "cut"} ${on}`; })()],
       ["Waste", (f.foul || []).some(([rr, cc]) => rr === r && cc === c) ? `${(f.foul.find(([rr, cc]) => rr === r && cc === c) || [])[2]}/9: people have stayed here; drinking near it risks infection` : null],
       ["Meat", at(f.meat) ? "raw meat lying here" : null], ["Cooked meat", at(f.cooked) ? "cooked meat lying here" : null],
       ["Wood", at(f.wood) ? "dead wood" : null], ["Fire", at(f.fire) ? "burning" : null],
@@ -3986,7 +3989,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     lblCv.style.width = `${rect.width}px`; lblCv.style.height = `${rect.height}px`;
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cw, chh);
     const kz = cw / map.width;                                  // label pixels per map pixel
-    ctx.setTransform(kz, 0, 0, kz, -Math.round(camC * P) * (T / P) * kz, -Math.round(camR * P) * (T / P) * kz);
+    ctx.setTransform(kz, 0, 0, kz, Math.round(-Math.round(camC * P) * (T / P) * kz), Math.round(-Math.round(camR * P) * (T / P) * kz));
     drawMotes(below, ctx, S);
     const now = performance.now(), dt = Math.min(200, now - lblTime); lblTime = now;
     const glide = reduced ? 1 : 1 - Math.exp(-dt / 70);
@@ -4035,74 +4038,91 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     speech.sort((p, q) => (q[1] === selected) - (p[1] === selected) || (q[1] === hovered) - (p[1] === hovered) || q[3] - p[3]);
     const sayers = new Set();
     const PAD = 7 * S, R = 6 * S, F1 = 12.5 * S, F2 = 10.5 * S, MAXW = 190 * S, GAP = 6 * S;
-    // Two forms: the selected or hovered speaker gets the full bubble (its name, how the words sound,
-    // and what they mean, wrapped); everyone else a one-line chip, "Name  what they said", so a
-    // talkative crowd stays readable.
+    // Speech, by default a small dark tag of the symbols said (what is happening on the map comes
+    // first); with Text boxes on, white boxes with the words (in English where the language is
+    // grounded): the selected or hovered speaker's wrapped and named, everyone else's on one line.
+    const snap = (v) => Math.round(v * kz) / kz;                  // to whole screen pixels, so edges and text are crisp
+    const glyphs = (syms, x, y, cell, col) => { ctx.fillStyle = col;
+      syms.forEach((m, j) => { for (let q = 0; q < 9; q++) if ((GLYPH[m] >> q) & 1)
+        ctx.fillRect(snap(x + j * (3 * cell + 2 * S) + (q % 3) * cell), snap(y + Math.floor(q / 3) * cell), snap(cell * 0.86 + 0.0001) || cell, snap(cell * 0.86 + 0.0001) || cell); }); };
+    const drawTag = (a, k, msg, al) => {                          // the default: symbols only, small and dark
+      const full = k === selected || k === hovered, syms = msg.filter((m) => m > 0), col = agentColour(DATA.agents[k]);
+      const cell = Math.max(1, Math.round(2 * S * kz)) / kz, pd = 3 * S, gw = syms.length * (3 * cell + 2 * S) - 2 * S;
+      const sound = full ? spokenOf(msg) : "";
+      ctx.font = `italic 500 ${10.5 * S}px ${UI_FONT}`; const sw = sound ? ctx.measureText(sound).width + 5 * S : 0;
+      const w = snap(gw + 2 * pd + sw), h = snap(3 * cell + 2 * pd);
+      const [hx, hy] = head(k), cands = [];
+      for (const lv of [0, 1, 2]) for (const [dx, pen] of [[0, 0], [-0.6, 1.5], [0.6, 1.5]]) cands.push([hx - w / 2 + dx * w, hy - 4 * S - h - lv * (h + 2 * S), pen + lv * 3]);
+      cands.push([hx + 0.4 * T, hy, 6], [hx - 0.4 * T - w, hy, 6]);
+      cands.ax = hx; cands.ay = hy;
+      let [x, y] = place(`s${k}`, w, h, cands, who.findIndex(([, q]) => q === k), true); x = snap(x); y = snap(y);
+      ctx.globalAlpha = al * (full ? 0.95 : 0.8);
+      ctx.fillStyle = "rgba(14, 18, 20, 0.82)"; pill(x, y, w, h, 3 * S); ctx.fill();
+      const over = hx > x + 2 * S && hx < x + w - 2 * S && y + h <= hy + 1;
+      if (over && hy - (y + h) < 10 * S) { ctx.beginPath(); ctx.moveTo(snap(hx - 3 * S), y + h); ctx.lineTo(snap(hx), snap(Math.min(hy, y + h + 3 * S))); ctx.lineTo(snap(hx + 3 * S), y + h); ctx.closePath(); ctx.fill(); }
+      else { ctx.strokeStyle = "rgba(14, 18, 20, 0.6)"; ctx.lineWidth = 1 * S; ctx.beginPath(); ctx.moveTo(Math.max(x, Math.min(x + w, hx)), Math.max(y, Math.min(y + h, hy))); ctx.lineTo(hx, hy); ctx.stroke(); }
+      ctx.fillStyle = col; ctx.fillRect(x + 2 * S, y + h - snap(1.5 * S), w - 4 * S, snap(1.5 * S));       // whose words: a thread of their colour
+      glyphs(syms, x + pd, y + pd - 0.5 * S, cell, "#efe9d8");
+      if (sound) { ctx.fillStyle = "#b9b09c"; ctx.fillText(sound, snap(x + pd + gw + 5 * S), snap(y + h / 2 + 3.6 * S)); }
+      ctx.globalAlpha = 1;
+    };
     const drawBubble = (a, k, msg, al) => {
+      if (!BOXES) return drawTag(a, k, msg, al);
       const meta = DATA.agents[k], col = agentColour(meta), name = label(k, f.t).replace(/ \(#\d+\)$/, "");
       const full = k === selected || k === hovered;
-      const tr = GROUNDED && TRANSLATE, body = tr ? glossOf(msg) : "", sound = spokenOf(msg), syms = msg.filter((m) => m > 0);
+      const syms = msg.filter((m) => m > 0), tr = GROUNDED, body = tr ? glossOf(msg) : spokenOf(msg), sound = spokenOf(msg);
       ctx.font = `600 ${F2}px ${UI_FONT}`; const nameW = ctx.measureText(name).width;
-      ctx.font = `italic 400 ${F2}px ${UI_FONT}`; const soundW = full ? ctx.measureText(sound).width : 0;
+      ctx.font = `italic 400 ${F2}px ${UI_FONT}`; const soundW = full && tr ? ctx.measureText(sound).width : 0;
       ctx.font = `500 ${full ? F1 : F2 * 1.08}px ${UI_FONT}`;
-      const lines = tr ? (full ? wrapText(ctx, body, MAXW) : [body]) : [];
-      const gs = (full ? 3.2 : 2.6) * S, glyphW = syms.length * (3 * gs + 3 * S);
-      const bodyW = tr ? Math.max(...lines.map((l) => ctx.measureText(l).width)) : glyphW;
-      if (!full) {                                          // the chip
-        const pd = 5 * S, w = pd * 2 + 3 * S + nameW + 6 * S + bodyW, h = F2 * 1.08 + 2 * pd;
+      const lines = full ? wrapText(ctx, body, MAXW) : [body];
+      const bodyW = Math.max(...lines.map((l) => ctx.measureText(l).width));
+      if (!full) {                                          // the one-line box
+        const pd = 4 * S, w = snap(pd * 2 + 3 * S + nameW + 5 * S + bodyW), h = snap(F2 * 1.08 + 2 * pd);
         const [hx, hy] = head(k), cands = [];
         for (const lv of [0, 1, 2, 3]) for (const [dx, pen] of [[0, 0], [-0.6, 1.5], [0.6, 1.5], [-1.05, 3], [1.05, 3]])
           cands.push([hx - w / 2 + dx * w, hy - GAP - h - lv * (h + 3 * S), pen + lv * 3]);
         cands.push([hx + 0.45 * T, hy, 6], [hx - 0.45 * T - w, hy, 6]);
         cands.ax = hx; cands.ay = hy;
-        const [x, y] = place(`s${k}`, w, h, cands, who.findIndex(([, q]) => q === k), true);
+        let [x, y] = place(`s${k}`, w, h, cands, who.findIndex(([, q]) => q === k), true); x = snap(x); y = snap(y);
         ctx.globalAlpha = al;
         const over = hx > x + 4 * S && hx < x + w - 4 * S && y + h <= hy + 1 && hy - (y + h) < GAP * 2;
-        ctx.fillStyle = "#f6f1e3"; ctx.strokeStyle = "rgba(24, 22, 18, 0.9)"; ctx.lineWidth = 1.1 * S;
-        if (over) { ctx.beginPath(); ctx.moveTo(hx - 4 * S, y + h - 1); ctx.lineTo(hx, hy - 1 * S); ctx.lineTo(hx + 4 * S, y + h - 1); ctx.closePath(); ctx.fill(); ctx.stroke(); }
+        ctx.fillStyle = "#f6f1e3"; ctx.strokeStyle = "rgba(24, 22, 18, 0.9)"; ctx.lineWidth = 1 * S;
+        if (over) { ctx.beginPath(); ctx.moveTo(snap(hx - 4 * S), y + h - 1); ctx.lineTo(snap(hx), snap(hy - 1 * S)); ctx.lineTo(snap(hx + 4 * S), y + h - 1); ctx.closePath(); ctx.fill(); ctx.stroke(); }
         else { const ex = Math.max(x, Math.min(x + w, hx)), ey = Math.max(y, Math.min(y + h, hy));
-          ctx.save(); ctx.strokeStyle = "rgba(246, 241, 227, 0.8)"; ctx.lineWidth = 1.2 * S; ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(hx, hy); ctx.stroke();
-          ctx.fillStyle = col; ctx.beginPath(); ctx.arc(hx, hy, 2 * S, 0, TAU); ctx.fill(); ctx.restore(); }
-        pill(x, y, w, h, 4 * S); ctx.fill(); ctx.stroke();
-        if (over) ctx.fillRect(hx - 3 * S, y + h - 2 * S, 6 * S, 3 * S);
-        ctx.fillStyle = col; ctx.fillRect(x + 1.1 * S, y + 3 * S, 2.6 * S, h - 6 * S);
-        ctx.font = `600 ${F2}px ${UI_FONT}`; ctx.fillStyle = "#6b604c"; ctx.fillText(name, x + pd + 3 * S, y + pd + F2 * 0.9);
-        const bx = x + pd + 3 * S + nameW + 6 * S;
-        if (tr) { ctx.font = `500 ${F2 * 1.08}px ${UI_FONT}`; ctx.fillStyle = "#14130f"; ctx.fillText(body, bx, y + pd + F2 * 0.92); }
-        else syms.forEach((m, j) => drawGlyph(ctx, m, bx + j * (3 * gs + 3 * S), y + (h - 3 * gs) / 2, gs));
+          ctx.save(); ctx.strokeStyle = "rgba(246, 241, 227, 0.8)"; ctx.lineWidth = 1 * S; ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(hx, hy); ctx.stroke(); ctx.restore(); }
+        pill(x, y, w, h, 3 * S); ctx.fill(); ctx.stroke();
+        if (over) ctx.fillRect(snap(hx - 3 * S), y + h - snap(2 * S), snap(6 * S), snap(3 * S));
+        ctx.fillStyle = col; ctx.fillRect(x + snap(1 * S), y + snap(3 * S), snap(2 * S), h - snap(6 * S));
+        ctx.font = `600 ${F2}px ${UI_FONT}`; ctx.fillStyle = "#6b604c"; ctx.fillText(name, snap(x + pd + 3 * S), snap(y + pd + F2 * 0.9));
+        ctx.font = `500 ${F2 * 1.08}px ${UI_FONT}`; ctx.fillStyle = "#14130f"; ctx.fillText(body, snap(x + pd + 3 * S + nameW + 5 * S), snap(y + pd + F2 * 0.92));
         ctx.globalAlpha = 1; sayers.add(k); return;
       }
       const headW = 8 * S + nameW + 6 * S + soundW;
-      const w = Math.max(bodyW, headW) + 2 * PAD + 3 * S, h = PAD * 2 + F2 + 4 * S + (tr ? lines.length * F1 * 1.2 : 3 * gs + 2 * S);
+      const w = snap(Math.max(bodyW, headW) + 2 * PAD + 3 * S), h = snap(PAD * 2 + F2 + 4 * S + lines.length * F1 * 1.2);
       const [hx, hy] = head(k);
       const cands = [];
       for (const lv of [0, 1, 2]) for (const [dx, pen] of [[0, 0], [-0.75, 1.5], [0.75, 1.5], [-1.15, 3], [1.15, 3]])
         cands.push([hx - w / 2 + dx * w, hy - GAP - h - lv * (h + GAP), pen + lv * 4]);
       cands.push([hx + 0.5 * T + GAP, hy, 7], [hx - 0.5 * T - GAP - w, hy, 7]);
       cands.ax = hx; cands.ay = hy;
-      const box = place(`s${k}`, w, h, cands, who.findIndex(([, q]) => q === k), true);
-      const [x, y] = box;
+      let [x, y] = place(`s${k}`, w, h, cands, who.findIndex(([, q]) => q === k), true); x = snap(x); y = snap(y);
       ctx.globalAlpha = al;
-      // the tail: a wedge when the bubble sits over its speaker, a leader line when it had to move away
       const over = hx > x + R && hx < x + w - R && y + h <= hy + 1;
-      ctx.fillStyle = "#f6f1e3"; ctx.strokeStyle = "rgba(24, 22, 18, 0.9)"; ctx.lineWidth = 1.25 * S;
+      ctx.fillStyle = "#f6f1e3"; ctx.strokeStyle = "rgba(24, 22, 18, 0.9)"; ctx.lineWidth = 1 * S;
       if (over && hy - (y + h) < GAP * 2.5) {
-        ctx.beginPath(); ctx.moveTo(hx - 5 * S, y + h - 1); ctx.lineTo(hx, hy - 1 * S); ctx.lineTo(hx + 5 * S, y + h - 1); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(snap(hx - 5 * S), y + h - 1); ctx.lineTo(snap(hx), snap(hy - 1 * S)); ctx.lineTo(snap(hx + 5 * S), y + h - 1); ctx.closePath(); ctx.fill(); ctx.stroke();
       } else {
         const lx = Math.max(x + R, Math.min(x + w - R, hx)), ly = y + h <= hy ? y + h : y >= hy ? y : y + h / 2;
         const ex = lx === hx ? lx : (lx < hx ? x + w : x), ey = lx === hx ? ly : Math.max(y + R, Math.min(y + h - R, hy));
-        ctx.save(); ctx.strokeStyle = "rgba(246, 241, 227, 0.85)"; ctx.lineWidth = 1.5 * S; ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(hx, hy); ctx.stroke();
-        ctx.fillStyle = col; ctx.beginPath(); ctx.arc(hx, hy, 2.2 * S, 0, TAU); ctx.fill(); ctx.restore();
+        ctx.save(); ctx.strokeStyle = "rgba(246, 241, 227, 0.85)"; ctx.lineWidth = 1 * S; ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(hx, hy); ctx.stroke(); ctx.restore();
       }
-      ctx.save(); ctx.shadowColor = "rgba(0, 0, 0, 0.35)"; ctx.shadowBlur = 6 * S; ctx.shadowOffsetY = 2 * S;
-      pill(x, y, w, h, R); ctx.fill(); ctx.restore(); pill(x, y, w, h, R); ctx.stroke();
-      if (over && hy - (y + h) < GAP * 2.5) { ctx.fillRect(hx - 4 * S, y + h - 2 * S, 8 * S, 3 * S); }   // join the wedge to the bubble
-      ctx.fillStyle = col; ctx.fillRect(x + 1.2 * S, y + R * 0.6, 3 * S, h - R * 1.2);                    // the speaker's colour, a spine
-      ctx.font = `600 ${F2}px ${UI_FONT}`; ctx.fillStyle = "#2a2620"; ctx.fillText(name, x + PAD + 3 * S, y + PAD + F2 * 0.85);
-      ctx.font = `italic 400 ${F2}px ${UI_FONT}`; ctx.fillStyle = "#857a66"; ctx.fillText(sound, x + PAD + 3 * S + nameW + 6 * S, y + PAD + F2 * 0.85);
+      pill(x, y, w, h, R); ctx.fill(); ctx.stroke();
+      if (over && hy - (y + h) < GAP * 2.5) { ctx.fillRect(snap(hx - 4 * S), y + h - snap(2 * S), snap(8 * S), snap(3 * S)); }
+      ctx.fillStyle = col; ctx.fillRect(x + snap(1 * S), y + snap(R * 0.6), snap(2 * S), h - snap(R * 1.2));
+      ctx.font = `600 ${F2}px ${UI_FONT}`; ctx.fillStyle = "#2a2620"; ctx.fillText(name, snap(x + PAD + 3 * S), snap(y + PAD + F2 * 0.85));
+      if (soundW) { ctx.font = `italic 400 ${F2}px ${UI_FONT}`; ctx.fillStyle = "#857a66"; ctx.fillText(sound, snap(x + PAD + 3 * S + nameW + 6 * S), snap(y + PAD + F2 * 0.85)); }
       const by = y + PAD + F2 + 4 * S;
-      if (tr) { ctx.font = `500 ${F1}px ${UI_FONT}`; ctx.fillStyle = "#14130f"; lines.forEach((l, j) => ctx.fillText(l, x + PAD + 3 * S, by + F1 * (0.95 + 1.2 * j))); }
-      else syms.forEach((m, j) => drawGlyph(ctx, m, x + PAD + 3 * S + j * (3 * gs + 3 * S), by + 1 * S, gs));
+      ctx.font = `500 ${F1}px ${UI_FONT}`; ctx.fillStyle = "#14130f"; lines.forEach((l, j) => ctx.fillText(l, snap(x + PAD + 3 * S), snap(by + F1 * (0.95 + 1.2 * j))));
       ctx.globalAlpha = 1; sayers.add(k);
     };
     speech.forEach(([a, k, msg, al]) => drawBubble(a, k, msg, al));
@@ -4122,12 +4142,12 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     const order = who.slice().sort(([, p], [, q]) => (q === selected) - (p === selected) || (q === hovered) - (p === hovered));
     order.forEach(([a, k]) => {
       const sel = k === selected, hov = k === hovered;
-      if (sayers.has(k) && !sel) return;                    // its name is on its bubble
+      if (sayers.has(k) && !sel) return;                    // its name is on its text box
       if (farOut && !sel && !hov) return;
       const name = label(k, f.t), col = agentColour(DATA.agents[k]);
       const detail = sel || hov;
       const doing = detail ? doingShort(a) : "", feels = detail ? feelingShort(a, k, f) : [];
-      const FN = (detail ? 11.5 : 10.5) * S, FD = 10.5 * S, ph = 5 * S;
+      const FN = (detail ? 11.5 : 10) * S, FD = 10.5 * S, ph = detail ? 5 * S : 2 * S;
       ctx.font = `600 ${FN}px ${UI_FONT}`; const nw = ctx.measureText(name).width;
       ctx.font = `400 ${FD}px ${UI_FONT}`;
       const line2 = detail ? [doing, ...feels.map((x) => x[0])].join(", ") : "";
@@ -4139,14 +4159,21 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       cands.ax = fx; cands.ay = fy;
       const box = place(`n${k}`, w, h, cands, who.findIndex(([, q]) => q === k), sel || hov);
       if (!box) return;
-      const [x, y] = box;
-      ctx.globalAlpha = a.alive ? (a.asleep && !detail ? 0.7 : 1) : 0.6;
-      ctx.fillStyle = sel ? "rgba(30, 27, 22, 0.94)" : "rgba(22, 24, 28, 0.78)"; pill(x, y, w, h, 4 * S); ctx.fill();
+      const x = snap(box[0]), y = snap(box[1]);
+      ctx.globalAlpha = a.alive ? (a.asleep && !detail ? 0.6 : detail ? 1 : 0.85) : 0.5;
+      if (!detail) {                                        // everyone else: just the name, small, with a dark halo
+        ctx.font = `600 ${FN}px ${UI_FONT}`; ctx.lineJoin = "round"; ctx.lineWidth = 2.5 * S; ctx.strokeStyle = "rgba(10, 12, 14, 0.75)";
+        const tx = snap(x + ph + 2 * S), ty = snap(y + ph + FN * 0.85);
+        ctx.strokeText(name, tx, ty); ctx.fillStyle = "#ece6d6"; ctx.fillText(name, tx, ty);
+        ctx.fillStyle = col; ctx.fillRect(tx - snap(5 * S), snap(ty - FN * 0.45), snap(3 * S), snap(3 * S));
+        ctx.globalAlpha = 1; return;
+      }
+      ctx.fillStyle = sel ? "rgba(30, 27, 22, 0.94)" : "rgba(22, 24, 28, 0.86)"; pill(x, y, w, h, 4 * S); ctx.fill();
       if (sel) { ctx.strokeStyle = "#e0a83a"; ctx.lineWidth = 1.3 * S; ctx.stroke(); }
       ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x + ph + 3.5 * S, y + ph + FN * 0.48, 3.2 * S, 0, TAU); ctx.fill();
-      ctx.font = `600 ${FN}px ${UI_FONT}`; ctx.fillStyle = "#f2ecdc"; ctx.fillText(name, x + ph + 10 * S, y + ph + FN * 0.85);
+      ctx.font = `600 ${FN}px ${UI_FONT}`; ctx.fillStyle = "#f2ecdc"; ctx.fillText(name, snap(x + ph + 10 * S), snap(y + ph + FN * 0.85));
       if (detail) {
-        ctx.font = `400 ${FD}px ${UI_FONT}`; let cx = x + ph; const cy = y + ph + FN + FD * 1.05;
+        ctx.font = `400 ${FD}px ${UI_FONT}`; let cx = x + ph; const cy = snap(y + ph + FN + FD * 1.05);
         ctx.fillStyle = "#c9c0aa"; ctx.fillText(doing, cx, cy); cx += ctx.measureText(doing).width;
         feels.forEach(([t, need]) => { ctx.fillStyle = "#8e8572"; ctx.fillText(", ", cx, cy); cx += ctx.measureText(", ").width;
           ctx.fillStyle = NEED_COL[need] || "#e0a83a"; ctx.fillText(t, cx, cy); cx += ctx.measureText(t).width; });
@@ -4351,9 +4378,10 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   $("zoom-in").addEventListener("click", () => zoomTo(zi + 1));
   $("zoom-out").addEventListener("click", () => zoomTo(zi - 1));
   {                                                   // Translate: the agents' script, or English (grounded worlds only)
-    const tb = $("translate"); tb.hidden = !GROUNDED; tb.setAttribute("aria-pressed", String(TRANSLATE));
-    tb.addEventListener("click", () => { TRANSLATE = !TRANSLATE; tb.setAttribute("aria-pressed", String(TRANSLATE));
-      try { localStorage.setItem("agon-translate", TRANSLATE ? "1" : "0"); } catch (e) { /* storage unavailable */ }
+    const tb = $("translate"); tb.textContent = GROUNDED ? "Translate" : "Text boxes"; tb.hidden = false; tb.setAttribute("aria-pressed", String(BOXES));
+    tb.title = GROUNDED ? "Show what is said as white text boxes, in English (otherwise: the symbols only)" : "Show what is said as white text boxes, as it sounds (otherwise: the symbols only)";
+    tb.addEventListener("click", () => { BOXES = !BOXES; tb.setAttribute("aria-pressed", String(BOXES));
+      try { localStorage.setItem("agon-boxes", BOXES ? "1" : "0"); } catch (e) { /* storage unavailable */ }
       show(cur); updateSide(cur); if (typeof updateInspector === "function") updateInspector(cur); });
   }
   $("follow").addEventListener("click", () => { follow = !follow; $("follow").setAttribute("aria-pressed", String(follow)); if (follow && viewN() === G) zoomTo(Math.min(2, VIEW_LEVELS.length - 1)); centreOnSelected(); applyCam(); });

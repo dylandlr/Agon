@@ -68,6 +68,16 @@ EDIBLE = jnp.zeros(N_MAT, bool).at[jnp.array([PLANT, RAW_MEAT, COOKED_MEAT, HONE
 _BASE0 = [0.0] * N_BASE_MAT
 HARDNESS = jnp.array([0.0, 0.0, 0.0, 0.3, 1.0, 0.0, 0.0] + mn.HARDNESS)   # hard on hard makes sparks; hard tools hit harder
 SHARPNESS = jnp.array([0.0, 0.0, 0.0, 0.0, 0.2, 0.0, 0.0] + mn.SHARPNESS)  # an edge hits harder and cuts more
+# Writing needs a tool and something to write on. A mark is cut with an edge (sharp enough; on stone
+# only with a point at least as hard as stone, flint, quartz, obsidian or metal) or drawn with a
+# pigment (ochre, charcoal-like coal). What takes a mark: a piece of wood lying here (put down by
+# someone, it stands as a sign), a loose stone, a rock face, or the bark of a tree. Bare earth, sand,
+# snow and water take none. A mark goes with its surface: carry off or burn the wood, and it is gone.
+PIGMENT = jnp.zeros(N_MAT).at[MIN0 + mn.IDX["ochre"]].set(1.0).at[MIN0 + mn.IDX["coal"]].set(1.0)
+SURF_NONE, SURF_WOOD, SURF_STONE, SURF_ROCK, SURF_BARK = range(5)
+SURFACE_NAMES = ["", "wood", "a stone", "rock", "bark"]
+SURF_HARD = jnp.array([9.0, 0.0, 1.0, 1.0, 0.0])            # how hard the cutting point must be (scaled by cfg)
+MARK_PAINTED = 8                                            # mark_kind = surface + 8 when drawn in pigment
 SPARK = jnp.array(_BASE0 + mn.SPARK)                                       # throws sparks struck against something hard
 MIN_FUEL = jnp.array(mn.FUEL)                                    # (M,) ticks of burning per unit (coal)
 MIN_COLOR = jnp.array(mn.COLOR)                                  # (M, 3) how each looks
@@ -263,6 +273,7 @@ class State(NamedTuple):
     urge: jnp.ndarray           # (N,) 0..1 need to relieve oneself (cfg.excretion)
     marks: jnp.ndarray          # (G, G, MSG_LEN) int32: what is written on each cell (all 0: nothing)
     mark_time: jnp.ndarray      # (G, G) int32: when it was written (-1: never)
+    mark_kind: jnp.ndarray      # (G, G) int32: what it is written on (SURF_*), + MARK_PAINTED if drawn in pigment
     # animals
     small: Animals
     large: Animals
@@ -985,6 +996,7 @@ def reset(key: jax.Array, cfg: EnvConfig, genotype: gt.Genotype | None = None,
         key=ks[8], t=jnp.int32(0), terrain=terrain, height=height, cliff=generate_cliffs(height), plants=plants,
         flora=flora, flora_patch=flora_patch, foul=jnp.zeros((g, g)), urge=jnp.zeros(n),
         marks=jnp.zeros((g, g, MSG_LEN), jnp.int32), mark_time=jnp.full((g, g), -1, jnp.int32),
+        mark_kind=jnp.zeros((g, g), jnp.int32),
         meat=jnp.zeros((g, g)), cooked=jnp.zeros((g, g)),
         wood=jnp.where(terrain == FOREST, cfg.wood_max * jax.random.uniform(ks[10], (g, g)), 0.0),
         stones=jnp.zeros((g, g)), minerals=generate_minerals(jax.random.fold_in(key, 99), terrain, cfg) + cv["surface_minerals"],
@@ -1049,6 +1061,29 @@ def available_here(state: State, r, c, below=None):
         return top
     deep = state.cave_floor[r, c].T.at[STONE].set(1e6)
     return jnp.where(below[None, :], deep, top)
+
+
+def surface_at(state: State, r, c, cfg: EnvConfig):
+    """What would take a mark at (r, c) (SURF_*): wood lying there first (a board, a sign), then a
+    loose stone, then the rock face, then a tree's bark; SURF_NONE on bare ground."""
+    t = state.terrain[r, c]
+    return jnp.where(state.wood[r, c] >= cfg.sign_min, SURF_WOOD,
+           jnp.where(state.stones[r, c] >= cfg.sign_min, SURF_STONE,
+           jnp.where(t == ROCK, SURF_ROCK, jnp.where(t == FOREST, SURF_BARK, SURF_NONE))))
+
+
+def write_means(state: State, cfg: EnvConfig):
+    """(N,) whether each agent can write where it stands, (N,) on what (SURF_*) and (N,) whether in
+    pigment: something in hand (an edge that can cut that surface, or a pigment) and a surface here."""
+    n = state.pos.shape[0]
+    r, c = state.pos[:, 0], state.pos[:, 1]
+    hand = state.hand
+    holding = state.inv[jnp.arange(n), hand] > 0.05
+    surf = surface_at(state, r, c, cfg)
+    cut = holding & (SHARPNESS[hand] >= cfg.write_edge) & (HARDNESS[hand] >= SURF_HARD[surf] * cfg.write_hard)
+    paint = holding & (PIGMENT[hand] > 0) & (surf != SURF_BARK)
+    ok = (surf != SURF_NONE) & (cut | paint)
+    return ok, surf, paint & ~cut
 
 
 def loose_plants(state: State, cfg: EnvConfig):
@@ -1144,7 +1179,7 @@ def action_mask(state: State, cfg: EnvConfig) -> jnp.ndarray:
     skills_ok = jnp.broadcast_to(jnp.asarray(cfg.skills), (n, N_SKILLS)) & jnp.any(can_move, axis=1)[:, None] \
         & ~below[:, None]                                            # the given skills know only the surface
     can_relieve = (state.urge >= cfg.relieve_min) if cfg.excretion else jnp.zeros_like(can_eat)
-    can_write = (~below & ~state.asleep) if cfg.writing else jnp.zeros_like(can_eat)
+    can_write = (~below & ~state.asleep & write_means(state, cfg)[0]) if cfg.writing else jnp.zeros_like(can_eat)
     # Sleep needs sleep pressure (the body clock lowers the bar at night); asleep, one may sleep on
     can_sleep = state.asleep | (state.sleepiness >= jnp.where(is_night(state.t, cfg), cfg.sleep_onset_night,
                                                               cfg.sleep_onset))
@@ -1423,6 +1458,14 @@ def observe(state: State, cfg: EnvConfig) -> jnp.ndarray:
                                        0.0, jnp.broadcast_to(shared, (n, shared.shape[0]))),   # below: no weather
                              heard_messages(state, cfg), read_marks(state, cfg)], axis=-1)
     return jnp.concatenate([win.reshape(n, -1), feats, read_mind_map(state.mind_map, state.pos, cfg)], axis=-1)
+
+
+def _marks_with_surface(marks, mark_time, mark_kind, wood, stones, cfg: EnvConfig):
+    """A mark goes with what it is on: wood carried off or burned, a stone taken, and it is gone."""
+    on = mark_kind % MARK_PAINTED
+    lost = (mark_time >= 0) & (((on == SURF_WOOD) & (wood < cfg.sign_min)) | ((on == SURF_STONE) & (stones < cfg.sign_min)))
+    return dict(marks=jnp.where(lost[..., None], 0, marks), mark_time=jnp.where(lost, -1, mark_time),
+                mark_kind=jnp.where(lost | (mark_time < 0), 0, mark_kind))
 
 
 def mark_beside(state: State, cfg: EnvConfig):
@@ -2277,15 +2320,22 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     msg = jnp.clip(msg, 0, VOCAB - 1)
     spoke_now = alive0 & (msg[:, 0] > 0)                   # first symbol 0 = staying silent
     msg = jnp.where(spoke_now[:, None], msg, 0)
-    # Writing: one's message this tick (else the last one) scratched into the ground here
-    writing = (a == WRITE) & alive0 & ~below0 if cfg.writing else jnp.zeros(n, bool)
+    # Writing: one's message this tick (else the last one), cut or drawn on what is here (write_means)
+    if cfg.writing:
+        w_ok, w_surf, w_paint = write_means(state, cfg)
+        writing = (a == WRITE) & alive0 & ~below0 & ~state.asleep & w_ok
+    else:
+        writing, w_surf, w_paint = jnp.zeros(n, bool), jnp.zeros(n, jnp.int32), jnp.zeros(n, bool)
     text = jnp.where(spoke_now[:, None], msg, state.last_msg)
     writing = writing & jnp.any(text > 0, axis=1)
     wcell = jnp.where(writing[:, None], state.pos, g)                     # out of range: dropped
     marks = state.marks.at[wcell[:, 0], wcell[:, 1]].set(text, mode="drop")
     mark_time = state.mark_time.at[wcell[:, 0], wcell[:, 1]].set(state.t, mode="drop")
+    mark_kind = state.mark_kind.at[wcell[:, 0], wcell[:, 1]].set((w_surf + MARK_PAINTED * w_paint).astype(jnp.int32), mode="drop")
     age_days = (state.t - mark_time) * cfg.tick_minutes / 1440.0
-    lasts = jnp.where(state.terrain == ROCK, cfg.mark_days_rock, cfg.mark_days)
+    on = mark_kind % MARK_PAINTED
+    lasts = jnp.where(mark_kind >= MARK_PAINTED, cfg.mark_days_paint,
+                      jnp.where((on == SURF_ROCK) | (on == SURF_STONE), cfg.mark_days_rock, cfg.mark_days))
     gone = (mark_time >= 0) & (age_days > lasts)
     marks = jnp.where(gone[..., None], 0, marks)
     mark_time = jnp.where(gone, -1, mark_time)
@@ -2949,7 +2999,7 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         below=jnp.where(alive0, below_after, state.below),
         small=small, large=large, predators=predators,
         flora=flora, flora_patch=state.flora_patch, foul=foul, urge=keep(urge, state.urge),
-        marks=marks, mark_time=mark_time,
+        **_marks_with_surface(marks, mark_time, mark_kind, wood, stones, cfg),
     )
     if cfg.reproduction:
         next_state, born = _give_birth(next_state, birthing, jax.random.fold_in(keys[0], 78), cfg)
