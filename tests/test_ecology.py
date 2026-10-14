@@ -9,7 +9,7 @@ from lifesim import ecology as eco
 from lifesim import env as E
 from lifesim.config import EnvConfig, living_world, with_tick_minutes
 
-CFG = dataclasses.replace(living_world(EnvConfig(grid_size=16, n_agents=2), downed=False),
+CFG = dataclasses.replace(living_world(EnvConfig(grid_size=16, n_agents=2), downed=False, excretion=True),
                           climate_volatility=0.0, lightning_prob=0.0, founder_spread=0)
 STEP = jax.jit(lambda s, a: E.step(s, a, CFG))
 

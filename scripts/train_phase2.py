@@ -102,6 +102,10 @@ def main():
     ap.add_argument("--fouling", action=argparse.BooleanOptionalAction, default=True,
                     help="with --world living: waste builds where people stay; drinking beside it risks "
                          "infection (EnvConfig.fouling)")
+    ap.add_argument("--excretion", action=argparse.BooleanOptionalAction, default=False,
+                    help="with --world living: an urge to relieve oneself, RELIEVE, soiling (EnvConfig.excretion). "
+                         "Off by default: an optional complexity. The network's shape is the same either way, so a "
+                         "run trained without it can be continued with it")
     ap.add_argument("--language", choices=["emergent", "grounded"], default="emergent",
                     help="emergent: symbols mean nothing given; grounded: a defined lexicon (env.LEXICON) whose "
                          "phrases about water and food with a direction are understood by listeners")
@@ -145,7 +149,8 @@ def main():
                         archetypes=archetypes.parse(args.archetypes))
     if args.world == "living":
         env_cfg = living_world(env_cfg, underground=args.underground, downed=args.downed, grazing=args.grazing,
-                               clothing=args.clothing, ecology=args.ecology, fouling=args.fouling)
+                               clothing=args.clothing, ecology=args.ecology, fouling=args.fouling,
+                               excretion=args.excretion)
     elif args.underground:
         raise SystemExit("--underground needs --world living (the cave mouths are a biome)")
     import dataclasses as _dc

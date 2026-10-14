@@ -661,5 +661,6 @@ def living_world(cfg: "EnvConfig", **kw) -> "EnvConfig":
     """The 'living' world: biomes, dynamic weather and a 3-year climate cycle, with the downed (too
     hurt to stand) and grazing animals whose numbers follow their food."""
     import dataclasses
-    kw = {"downed": True, "grazing": True, "clothing": True, "ecology": True, "fouling": True, "excretion": True, **kw}       # living things: the downed, and grazers that eat the land
+    # Excretion stays off unless asked for (an optional complexity: urge, relieving oneself, soiling).
+    kw = {"downed": True, "grazing": True, "clothing": True, "ecology": True, "fouling": True, "excretion": False, **kw}
     return dataclasses.replace(cfg, biomes=True, dynamic_weather=True, climate_cycle_years=3.0, **kw)

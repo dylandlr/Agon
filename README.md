@@ -1081,7 +1081,8 @@ unit of plant food in hand, `cfg.plant_food_value` of satiety, ~4,400 kcal):
   slowly. Grazing animals eat greens and loose food, not roots.
 - **What agents see:** for each cell in view, how well each kind would gather there (four
   channels), and waste; the old plants channel and the remembered map hold the best of these.
-- **Excretion** (`EnvConfig.excretion`, on in the living world): an urge builds as the body
+- **Excretion** (`EnvConfig.excretion`, off unless asked for: `--excretion` in training and
+  export; runs recorded before the flag are replayed with it on): an urge builds as the body
   processes food and water (`urge_rate` x (0.5 + hydration); 40% of that asleep at night), about
   four to six reliefs a day. `RELIEVE` (from 15% urge) empties it where one stands and leaves
   that much waste there (a full urge is 0.3 person-days). Past 70% the urge is stressful (a new

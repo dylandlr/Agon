@@ -454,6 +454,7 @@ def main():
     ap.add_argument("--world", choices=["classic", "living"], default="classic", help="for --random and --decisions")
     ap.add_argument("--language", choices=["emergent", "grounded"], default=None, help="for --random and --decisions")
     ap.add_argument("--writing", action="store_true", help="for --random and --decisions")
+    ap.add_argument("--excretion", action="store_true", help="with --world living, for --random and --decisions")
     for knob, what in (("food", "plant abundance (scarcity)"), ("predators", "predator numbers (0 = harmless)"),
                        ("disease", "infection chances"), ("hazards", "extreme weather, lightning, falls")):
         ap.add_argument(f"--{knob}", type=float, default=None,
@@ -479,14 +480,15 @@ def main():
             env_cfg = living_world(env_cfg, underground=bool(h.get("underground", False)),
                                    downed=bool(h.get("downed", False)), grazing=bool(h.get("grazing", False)),
                                    clothing=bool(h.get("clothing", False)), ecology=bool(h.get("ecology", False)),
-                                   fouling=bool(h.get("fouling", False)))
+                                   fouling=bool(h.get("fouling", False)),
+                               excretion=bool(h.get("excretion", True)))   # runs from before the flag had it on
         import dataclasses as _dc
         env_cfg = _dc.replace(env_cfg, language_mode=h.get("language", "emergent"), writing=bool(h.get("writing", False)))
         if h.get("reproduction"):
             env_cfg = with_reproduction(env_cfg, n_founders=h.get("founders") or None)
     elif args.world == "living":
         from lifesim.config import living_world
-        env_cfg = living_world(env_cfg, underground=args.underground)
+        env_cfg = living_world(env_cfg, underground=args.underground, excretion=args.excretion)
     if args.language or args.writing:
         import dataclasses as _dc
         env_cfg = _dc.replace(env_cfg, language_mode=args.language or env_cfg.language_mode, writing=args.writing or env_cfg.writing)
