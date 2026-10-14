@@ -152,6 +152,21 @@ class EnvConfig:
     # colder than comfort (body temperature drifts toward the cold more slowly: x 1 + insulation x
     # coverage). It does not wear out and cannot yet be made, so children born in a run stay bare.
     clothing: bool = False
+    # Plant ecology (lifesim/ecology.py): greens, fruit, nuts and roots per cell, from biome densities
+    # per km^2 times the cell's area; logistic regrowth and seed spread, seasonal crops, gathering
+    # that takes time and pays less where food is thin. Off by default (the classic plants: one stock
+    # per cell regrowing at a fixed rate); on in the living world.
+    ecology: bool = False
+    kcal_per_day: float = 2400.0       # an active forager's daily need: what hunger takes in a day
+    loose_food_spoil: float = 0.05     # per day: plant food left lying on the ground
+    # Camp fouling: where people stay, waste builds up (person-days per km^2), and drinking near it
+    # risks infection: the infection chance per drink is water_infection x (1 + foul / foul_ref, at
+    # most foul_max_mult). It fades with time, faster in rain. (Why foragers move camp, besides food.)
+    fouling: bool = False
+    foul_ref: float = 50.0             # person-days per km^2 that double the risk from water nearby
+    foul_max_mult: float = 20.0
+    foul_half_life_days: float = 20.0
+    foul_rain_mult: float = 3.0        # fades this much faster while it rains
     clothing_min: float = 0.1
     clothing_insulation: float = 0.8
     downed: bool = False
@@ -403,6 +418,11 @@ class EnvConfig:
     sleep_deep_ticks: int = 4          # ticks of unbroken sleep to reach deep sleep (2 h)
     sleep_day_efficiency: float = 0.7
     sleep_forced: float = 0.95
+    # Sleep is honest: one can only fall asleep with real sleep pressure (lower at night, when the
+    # body clock opens the gate). Lying down without it is rest, nothing more: no deep sleep, no sleep
+    # healing or calm. (Before this, choosing sleep at no sleepiness gave sleep's benefits for free.)
+    sleep_onset: float = 0.3           # sleepiness needed to fall asleep by day (~12 h awake)
+    sleep_onset_night: float = 0.1     # ... at night
     sleep_wake_block: float = 0.6
     sleep_energy: float = 0.01         # extra energy per tick of deep sleep, beyond resting
     sleep_stress_relief: float = 0.01  # stress removed per tick of deep sleep
@@ -498,8 +518,8 @@ class EnvConfig:
     # Nominal physical scale, derived from rules the world already has. One move per tick at a
     # walking pace of 4 km/h makes a cell 2 km across at 30-minute ticks (67 m at 1 minute); the altitude cooling (6 C over the
     # map's full relief) at the usual 6.5 C per km makes the relief about 900 m. Close-range rules
-    # (striking or huddling with someone in a neighbouring cell) do not fit a 2 km cell: the scale
-    # is nominal, for describing tiles, and no rule uses it.
+    # (striking or huddling with someone in a neighbouring cell) do not fit a 2 km cell. The plant
+    # ecology (ecology=True) and camp fouling use it: their amounts are per km^2 times a cell's area.
     walk_kmh: float = 4.0
     lapse_c_per_km: float = 6.5
 
@@ -611,5 +631,5 @@ def living_world(cfg: "EnvConfig", **kw) -> "EnvConfig":
     """The 'living' world: biomes, dynamic weather and a 3-year climate cycle, with the downed (too
     hurt to stand) and grazing animals whose numbers follow their food."""
     import dataclasses
-    kw = {"downed": True, "grazing": True, "clothing": True, **kw}       # living things: the downed, and grazers that eat the land
+    kw = {"downed": True, "grazing": True, "clothing": True, "ecology": True, "fouling": True, **kw}       # living things: the downed, and grazers that eat the land
     return dataclasses.replace(cfg, biomes=True, dynamic_weather=True, climate_cycle_years=3.0, **kw)

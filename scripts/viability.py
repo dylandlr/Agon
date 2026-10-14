@@ -74,12 +74,17 @@ def scripted_policy(cfg: EnvConfig, knowledge: str = "full"):
         # where things are (full knowledge: an upper bound)
         water_cells = E.drinkable(state.terrain)
         shelter = (state.terrain == E.FOREST) | (state.terrain == E.CAVE)
-        food_cells = state.plants > 0.3
+        forage = E.forage_grid(state, cfg)
+        if cfg.ecology:                    # a competent forager heads for rich patches and leaves thin ones
+            rich = forage > 0.5 * cfg.plant_max
+            food_cells = jnp.where(jnp.any(rich), rich, forage > 0.15 * cfg.plant_max)
+        else:
+            food_cells = forage > 0.3
         f_water, f_food, f_shelter = field(water_cells, state), field(food_cells, state), field(shelter, state)
         go_water = jnp.where(mask[:, E.DRINK], E.DRINK, _down(f_water, pos, can_move, g))
         held = state.inv[idx, state.hand]
         edible = ((state.hand == E.PLANT) | (state.hand == E.COOKED_MEAT)) & (held > 0.05)
-        plants_here = state.plants[r, c] > 0.1
+        plants_here = food_cells[r, c] if cfg.ecology else forage[r, c] > 0.1
         go_food = jnp.where(edible, E.EAT,
                   jnp.where(state.inv[:, E.PLANT] > 0.05, E.SELECT_0 + E.PLANT,
                   jnp.where(plants_here & (state.hand == E.PLANT) & mask[:, E.GRASP], E.GRASP,
@@ -144,7 +149,7 @@ def build_cfg(args):
     cfg = EnvConfig(grid_size=p["grid"], n_agents=p["agents"], skills=p.get("slate") == "caveman",
                     plant_abundance=args.food, reward_mode="survival")
     if (args.world or p.get("world")) == "living":
-        cfg = living_world(cfg)
+        cfg = living_world(cfg, ecology=args.ecology, fouling=args.fouling)
     from lifesim.config import with_time_scale
     cfg = with_time_scale(cfg, p.get("days_per_year", 40), p.get("days_per_bio_year", 1.0))
     if p.get("reproduction"):
@@ -212,6 +217,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--preset", default="society", choices=sorted(PRESETS))
     ap.add_argument("--world", default=None, choices=["classic", "living"])
+    ap.add_argument("--ecology", action=argparse.BooleanOptionalAction, default=True)
+    ap.add_argument("--fouling", action=argparse.BooleanOptionalAction, default=True)
     ap.add_argument("--food", type=float, default=1.0, help="x plant abundance (scarcity)")
     ap.add_argument("--predators", type=float, default=1.0, help="x predator numbers (0 = harmless)")
     ap.add_argument("--disease", type=float, default=1.0, help="x infection chances")

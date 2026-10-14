@@ -1788,7 +1788,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       }
     }
     // food plants: a sprig, a bush, a bush in berry as they fill (in woods the berries hang in the trees)
-    for (let r = 0; r < G; r++) for (let c = 0; c < G; c++) {
+    if (f.flora) { pixFlora(f); } else for (let r = 0; r < G; r++) for (let c = 0; c < G; c++) {
       const v = +f.plants[r * G + c];
       if (!v || DATA.terrain[r * G + c] === "1") continue;
       const shake = !reduced && THROUGH.has(r * G + c) ? (flick % 2 ? 1 : -1) * (POSE.frac < 0.9 ? 1 : 0) : 0;   // brushed past
@@ -1799,6 +1799,12 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       px(ctx, x + 1, y + 1, "#3f7f3e", w - 2, 3); px(ctx, x + 1, y + 1, "#6fae50", 2, 1);
       if (v === 3) { px(ctx, x + 2, y + 2, "#e0434e"); px(ctx, x + 4, y + 1, "#e0434e"); }
     }
+    (f.foul || []).forEach(([r, c, v]) => {           // where people have stayed: trodden dirt, refuse, flies
+      if (v < 2) return;
+      for (let k = 0; k < Math.min(4, v - 1); k++) { const x = c * P + 2 + Math.floor(hash(r, c, 90 + k) * 11), y = r * P + 3 + Math.floor(hash(r, c, 95 + k) * 10);
+        px(ctx, x, y, "rgba(70, 52, 32, 0.55)", 2, 1); }
+      if (v >= 5 && !reduced) { const o = flick % 4; px(ctx, c * P + 6 + (o & 1), r * P + 4 + (o >> 1), "#1c2229"); px(ctx, c * P + 10 - (o & 1), r * P + 7, "#1c2229"); }
+    });
     const minByCell = new Map();
     (f.minerals || []).forEach(([r, c, k]) => { const key = r * G + c; if (!minByCell.has(key)) minByCell.set(key, []); minByCell.get(key).push(k); });
     minByCell.forEach((ks, key) => {
@@ -1811,6 +1817,28 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     f.cooked.forEach(([r, c]) => { const x = c * P + 9, y = r * P + 10; px(ctx, x, y, INKP, 6, 4); px(ctx, x + 1, y + 1, "#8a5a2b", 4, 2); px(ctx, x + 2, y + 1, "#d09050"); });
     (DATA.hives || []).forEach(([r, c]) => { const x = c * P + 1, y = r * P + 1; px(ctx, x, y, INKP, 5, 7); px(ctx, x + 1, y + 1, "#c9902e", 3, 5); px(ctx, x + 1, y + 3, "#7a5216", 3, 1); });
     (DATA.mounds || []).forEach(([r, c]) => { const x = c * P + 1, y = r * P + 9; px(ctx, x + 1, y, INKP, 4, 1); px(ctx, x, y + 1, INKP, 6, 5); px(ctx, x + 1, y + 1, "#b08850", 4, 4); px(ctx, x + 2, y + 1, "#d0a870"); });
+  }
+  // Plant food by kind (DATA.consts.flora_kinds: greens, fruit, nuts, roots), each 0-9 for how well it would
+  // gather here: greens as leafy tufts, fruit as a bush in berry, nuts as nuts on the ground, roots as the
+  // leaves of a tuber plant. In woods the canopy is drawn above; these are what lies or grows below it.
+  function pixFlora(f) {
+    const fl = f.flora;
+    for (let r = 0; r < G; r++) for (let c = 0; c < G; c++) {
+      const i = r * G + c, q = [+fl[4 * i], +fl[4 * i + 1], +fl[4 * i + 2], +fl[4 * i + 3]];
+      if (DATA.terrain[i] === "3" || DATA.terrain[i] === "7") continue;
+      const shake = !reduced && THROUGH.has(i) ? (flick % 2 ? 1 : -1) * (POSE.frac < 0.9 ? 1 : 0) : 0;
+      const at = (s) => [c * P + 1 + Math.floor(hash(r, c, s) * 11) + shake, r * P + 3 + Math.floor(hash(r, c, s + 1) * 9)];
+      if (q[0] >= 2) for (let k = 0; k < Math.min(3, q[0] >> 1); k++) { const [x, y] = at(110 + 2 * k);     // greens
+        px(ctx, x, y + 1, "#4f8f3e"); px(ctx, x + 1, y, "#8fcf62"); px(ctx, x + 2, y + 1, "#6fae50"); }
+      if (q[3] >= 3) { const [x, y] = at(120);                                                          // roots: a tuber plant's leaves
+        px(ctx, x + 1, y + 2, "#7a6a3a", 1, 2); px(ctx, x, y + 1, "#5a8a3a"); px(ctx, x + 2, y + 1, "#5a8a3a"); px(ctx, x + 1, y, "#9ab858"); }
+      if (q[1] >= 2) { const [x, y] = at(130), w = q[1] >= 6 ? 7 : 5;                                 // fruit: a bush in berry
+        px(ctx, x + 1, y, INKP, w - 2, 1); px(ctx, x, y + 1, INKP, w, 3); px(ctx, x + 1, y + 4, INKP, w - 2, 1);
+        px(ctx, x + 1, y + 1, "#3f7f3e", w - 2, 3); px(ctx, x + 1, y + 1, "#6fae50", 2, 1);
+        for (let k = 0; k < Math.min(4, q[1] >> 1); k++) px(ctx, x + 1 + Math.floor(hash(r, c, 140 + k) * (w - 2)), y + 1 + (k % 3), k % 2 ? "#e0434e" : "#8a3a8a"); }
+      if (q[2] >= 2) for (let k = 0; k < Math.min(4, q[2] >> 1); k++) { const [x, y] = at(150 + 2 * k);   // nuts on the ground
+        px(ctx, x, y + 6, "#5a3b26", 2, 2); px(ctx, x, y + 6, "#a8784a"); }
+    }
   }
   function pixCreatures(f, flick, asScene = false) {
     // the raw frame's lists, matched with the tick before; only those above ground are drawn here.
@@ -2988,7 +3016,9 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     }
     const here = f.agents.map((a, k) => [a, k]).filter(([a]) => a.existed !== false && a.r === r && a.c === c);
     html += "<h3>On it now</h3>" + row([
-      ["Plants", terr === 3 ? null : `${+f.plants[idx]} of 3`],
+      ["Plants", terr === 3 ? null : f.flora ? (DATA.consts.flora_kinds || []).map((nm, k) => `${nm} ${f.flora[4 * idx + k]}/9`).join(", ")
+        + " (how well each would gather here; dropped food counts too)" : `${+f.plants[idx]} of 3`],
+      ["Waste", (f.foul || []).some(([rr, cc]) => rr === r && cc === c) ? `${(f.foul.find(([rr, cc]) => rr === r && cc === c) || [])[2]}/9: people have stayed here; drinking near it risks infection` : null],
       ["Meat", at(f.meat) ? "raw meat lying here" : null], ["Cooked meat", at(f.cooked) ? "cooked meat lying here" : null],
       ["Wood", at(f.wood) ? "dead wood" : null], ["Fire", at(f.fire) ? "burning" : null],
       ...(f.minerals || []).filter(([rr, cc]) => rr === r && cc === c).map(([, , k, v]) => {

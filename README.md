@@ -970,6 +970,57 @@ temperature drifts toward the cold more slowly, by 1 + 0.8 x coverage. It does n
 yet be made, so children born in a run stay bare (making clothes from hides is the natural next step).
 Exported per agent as `clothing`; the playback dresses each person by it.
 
+## Plant ecology and camp fouling (living world)
+
+`EnvConfig.ecology` and `EnvConfig.fouling`, on in the living world (`lifesim/ecology.py`). Before
+them, a cell's plants regrew at a fixed rate whatever was left, and one grasp took a whole unit
+(about 4,400 kcal) in one act, so a band could live forever on one cell beside water.
+
+**Four kinds of plant food**, the ones foragers live on, per cell, in food units (1 unit = one
+unit of plant food in hand, `cfg.plant_food_value` of satiety, ~4,400 kcal):
+
+| | Grows | Lasts | Gathering (kcal/h) |
+|---|---|---|---|
+| Greens | logistic, from what is left; spring flush | die back in winter | 500 |
+| Fruit | a crop in summer and autumn | rots within weeks out of season | 1,500 |
+| Nuts and seeds | the autumn mast | keep through winter | 1,000 (cracking included) |
+| Roots and tubers | logistic, slow (digging takes the plant) | all year, dormant in winter | 1,200; x1.5 with a digging stick |
+
+- **Where:** each biome has a standing crop it can hold (K) and a production rate (P) per km^2 for
+  each kind: forest is rich in nuts, fruit and roots; grass in greens, seeds and roots; marsh in
+  roots (cattail-like rhizomes); tundra in berries; desert and rock little. Patches vary
+  (lognormal richness per cell and kind, fixed per world). Amounts per cell are density x the
+  cell's area, so the ecology is the same per km^2 at any tick length (a cell is 2 km across at
+  30-minute ticks, 67 m at 1 minute).
+- **Reproduction:** greens and roots grow logistically (r S (1 - S/K), with r set so the maximum
+  sustained yield r K / 4 equals P), plus a seed bank and seed blowing in from neighbouring cells:
+  a patch picked bare comes back slowly, one left alone fills. Fruit and nuts come from trees and
+  shrubs that picking does not harm, as a seasonal crop up to what the patch holds. Rain speeds
+  growth, drought slows it, snow stops it; fire burns greens, fruit and nuts but roots survive.
+- **Gathering takes time:** one act is one tick of work, yielding the kind's return rate x the
+  share a type II functional response gives at this density (density / (density + half-density)).
+  A rich patch pays; a picked-over one barely does, so a band that stays eats its patch out and
+  has to move, as foragers do. Food dropped or placed lies loose (picked up whole) and spoils
+  slowly. Grazing animals eat greens and loose food, not roots.
+- **What agents see:** for each cell in view, how well each kind would gather there (four
+  channels), and waste; the old plants channel and the remembered map hold the best of these.
+- **Camp fouling:** waste builds where people stay (person-days per km^2) and fades (20-day
+  half-life, faster in rain). Drinking beside it multiplies the infection chance by
+  1 + waste / 50 (at most 20). Agents can see (smell) it.
+- **Scale consequence:** at 1-minute ticks the 32 x 32 map is about 4.6 km^2. Its plants make
+  about 5,600 kcal a day (mean over the year; standing crop at most ~1.7 million kcal) against
+  38,400 kcal a day for the 16 people of the "society" preset: plants alone cannot feed them
+  there, which is the real arithmetic of a band that size in a village-sized area. At 5-minute
+  ticks the same grid is 114 km^2 (~140,000 kcal a day); at 30-minute ticks 4,096 km^2 (~5
+  million kcal a day), plentiful but spread out, and any one cell is eaten out in weeks.
+- The figures are order-of-magnitude estimates in the range reported for foragers'
+  environments (return rates and population densities, e.g. Kelly, *The Lifeways of
+  Hunter-Gatherers*, 2013), chosen so a forest supports roughly 0.2-0.5 people per km^2
+  indefinitely and tundra or desert a tenth of that. They are knobs (`lifesim/ecology.py`), not
+  measurements. Energy is the only nutrient so far.
+- Playback: fruit shows as a bush in berry, nuts on the ground, greens as tufts, roots as a tuber
+  plant's leaves; waste as trodden dirt and flies. The tile inspector lists each kind 0-9.
+
 ## Caves: the underground layer
 
 `--world living --underground` (training; `EnvConfig.underground`, off by default, so every
@@ -1195,6 +1246,12 @@ Sleep is built in, as in people; how agents handle it is up to them.
   faster once sleep is deep (after 2 unbroken hours) and at night; about 8 hours
   a night keeps up. Past 0.95 (about 30 hours awake) an agent collapses asleep
   whatever it chose and cannot wake by choice until sleepiness is below 0.6.
+- **Sleep is honest.** One can only fall asleep with real sleep pressure: sleepiness of
+  0.3 by day (about 12 hours awake), 0.1 at night, when the body clock opens the gate
+  (`sleep_onset`, `sleep_onset_night`). Before this, choosing `SLEEP` at no sleepiness
+  still gave deep sleep's healing, calm and energy: the first living-world policy
+  (Oct 2026) chose it 57% of the time while asleep only 17%, and lay by the water. The
+  training log's `asleep_share_*` now counts real sleep, not the choice.
 - **The cost is awareness.** Asleep, an agent sees and hears only the cells next
   to it, cannot act (only sleep on, or `REST` to wake), and is woken by being
   struck, attacked, burned, touched or falling. Others can see who is asleep.

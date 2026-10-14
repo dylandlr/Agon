@@ -40,6 +40,7 @@ COND_NAMES = _cond.NAMES
 from lifesim import minerals as _min  # noqa: E402
 from lifesim import techtree as _tech  # noqa: E402
 from lifesim import fauna as _fa  # noqa: E402
+from lifesim import ecology as _eco  # noqa: E402
 from lifesim.policy import DECODE_NAMES  # noqa: E402
 
 # ---------------------------------------------------------------- the decision behind each action
@@ -67,6 +68,8 @@ def obs_groups(cfg):
     chan[E.CH_BODIES] = 6
     chan[E.CH_MINERALS:E.CH_MINERALS + E.N_MINERAL_CHANNELS] = 5                              # minerals (how they look)
     chan[E.CH_FAUNA:E.CH_FAUNA + E.N_FAUNA_CHANNELS] = 3                                       # animals' looks, bugs
+    chan[E.CH_FLORA:E.CH_FLORA + E.N_FLORA_CHANNELS - 1] = 1                                  # plants by kind
+    chan[E.CH_FLORA + E.N_FLORA_CHANNELS - 1] = 0                                             # waste (the land)
     groups = [np.tile(chan, v * v)]
     own = np.full(E.OWN_FEATURES, 8)                                                           # body, underground, conditions
     own[[0, 1, 2, 19, 20]] = 7                                                                 # satiety, water, energy, sleepiness, asleep
@@ -186,6 +189,8 @@ def world_static(state, cfg):
                        "comfort_temp": cfg.comfort_temp, "air_min": AIR_MIN, "view_radius": cfg.view_radius,
                        "tick_minutes": cfg.tick_minutes, "day_length": cfg.day_length, "stress_sources": list(E.STRESS_SOURCES),
                        "cell_km": cfg.cell_km, "relief_m": cfg.relief_m,
+                       "ecology": bool(cfg.ecology), "fouling": bool(cfg.fouling), "flora_kinds": list(_eco.KINDS),
+                       "plant_unit_kcal": round(_eco.unit_kcal(cfg)), "foul_ref": cfg.foul_ref,
                        "max_bio_years": cfg.max_bio_years, "care_empathy": cfg.care_empathy,
                        "care_kin": cfg.care_kin, "care_reciprocity": cfg.care_reciprocity,
                        "care_revenge": cfg.care_revenge, "loneliness_stress": cfg.loneliness_stress,
@@ -316,7 +321,15 @@ def build_frame(t, prev, state, a, info, evs, env_cfg, n_agents, minds=None):
         # minerals lying on the ground: [row, column, mineral index, amount]
         "minerals": [[int(r), int(c), int(k), round(float(s.minerals[r, c, k]), 1)]
                      for r, c, k in zip(*np.nonzero(s.minerals > 0.05))],
-        "plants": "".join(str(min(3, int(round(float(v))))) for v in s.plants.reshape(-1)),
+        "plants": "".join(str(min(3, int(round(float(v) * (3.0 / env_cfg.plant_max if env_cfg.ecology else 1.0)))))
+                          for v in np.asarray(E.forage_grid(s, env_cfg)).reshape(-1)),
+        # with ecology: each cell's four kinds (greens, fruit, nuts, roots), how well each would gather
+        # there, 0-9; and waste where people have stayed: [row, column, 1-9]
+        **({"flora": "".join(str(min(9, int(round(9 * float(q))))) for q in
+                             np.asarray(_eco.quality(s.flora, env_cfg)).reshape(-1))} if env_cfg.ecology else {}),
+        **({"foul": [[int(r), int(c), int(v)] for (r, c), v in
+                     np.ndenumerate(np.round(9 * (1 - np.exp(-np.asarray(s.foul) / env_cfg.foul_ref)))) if v >= 1]}
+           if env_cfg.fouling else {}),
         "events": [ev["id"] for ev in evs],
         "ties": ties,
         **weather_record(t, state, env_cfg),
@@ -397,7 +410,8 @@ def main():
         if h.get("world") == "living":
             env_cfg = living_world(env_cfg, underground=bool(h.get("underground", False)),
                                    downed=bool(h.get("downed", False)), grazing=bool(h.get("grazing", False)),
-                                   clothing=bool(h.get("clothing", False)))
+                                   clothing=bool(h.get("clothing", False)), ecology=bool(h.get("ecology", False)),
+                                   fouling=bool(h.get("fouling", False)))
         if h.get("reproduction"):
             env_cfg = with_reproduction(env_cfg, n_founders=h.get("founders") or None)
     elif args.world == "living":

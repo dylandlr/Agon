@@ -464,7 +464,8 @@ def main():
     if hist.get("world") == "living":
         env_cfg = living_world(env_cfg, underground=bool(hist.get("underground", False)),
                                downed=bool(hist.get("downed", False)), grazing=bool(hist.get("grazing", False)),
-                               clothing=bool(hist.get("clothing", False)))
+                               clothing=bool(hist.get("clothing", False)), ecology=bool(hist.get("ecology", False)),
+                               fouling=bool(hist.get("fouling", False)))
     if hist.get("reproduction"):
         env_cfg = with_reproduction(with_time_scale(env_cfg, hist.get("days_per_year", 40),
                                                     hist.get("days_per_bio_year", 1.0)),
