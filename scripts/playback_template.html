@@ -173,9 +173,15 @@ a.place:hover { text-decoration: underline; }
 .morals { display: grid; grid-template-columns: repeat(6, 8px); gap: 2px; align-items: end; height: 22px; }
 .morals i { display: block; background: var(--muted); }
 .legend { color: var(--muted); font-size: 13px; margin: 0 0 6px; }
-ol.events { list-style: none; margin: 0; padding: 0; max-height: 460px; overflow-y: auto; }
+ol.events { list-style: none; margin: 0; padding: 0; max-height: 640px; overflow-y: auto; }
 ol.events li.tick { font: 600 14px/1.4 var(--face); color: var(--accent); padding-top: 10px; }
 ol.events li.said { padding-left: 12px; }
+ol.events li:not(.tick):not(.empty) { padding-left: 8px; border-left: 3px solid transparent; line-height: 1.45; }
+ol.events li.move { border-left-color: #8aa0b8; } ol.events li.food { border-left-color: #6fae50; }
+ol.events li.social { border-left-color: #c08ad0; } ol.events li.fight, ol.events li.danger { border-left-color: #e05252; }
+ol.events li.sleep { border-left-color: #5a6ab0; } ol.events li.rest { border-left-color: var(--line); }
+ol.events li.ev { border-left-color: #e0b04a; font-style: italic; } ol.events li.ev.danger { border-left-color: #e05252; }
+ol.events li.tick { position: sticky; top: 0; background: var(--panel, var(--bg)); z-index: 1; }
 .agent .sub + .sub { margin-top: 1px; }
 ol.events li { padding: 4px 0; border-top: 1px solid var(--line); font-size: 14px; }
 ol.events li:first-child { border-top: 0; }
@@ -288,7 +294,9 @@ canvas.map { border-radius: 3px; outline: 1px solid rgba(0, 0, 0, 0.35); }
         <div class="controls" role="group" aria-label="How much to show" style="margin: 0 0 10px">
           <button id="mode-all" class="primary" aria-pressed="true">Everything</button>
           <button id="mode-notable" aria-pressed="false">Notable only</button>
+          <button id="mode-watched" aria-pressed="false" title="Only the person selected on the map, over the last day">Selected person</button>
         </div>
+        <p class="fine" id="events-note" style="margin: -4px 0 8px"></p>
         <ol class="events" id="events"></ol>
       </section>
     </aside>
@@ -1966,12 +1974,18 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     return cv;
   }
   // An agent glides from where it was to where it is over the tick (while playing)
-  function tweenPos(a, pa, frac) {
-    if (frac >= 1 || reduced || !playing || !pa || pa.existed === false || !pa.alive || !a.alive || !!pa.below !== !!a.below) return [a.r, a.c];
+  // Walking between ticks: a person still walking from the tick before keeps its pace (no ease in),
+  // one walking on into the next tick does not slow down (no ease out); a walk that starts or stops
+  // eases there. So a walk of several cells is one steady walk, not a hop per cell.
+  function tweenPos(a, pa, frac, carryIn = false, carryOut = false) {
+    if (frac >= 1 || reduced || !(playing || stepAnim) || !pa || pa.existed === false || !pa.alive || !a.alive || !!pa.below !== !!a.below) return [a.r, a.c];
     if (Math.max(Math.abs(pa.r - a.r), Math.abs(pa.c - a.c)) > 2) return [a.r, a.c];
-    const e = frac < 0.5 ? 2 * frac * frac : 1 - 2 * (1 - frac) * (1 - frac);           // ease in and out
+    const f = Math.max(0, frac);
+    const e = carryIn && carryOut ? f : carryIn ? 1 - (1 - f) * (1 - f) : carryOut ? f * f
+      : f < 0.5 ? 2 * f * f : 1 - 2 * (1 - f) * (1 - f);
     return [pa.r + (a.r - pa.r) * e, pa.c + (a.c - pa.c) * e];
   }
+  let stepAnim = null;                                // a single step forward while paused, animated
   const surfaceViews = new WeakMap();
   function surfaceView(f) {                           // the frame without what is underground
     if (!CAVES) return f;
@@ -2556,7 +2570,10 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   const escT = (x) => String(x).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
   const agentLink = (k, t) => `<a href="#" class="who" data-agent="${k}" title="Open ${escT(label(k, t))}'s record"><i style="background:${agentColour(DATA.agents[k])}"></i>${escT(label(k, t))}</a>`;
   const placeLink = (r, c) => `<a href="#" class="place" data-tile="${r},${c}" title="Inspect this tile">row ${r}, column ${c}</a>`;
-  const linkify = (text, t) => escT(text).replace(new RegExp(`${MENTION}(\\d+)${MENTION}`, "g"), (_, k) => agentLink(+k, t));
+  const PLACE = "\u0002";
+  const placeTok = (r, c) => `${PLACE}${r},${c}${PLACE}`;
+  const linkify = (text, t) => escT(text).replace(new RegExp(`${MENTION}(\\d+)${MENTION}`, "g"), (_, k) => agentLink(+k, t))
+    .replace(new RegExp(`${PLACE}(\\d+),(\\d+)${PLACE}`, "g"), (_, r, c) => placeLink(+r, +c));
   const plain = (text, t) => String(text).replace(new RegExp(`${MENTION}(\\d+)${MENTION}`, "g"), (_, k) => label(+k, t));
   const DIRS = { n: "north", ne: "northeast", e: "east", se: "southeast", s: "south", sw: "southwest", w: "west", nw: "northwest" };
   const mat = (m) => m.replace(/_/g, " ");
@@ -2568,8 +2585,63 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       drink: "drank", strike_miss: `struck at the air to the ${d}`, strike_animal: `struck an animal to the ${d}`,
       strike_agent: `struck someone to the ${d}`, kill: `made a kill to the ${d}`, release: `dropped ${mat(a.hand)}`,
       touch: `touched someone to the ${d}`, select: `took ${mat(a.hand)} in hand`, place: `placed ${mat(a.hand)} to the ${d}`,
+      sleep: a.asleep ? "fell asleep" : "lay down but did not sleep",
     };
     return by[a.act] || a.act.replace(/_/g, " ");
+  }
+
+  // ---------- the log's narrator: one full sentence per person per tick, from the recording itself:
+  // what it chose and what came of it, where, what drove it (its most pressing need), who was beside
+  // it, what it held, and how its body changed since the tick before
+  const INTENT = {
+    rest: "chose to rest", sleep: "chose to sleep", grasp: "reached to gather", eat: "chose to eat", drink: "went to drink",
+    release: "chose to drop what it held", seek_water: "set off for water it remembered", seek_food: "went looking for food it remembered",
+    flee: "fled", seek_shelter: "made for shelter", mate: "sought to mate", delve: "went to the cave mouth",
+  };
+  const intentPhrase = (w) => {
+    if (INTENT[w]) return INTENT[w];
+    const m = /^(move|strike|touch|place)_(\w+)$/.exec(w || ""); if (m) return { move: "chose to walk", strike: "chose to strike", touch: "reached out", place: "chose to place something" }[m[1]] + ` ${DIRS[m[2]] || m[2]}`;
+    const s2 = /^select_(\w+)$/.exec(w || ""); if (s2) return `reached for its ${mat(s2[1])}`;
+    return (w || "did nothing").replace(/_/g, " ");
+  };
+  const KCAL = () => (DATA.consts && DATA.consts.plant_unit_kcal) || 4375;
+  function narrateAgent(a, pa, k, fj) {
+    const age = a.age !== undefined ? `${Math.floor(a.age)}-year-old ` : "";
+    const who = `${mention(k)} (${age}${a.sex || "person"})`;
+    const terr = TERRAIN_NAMES_ALL[+DATA.terrain[a.r * G + a.c]] || "ground";
+    const where = `${a.below ? "underground at " : `on ${terr} at `}${placeTok(a.r, a.c)}`;
+    if (a.asleep && pa && pa.asleep) return `${who} slept ${where}${a.sleepiness !== undefined ? ` (sleepiness ${pct(a.sleepiness)})` : ""}.`;
+    let s = `${who} ${intentPhrase(a.action)}`;
+    const did = actionPhrase(a);
+    const same = (a.act === "rest" && /^(rest)$/.test(a.action)) || (a.act === "drink" && a.action === "drink") || (a.act === "eat" && a.action === "eat")
+      || (a.act === "sleep" && a.action === "sleep" && a.asleep);
+    if (!same) s += a.act === "gather_lost" ? ", but lost the scramble to someone else" : a.act === "move_failed" ? `, but stumbled and stayed put` : `: it ${did}`;
+    if (a.act === "sleep" && pa && !pa.asleep) s = `${who} lay down and fell asleep`;
+    s += ` ${where}`;
+    // amounts: what came into the hand or went into the body
+    if (pa) {
+      const got = Object.entries(a.carrying || {}).map(([m, v]) => [m, v - ((pa.carrying || {})[m] || 0)]).filter(([, d]) => d > 0.005);
+      if (a.act === "gather" && got.length) s += `, gathering ${got.map(([m, d]) => `${d.toFixed(2)} ${mat(m)}${m === "plant" ? ` (about ${Math.round(d * KCAL())} kcal)` : ""}`).join(" and ")}`;
+      const delta = [["food", a.food - pa.food], ["water", a.water - pa.water], ["energy", a.energy - pa.energy], ["health", a.health - pa.health]]
+        .filter(([, d]) => Math.abs(d) >= 0.01).map(([n, d]) => `${n} ${d > 0 ? "+" : ""}${Math.round(d * 100)}%`);
+      if (delta.length) s += ` (${delta.join(", ")})`;
+    }
+    s += ".";
+    // why: the most pressing need, and what hurts
+    const needs = [["hungry", a.food], ["thirsty", a.water], ["tired", a.energy]].filter(([, v]) => v < 0.5).sort((x, y) => x[1] - y[1]);
+    const why = [];
+    if (needs.length) why.push(`${needs[0][0]} (${needs[0][0] === "hungry" ? "food" : needs[0][0] === "thirsty" ? "water" : "energy"} at ${pct(needs[0][1])})`);
+    if ((a.sleepiness || 0) > 0.6) why.push(`sleepy (${pct(a.sleepiness)})`);
+    if (a.injury > 0.2) why.push(`injured (${pct(a.injury)})`);
+    if (a.sick) why.push("sick");
+    if ((a.temp ?? 0) < -0.4) why.push("cold"); else if ((a.temp ?? 0) > 0.5) why.push("overheated");
+    if (a.downed) why.push("down and unable to stand");
+    if ((a.stress || 0) > 0.6) { const src = stressTop(k, fj); why.push(`stressed ${pct(a.stress)}${src ? `, mostly by ${src}` : ""}`); }
+    if (why.length) s += ` It was ${why.join(", ")}.`;
+    const beside = fj.agents.map((b, j) => [b, j]).filter(([b, j]) => j !== k && b.alive && !!b.below === !!a.below && Math.max(Math.abs(b.r - a.r), Math.abs(b.c - a.c)) <= 1);
+    if (beside.length) s += ` Beside it: ${beside.map(([, j]) => mention(j)).join(", ")}.`;
+    if (a.hand && (a.carrying || {})[a.hand] > 0.05 && a.act !== "gather") s += ` Holding ${mat(a.hand)}${a.torch ? " (burning)" : ""}.`;
+    return s;
   }
 
   const PHRASE = {
@@ -3135,6 +3207,11 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   }
 
   // what has been stressing this person over the last game hour, by source (like RimWorld's thoughts)
+  function stressTop(k, fj) {                       // the biggest source of stress this tick, by name
+    const names = (DATA.consts || {}).stress_sources, w = fj.agents[k] && fj.agents[k].sw;
+    if (!names || !w) return "";
+    const q = w.indexOf(Math.max(...w)); return w[q] > 0 ? names[q] : "";
+  }
   function stressWhy(k, i) {
     const names = (DATA.consts || {}).stress_sources;
     if (!names) return "";
@@ -3292,35 +3369,61 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       rows[k].querySelector(".bar > i").style.width = `${Math.round((a.alive ? a.health : 0) * 100)}%`;
     });
     const list = $("events"); list.innerHTML = "";
-    const add = (text, cls, time) => {
+    const add = (text, cls, time, extraHtml = "") => {
       const li = document.createElement("li"); if (cls) li.className = cls;
       if (time) { const tm = document.createElement("time"); tm.textContent = time; li.appendChild(tm); }
-      li.insertAdjacentHTML("beforeend", linkify(text, F[i].t)); list.appendChild(li);
+      li.insertAdjacentHTML("beforeend", linkify(text, F[i].t) + extraHtml); list.appendChild(li);
     };
+    const CAT = (a) => !a.alive ? "danger" : a.downed ? "danger" : /^strike/.test(a.act) || a.act === "kill" ? "fight"
+      : /^(gather|eat|drink|select|release|place)/.test(a.act) ? "food" : a.act === "touch" || a.said ? "social"
+      : a.act === "sleep" || a.asleep ? "sleep" : /^move/.test(a.act) ? "move" : "rest";
+    const header = (fj) => {
+      const alive = fj.agents.filter((a) => a.alive).length;
+      add(`${fj.time} · ${fj.night ? "night" : "day"} · ${fj.weather.replace("_", " ")} · ${alive} alive`, "tick");
+    };
+    const tickEvents = (fj, only = null) => fj.events.map((id) => evById.get(id))
+      .filter((e) => e && (only === null || e.agent === only || (e.by || []).includes(only) || (e.victims || []).includes(only))
+        && !/^(gather|eat|drink|release|touch|move_failed|strike_animal|fell_asleep)$/.test(e.type))
+      .forEach((e) => add(describe(e), "ev " + (/^(death|predator_attack|struck_by_agent|downed|fall|infected|starving|parched|burned)$/.test(e.type) ? "danger" : ""), "", because(e)));
+    const note = $("events-note");
     if (mode === "notable") {
+      note.textContent = "Deaths, blows, births, illness, fires and other turning points over the last 12 hours, newest first, with their causes.";
       const recent = [];
-      for (let j = i; j >= Math.max(0, i - 24) && recent.length < 40; j--) F[j].events.forEach((id) => { const e = evById.get(id); if (e) recent.push(e); });
+      for (let j = i; j >= Math.max(0, i - 24) && recent.length < 60; j--) F[j].events.forEach((id) => { const e = evById.get(id); if (e && !/^(gather|eat|drink|release|move_failed|fell_asleep|touch)$/.test(e.type)) recent.push(e); });
       if (!recent.length) { list.innerHTML = '<li class="empty">Nothing notable in the last 12 hours.</li>'; return; }
-      recent.forEach((e) => add(describe(e), "", e.time.slice(-5)));
+      recent.forEach((e) => add(describe(e), "ev", e.time.slice(-5), because(e)));
       return;
     }
-    // Everything: the last few ticks in full, newest first
-    for (let j = i; j >= Math.max(0, i - 5); j--) {
-      const fj = F[j];
-      add(`${fj.time.slice(-5)}  ${fj.night ? "night" : "day"}, ${fj.weather.replace("_", " ")}`, "tick");
+    if (mode === "watched") {
+      if (selected === null) { note.textContent = ""; list.innerHTML = '<li class="empty">Select someone on the map (or in People) to follow their day here.</li>'; return; }
+      note.textContent = `Everything ${plain(mention(selected), F[i].t)} did over the last day, newest first: what it chose, what came of it, and why.`;
+      for (let j = i; j >= Math.max(1, i - 48); j--) {
+        const fj = F[j], a = fj.agents[selected], pa = F[j - 1].agents[selected];
+        if (!a || !a.was_alive) continue;
+        if (!a.alive) { add(`${mention(selected)} died.`, "danger", fj.time.slice(-5)); continue; }
+        add(narrateAgent(a, pa, selected, fj), CAT(a), fj.time.slice(-5));
+        if (a.said) add(`${mention(selected)} said "${a.said}" (${a.msg.filter((x) => x > 0).join("-")}), heard by ${a.heard_by.length ? a.heard_by.map(mention).join(", ") : "no one"}.`, "social");
+        tickEvents(fj, selected);
+      }
+      return;
+    }
+    // Everything: the last eight ticks in full, newest first
+    note.textContent = "Every person, every tick: what each chose and what came of it, where, why, who was beside them, and how their body changed. Click a name or a place.";
+    for (let j = i; j >= Math.max(0, i - 7); j--) {
+      const fj = F[j], fp = j > 0 ? F[j - 1] : null;
+      header(fj);
       GIVEN.filter((g) => g.t === fj.t).forEach((g) =>
-        add(`${g.named_by.map((s) => mention(s)).join(" and ")} began calling #${g.agent} "${g.name}" (${g.message.join("-")})`, "said"));
+        add(`${g.named_by.map((s) => mention(s)).join(" and ")} began calling #${g.agent} "${g.name}" (${g.message.join("-")})`, "social"));
       fj.agents.forEach((a, k) => {
         if (!a.was_alive) return;
-        if (!a.alive) { add(`${mention(k)} died`); return; }
-        add(`${mention(k)} ${actionPhrase(a)}`);
+        if (!a.alive) { add(`${mention(k)} died.`, "danger"); return; }
+        add(narrateAgent(a, fp && fp.agents[k], k, fj), CAT(a));
         if (a.said) {
           const heard = a.heard_by.length ? a.heard_by.map((h) => mention(h)).join(", ") : "no one";
-          add(`${mention(k)} said "${a.said}" (${a.msg.filter((x) => x > 0).join("-")}), heard by ${heard}`, "said");
+          add(`${mention(k)} said "${a.said}" (${a.msg.filter((x) => x > 0).join("-")}), heard by ${heard}.`, "social");
         }
       });
-      fj.events.map((id) => evById.get(id)).filter((e) => e && !/^(gather|eat|drink|release|touch|move_failed|strike_animal|strike_agent)$/.test(e.type))
-        .forEach((e) => add(describe(e), "said"));
+      tickEvents(fj);
     }
   }
 
@@ -3366,7 +3469,10 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   }
   // where a person is drawn: gliding between cells, lunging at a blow or a touch, bobbing in the step
   function placeOf(a, k, i, frac, fp) {
-    let [r, c] = tweenPos(a, fp && fp.agents[k], frac);
+    const pa = fp && fp.agents[k], moved = (x, y) => x && y && (x.r !== y.r || x.c !== y.c);
+    const carryIn = i >= 2 && moved(F[i - 2].agents[k], F[i - 1].agents[k]) && moved(pa, a);
+    const carryOut = i + 1 < F.length && moved(a, F[i + 1].agents[k]) && moved(pa, a);
+    let [r, c] = tweenPos(a, pa, frac, carryIn, carryOut);
     if (frac < 1 && !reduced && a.alive && !a.asleep) {
       const m = /^(strike|touch)_(\w+)$/.exec(a.action || "");
       if (m && STEP_OF[m[2]]) { const s = Math.sin(Math.PI * frac) * (m[1] === "strike" ? 0.3 : 0.15); r += STEP_OF[m[2]][0] * s; c += STEP_OF[m[2]][1] * s; }
@@ -3534,7 +3640,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     const fmt = (s) => (s >= 3600 ? `${(s / 3600).toFixed(1)} h` : s >= 60 ? `${Math.floor(s / 60)} min ${Math.round(s % 60)} s` : `${Math.round(s)} s`);
     sel.innerHTML = mult.map((m, j) => {
       const tps = TM < 30 ? m * 1.44 / TM : m;
-      return `<option value="${tps}"${j === (TM < 30 ? 0 : 1) ? " selected" : ""}>${m}&times; &middot; a day in ${fmt(1440 / TM / tps)}</option>`;
+      return `<option value="${tps}"${j === 0 ? " selected" : ""}>${m}&times; &middot; a day in ${fmt(1440 / TM / tps)}</option>`;
     }).join("");
     sel.title = TM < 30 ? `RimWorld's speeds: 1× is 1.44 game minutes a second; a tick here is ${TM} min. Keys 1-4.`
       : "Ticks per second; one tick is half an hour. Keys 1-4.";
@@ -3606,9 +3712,9 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     if (cur === prevShown + 1 && playing) spawnMotes(cur); else if (cur !== prevShown) motes = [];
     prevShown = cur;
     if (follow) centreOnSelected();
-    drawFrame(cur, flick, playing ? acc : 1);
+    drawFrame(cur, flick, playing ? acc : stepAnim ? 0 : 1);
     const now = performance.now();
-    if (!playing || now - lastSide > 150) { lastSide = now; updateSide(cur); updateColonists(cur); updateLetters(cur); }
+    if (!playing || now - lastSide > 400) { lastSide = now; updateSide(cur); updateColonists(cur); updateLetters(cur); }
     syncSpeedButtons();
     if ($("fw-on").checked) drawFoodWeb(cur); };
   $("insp-tile").addEventListener("click", () => {
@@ -3769,13 +3875,15 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     mode = m;
     $("mode-all").className = m === "all" ? "primary" : ""; $("mode-all").setAttribute("aria-pressed", m === "all");
     $("mode-notable").className = m === "notable" ? "primary" : ""; $("mode-notable").setAttribute("aria-pressed", m === "notable");
+    $("mode-watched").className = m === "watched" ? "primary" : ""; $("mode-watched").setAttribute("aria-pressed", m === "watched");
     updateSide(cur);
   };
+  $("mode-watched").onclick = () => setMode("watched");
   $("mode-all").onclick = () => setMode("all");
   $("mode-notable").onclick = () => setMode("notable");
   $("play").onclick = () => { if (!playing && cur === F.length - 1) show(0); setPlaying(!playing); };
   $("back").onclick = () => { setPlaying(false); show(cur - 1); };
-  $("fwd").onclick = () => { setPlaying(false); show(cur + 1); };
+  $("fwd").onclick = () => { setPlaying(false); if (cur < F.length - 1 && !reduced) stepAnim = { t0: performance.now() }; show(cur + 1); };
   scrub.oninput = () => { setPlaying(false); show(+scrub.value); };
   document.addEventListener("keydown", (e) => {
     if (e.target.tagName === "SELECT") return;
@@ -3816,8 +3924,11 @@ const DATA = /*__PLAYBACK_DATA__*/null;
         else show(cur + n);
         lastDraw = ts;
       } else if (!reduced && ts - lastDraw > 33) { lastDraw = ts; drawFrame(cur, flick, acc); }
+    } else if (stepAnim) {                            // stepping forward while paused: play the one tick out
+      const fr = Math.min(1, (ts - stepAnim.t0) / 450);
+      lastDraw = ts; if (fr >= 1) stepAnim = null; drawFrame(cur, flick, fr);
     } else if (motes.length && ts - lastDraw > 33) { lastDraw = ts; drawFrame(cur, flick, 1); }
-    if (!reduced && Math.floor(ts / 250) !== flick) { flick = Math.floor(ts / 250); drawFrame(cur, flick, playing ? acc : 1); }
+    if (!reduced && Math.floor(ts / 250) !== flick) { flick = Math.floor(ts / 250); if (!stepAnim) drawFrame(cur, flick, playing ? acc : 1); }
     requestAnimationFrame(loop);
   }
   function drawSidebarFigures() { document.querySelectorAll(".agent canvas[data-fig], .colonist canvas[data-fig]").forEach((cv) => {

@@ -149,7 +149,7 @@ def build_cfg(args):
     cfg = EnvConfig(grid_size=p["grid"], n_agents=p["agents"], skills=p.get("slate") == "caveman",
                     plant_abundance=args.food, reward_mode="survival")
     if (args.world or p.get("world")) == "living":
-        cfg = living_world(cfg, ecology=args.ecology, fouling=args.fouling)
+        cfg = living_world(cfg, ecology=getattr(args, "ecology", True), fouling=getattr(args, "fouling", True))
     from lifesim.config import with_time_scale
     cfg = with_time_scale(cfg, p.get("days_per_year", 40), p.get("days_per_bio_year", 1.0))
     if p.get("reproduction"):

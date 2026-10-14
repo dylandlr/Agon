@@ -2071,7 +2071,11 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     # Grasp takes the selected material if present, otherwise whatever is most
     # plentiful here (no preference is built in); the hand then holds what was taken.
     empty_hand = held0 <= 0.05
-    most = jnp.argmax(jnp.minimum(avail_here, 3.0), axis=0)
+    plenty = avail_here
+    if cfg.ecology:                                   # growing plants count by what a grasp would get, not the stock
+        plenty = plenty.at[PLANT].set(jnp.where(below0 if cfg.underground else False, avail_here[PLANT],
+                                                forage_grid(state, cfg)[r0, c0]))
+    most = jnp.argmax(jnp.minimum(plenty, 3.0), axis=0)
     sel_present = avail_here[hand0, idx] > 0.1
     grab = jnp.where(sel_present, hand0, most).astype(jnp.int32)
     here_sel = avail_here[grab, idx]

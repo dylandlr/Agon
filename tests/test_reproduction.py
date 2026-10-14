@@ -252,6 +252,7 @@ def test_a_choice_to_mate_stays_open_for_a_few_ticks_and_is_seen():
 
 def test_a_sleeping_partner_is_not_courting():
     cfg, s = _world()
+    s = s._replace(sleepiness=s.sleepiness.at[0].set(0.5))         # tired enough to sleep (sleep is honest)
     _, infos = _seq(cfg, s, [[MATE, REST, REST, REST], [E.SLEEP, MATE, REST, REST]])
     assert not any(bool(i.mated.any()) for i in infos)
 
