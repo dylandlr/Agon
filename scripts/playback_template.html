@@ -173,6 +173,16 @@ section.panel { margin: 0; }
 .plot-key { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11.5px; color: var(--muted); }
 .plot-key span::before { content: ""; display: inline-block; width: 10px; height: 2px; background: var(--c); vertical-align: 3px; margin-right: 4px; }
 .speech { font-size: 12.5px; background: var(--panel2); border-radius: 4px; padding: 6px 9px; }
+.soc h2 { margin-top: 16px; } .soc h2:first-child { margin-top: 0; }
+.soc .grp { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); font-size: 12.5px; }
+.soc .grp:first-of-type { border-top: 0; }
+.soc .grp .n { font-weight: 600; min-width: 4.5em; }
+.soc .stat { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; font-size: 12.5px; }
+.soc .stat span:nth-child(even) { text-align: right; color: var(--muted); }
+.soc .pairs { display: grid; grid-template-columns: 1fr 90px 3em; gap: 3px 8px; align-items: center; font-size: 12px; }
+.soc .pairs .bar2 { height: 6px; background: var(--track); position: relative; border-radius: 1px; }
+.soc .pairs .bar2 i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); border-radius: 1px; }
+.soc .pairs span:nth-child(3n) { text-align: right; color: var(--muted); }
 .speech .snd { color: var(--muted); font-style: italic; }
 
 /* ---- the inspector's long form, the people list, the log */
@@ -349,6 +359,7 @@ ol.events time { color: var(--accent); margin-right: 8px; }
       <button role="tab" id="tab-agent" data-tab="agent" aria-selected="true" aria-controls="pane-agent">Inspect</button>
       <button role="tab" id="tab-log" data-tab="log" aria-selected="false" aria-controls="pane-log">Log</button>
       <button role="tab" id="tab-people" data-tab="people" aria-selected="false" aria-controls="pane-people">People</button>
+      <button role="tab" id="tab-society" data-tab="society" aria-selected="false" aria-controls="pane-society">Society</button>
       <button role="tab" id="tab-language" data-tab="language" aria-selected="false" aria-controls="pane-language">Language</button>
       <button role="tab" id="tab-world" data-tab="world" aria-selected="false" aria-controls="pane-world">World</button>
     </div>
@@ -371,6 +382,10 @@ ol.events time { color: var(--accent); margin-right: 8px; }
     <div class="pane" id="pane-people" role="tabpanel" aria-labelledby="tab-people" hidden>
       <p class="legend">Click someone to inspect them. <span class="who">Blue names</span> and <a class="place" href="#" onclick="return false">purple places</a> are links throughout. Bars on the right: empathy, kin care, envy, guilt, reciprocity, vengefulness.</p>
       <div id="agents"></div>
+    </div>
+    <div class="pane" id="pane-society" role="tabpanel" aria-labelledby="tab-society" hidden>
+      <label class="toggle" style="margin-bottom: 10px"><input type="checkbox" id="show-groups"> Outline groups on the map</label>
+      <div id="society"></div>
     </div>
     <div class="pane" id="pane-language" role="tabpanel" aria-labelledby="tab-language" hidden>
       <div id="language"></div>
@@ -3736,6 +3751,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   function updateSide(i) {
     const f = F[i];
     updateInspector(i);
+    updateSociety(i);
     const [, y, season, day, hm] = f.time.match(/^Y(\d+) (\w+) D(\d+) (\d\d:\d\d)$/);
     $("time").textContent = hm;
     $("date").textContent = `${season}, day ${day}, year ${y}`;
@@ -3990,6 +4006,17 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cw, chh);
     const kz = cw / map.width;                                  // label pixels per map pixel
     ctx.setTransform(kz, 0, 0, kz, Math.round(-Math.round(camC * P) * (T / P) * kz), Math.round(-Math.round(camR * P) * (T / P) * kz));
+    if ($("show-groups").checked) {                     // groups: a soft ring round each, in one colour per group
+      groupsAt(i).forEach((x, gi) => {
+        const pts = x.filter((k) => AT[k] && !!f.agents[k].below === below);
+        if (pts.length < 2) return;
+        const cx = pts.reduce((s2, k) => s2 + AT[k][1] + 0.5, 0) / pts.length, cy = pts.reduce((s2, k) => s2 + AT[k][0] + 0.55, 0) / pts.length;
+        const rad = Math.max(...pts.map((k) => Math.hypot(AT[k][1] + 0.5 - cx, AT[k][0] + 0.55 - cy))) + 0.75;
+        const hue = (gi * 67 + 40) % 360;
+        ctx.fillStyle = `hsla(${hue}, 70%, 60%, 0.10)`; ctx.strokeStyle = `hsla(${hue}, 75%, 68%, 0.85)`; ctx.lineWidth = 1.5 * S;
+        ctx.setLineDash([5 * S, 4 * S]); ctx.beginPath(); ctx.arc(cx * T, cy * T, rad * T, 0, TAU); ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
+      });
+    }
     drawMotes(below, ctx, S);
     const now = performance.now(), dt = Math.min(200, now - lblTime); lblTime = now;
     const glide = reduced ? 1 : 1 - Math.exp(-dt / 70);
@@ -4423,6 +4450,114 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   window.addEventListener("mousemove", (ev) => { if (miniDrag) miniGo(ev); });
   window.addEventListener("mouseup", () => { miniDrag = false; });
   mini.addEventListener("click", (ev) => ev.stopPropagation());
+
+  // ---------- society in this recording: who is with whom (groups: people within one cell of each
+  // other, chained), how that ran day by day, gifts, joint hunts, blows and blows answered by a third
+  // party. Descriptive: scripts/society.py tests the same things against null models on whole
+  // continuous worlds.
+  const GROUPS = new Map();
+  function groupsAt(i) {                                // [[agent indices]] at frame i, the biggest first
+    let g = GROUPS.get(i);
+    if (g) return g;
+    const f = F[i], who = f.agents.map((a, k) => [a, k]).filter(([a]) => a.alive && a.existed !== false);
+    const lab = new Map(who.map(([, k]) => [k, k]));
+    const find = (k) => { while (lab.get(k) !== k) k = lab.get(k); return k; };
+    for (let x = 0; x < who.length; x++) for (let y = x + 1; y < who.length; y++) {
+      const [a, p] = who[x], [b, q] = who[y];
+      if (!!a.below === !!b.below && Math.max(Math.abs(a.r - b.r), Math.abs(a.c - b.c)) <= 1) { const rp = find(p), rq = find(q); if (rp !== rq) lab.set(rp, rq); }
+    }
+    const m = new Map(); who.forEach(([, k]) => { const r = find(k); if (!m.has(r)) m.set(r, []); m.get(r).push(k); });
+    g = [...m.values()].sort((x, y) => y.length - x.length);
+    GROUPS.set(i, g); if (GROUPS.size > 3000) GROUPS.delete(GROUPS.keys().next().value);
+    return g;
+  }
+  let SOC = null;                                       // per-day series, built once
+  function societySeries() {
+    if (SOC) return SOC;
+    const perDay = Math.max(1, Math.round(1440 / TM)), days = [];
+    const blowsOn = new Map();                          // victim -> [t]
+    const blowList = [];
+    DATA.events.forEach((e) => { if (e.type === "strike_agent") (e.victims || []).forEach((v) => { blowList.push([e.t, e.agent, v]); if (!blowsOn.has(v)) blowsOn.set(v, []); blowsOn.get(v).push([e.t, e.agent]); }); });
+    const strikes = new Map(); DATA.events.forEach((e) => { if (e.type === "strike_animal" || e.type === "kill") { if (!strikes.has(e.t)) strikes.set(e.t, []); strikes.get(e.t).push(e); } });
+    const t0 = F[0].t;
+    const dayOf = (t) => Math.floor((t - t0) / perDay);
+    const nDays = dayOf(F[F.length - 1].t) + 1;
+    for (let d = 0; d < nDays; d++) days.push({ tgs: 0, alone: 0, n: 0, groups: 0, gifts: 0, kills: 0, joint: 0, blows: 0, answered: 0 });
+    F.forEach((f, i) => {
+      if (i % Math.max(1, Math.round(60 / TM)) !== 0) return;          // hourly
+      const g = groupsAt(i), d = days[dayOf(f.t)]; if (!d) return;
+      const people = g.reduce((s2, x) => s2 + x.length, 0); if (!people) return;
+      d.tgs += g.reduce((s2, x) => s2 + x.length * x.length, 0) / people; d.alone += g.filter((x) => x.length === 1).length / people;
+      d.groups += g.filter((x) => x.length >= 2).length; d.n++;
+    });
+    DATA.events.forEach((e) => {
+      const d = days[dayOf(e.t)]; if (!d) return;
+      if (e.type === "took_food") d.gifts++;
+      if (e.type === "kill" && (e.animal === "large_prey" || e.animal === "large")) {
+        d.kills++;
+        const p = e.pos || [0, 0];
+        let joint = false; for (let tt = e.t - 3; tt <= e.t && !joint; tt++) (strikes.get(tt) || []).forEach((x) => { if (x.agent !== e.agent && x.pos && Math.max(Math.abs(x.pos[0] - p[0]), Math.abs(x.pos[1] - p[1])) <= 2) joint = true; });
+        if (joint) d.joint++;
+      }
+    });
+    blowList.forEach(([t, a, b]) => { const d = days[dayOf(t)]; if (!d) return; d.blows++;
+      if ((blowsOn.get(a) || []).some(([tt, s2]) => tt > t && tt <= t + perDay && s2 !== b)) d.answered++; });
+    days.forEach((d) => { if (d.n) { d.tgs /= d.n; d.alone /= d.n; d.groups /= d.n; } });
+    // association over the whole recording (hourly samples): the share of hours both were alive together
+    const N = DATA.agents.length, both = Array.from({ length: N }, () => new Float32Array(N)), tog = Array.from({ length: N }, () => new Float32Array(N));
+    F.forEach((f, i) => {
+      if (i % Math.max(1, Math.round(60 / TM)) !== 0) return;
+      const live = f.agents.map((a, k) => (a.alive && a.existed !== false ? k : -1)).filter((k) => k >= 0);
+      live.forEach((p) => live.forEach((q) => { if (p < q) both[p][q]++; }));
+      groupsAt(i).forEach((x) => x.forEach((p) => x.forEach((q) => { if (p < q) tog[p][q]++; })));
+    });
+    const pairs = [];
+    for (let p = 0; p < N; p++) for (let q = p + 1; q < N; q++) if (both[p][q] >= 6) pairs.push([p, q, tog[p][q] / both[p][q]]);
+    pairs.sort((x, y) => y[2] - x[2]);
+    SOC = { days, pairs, perDay, dayOf };
+    return SOC;
+  }
+  function smallChart(title, vals, cur, fmt, unit, max) {
+    const W = 400, H = 70, L = 34, R = 6, Tp = 6, B = 16, pw = W - L - R, ph = H - Tp - B, n = vals.length;
+    const mx = max ?? Math.max(1e-9, ...vals.map((v) => v ?? 0));
+    const X = (d) => L + (n <= 1 ? pw / 2 : pw * d / (n - 1)), Y = (v) => Tp + ph * (1 - v / mx);
+    let path = ""; vals.forEach((v, d) => { if (v === null) return; path += `${path ? "L" : "M"}${X(d).toFixed(1)},${Y(v).toFixed(1)}`; });
+    const ticks = n <= 1 ? [0] : [0, Math.floor((n - 1) / 2), n - 1];
+    return `<div><p class="lbl" style="margin:8px 0 2px">${esc(title)}${cur !== null && vals[cur] !== null && vals[cur] !== undefined ? `: <b style="color:var(--ink)">${fmt(vals[cur])}</b>${unit} today` : ""}</p>`
+      + `<svg class="plot" viewBox="0 0 ${W} ${H}">`
+      + [0, 0.5, 1].map((q) => `<line class="grid" x1="${L}" x2="${L + pw}" y1="${Y(q * mx)}" y2="${Y(q * mx)}"/><text x="${L - 4}" y="${Y(q * mx) + 3}" text-anchor="end">${fmt(q * mx)}</text>`).join("")
+      + ticks.map((d, j) => `<text x="${X(d)}" y="${H - 3}" text-anchor="${n <= 1 ? "middle" : j === 0 ? "start" : j === ticks.length - 1 ? "end" : "middle"}">day ${d + 1}</text>`).join("")
+      + `<rect class="axis" x="${L}" y="${Tp}" width="${pw}" height="${ph}"/>`
+      + (n > 1 ? `<path d="${path}" fill="none" stroke="var(--accent)" stroke-width="1.6"/>` : vals.map((v, d) => `<circle cx="${X(d)}" cy="${Y(v ?? 0)}" r="3" fill="var(--accent)"/>`).join(""))
+      + (cur !== null ? `<line class="now" x1="${X(cur)}" x2="${X(cur)}" y1="${Tp}" y2="${Tp + ph}"/>` : "") + `</svg></div>`;
+  }
+  function updateSociety(i) {
+    if ($("pane-society").hidden) return;
+    const f = F[i], g = groupsAt(i), S2 = societySeries(), cur = Math.min(S2.days.length - 1, S2.dayOf(f.t));
+    const alive = g.reduce((s2, x) => s2 + x.length, 0);
+    let h = `<div class="soc"><h2>Groups now</h2>`;
+    h += alive ? g.map((x) => `<div class="grp"><span class="n">${x.length === 1 ? "alone" : `${x.length} together`}</span>${x.map((k) => agentLink(k, f.t)).join(" ")}</div>`).join("")
+      : `<p class="empty">No one is alive.</p>`;
+    const d = S2.days[cur] || {};
+    h += `<h2>Today</h2><div class="stat">`
+      + `<span>Group size the average person is in</span><span>${(d.tgs || 0).toFixed(1)}</span>`
+      + `<span>Share of the time alone</span><span>${Math.round(100 * (d.alone || 0))}%</span>`
+      + `<span>Groups of two or more</span><span>${(d.groups || 0).toFixed(1)}</span>`
+      + `<span>Food left by one and taken by another</span><span>${d.gifts || 0}</span>`
+      + `<span>Large prey killed (with another hunter close)</span><span>${d.kills || 0} (${d.joint || 0})</span>`
+      + `<span>Blows (answered by a third party within a day)</span><span>${d.blows || 0} (${d.answered || 0})</span></div>`;
+    h += `<h2>Over the recording</h2>`
+      + smallChart("Group size the average person is in", S2.days.map((x) => (x.n ? x.tgs : null)), cur, (v) => v.toFixed(1), "", null)
+      + smallChart("Share of the time alone", S2.days.map((x) => (x.n ? x.alone : null)), cur, (v) => `${Math.round(v * 100)}%`, "", 1)
+      + smallChart("Food left and taken by another", S2.days.map((x) => x.gifts), cur, (v) => v.toFixed(0), "", Math.max(2, ...S2.days.map((x) => x.gifts)))
+      + smallChart("Blows struck", S2.days.map((x) => x.blows), cur, (v) => v.toFixed(0), "", Math.max(2, ...S2.days.map((x) => x.blows)));
+    const top = S2.pairs.slice(0, 10);
+    h += `<h2>Who keeps company with whom</h2><p class="lbl">Share of the hours both were alive that they were together, whole recording</p>`
+      + (top.length ? `<div class="pairs">${top.map(([p, q, v]) => `<span>${agentLink(p, f.t)} and ${agentLink(q, f.t)}</span><span class="bar2"><i style="width:${Math.round(v * 100)}%"></i></span><span>${Math.round(v * 100)}%</span>`).join("")}</div>` : `<p class="empty">Too little time together to say.</p>`);
+    h += `<p class="note" style="margin-top:12px">Together means within one cell of each other (a cell is about a half-hour walk across). These are descriptions of this recording. To test bands, camps, sharing, joint hunts, division of labour and punishment against chance over a whole continuous world, run <code>scripts/society.py</code>.</p></div>`;
+    $("society").innerHTML = h;
+  }
+  $("show-groups").addEventListener("change", () => drawFrame(cur, flick, playing ? acc : 1));
 
   // ---------- playback
   const scrub = $("scrub"); scrub.max = F.length - 1;

@@ -24,6 +24,7 @@ scripts/
   experiment.py     The thesis experiments, gate and report
   hierarchy.py      Dominance, linearity, steepness, stability, leadership, rank outcomes
   culture.py        Between-world differences, traditions, persistence, dialects
+  society.py        Bands, camps, sharing, joint hunts, division of labour, punishment, over the generations
 hprc/               Grace setup, benchmark, single-run and E0 array job scripts
   evaluate.py       Random vs scripted vs trained survival + record an episode
 tests/
@@ -951,6 +952,56 @@ predator, large prey or fire was in view of each speaker) beside `lives.json` an
 
 A candidate culture is one that differs between social worlds, persists past generations, holds
 beyond genes, and is weaker or absent in the solitary control.
+
+**Society** (`scripts/society.py <world> [--window-days 40] [--radius 1] [--json out.json]`)
+measures the rest of what makes a society, per window, beside the generations alive, so a world's
+course over the generations reads as one table. Each measure has a null model:
+- *Bands (fission-fusion).* People within one cell of each other are together.
+  - Per window: the typical group size (the size of the group the average person is in), the share
+    alone, the number of groups, and how often a person's companions change per day.
+  - Association: each pair's share of hours together. Its null keeps each person's daily rhythm
+    and the places they go, and breaks only who goes with whom (one track of the pair shifted by
+    whole days). The ratio over the null is company sought, not company from a shared water hole.
+  - Preferred companions are pairs above their own null's 95th percentile and at least 0.2,
+    counted against the 5% expected by chance. Bands are the connected groups of preferred
+    companions, and band stability is how well each band is found again in the next window.
+- *Places.*
+  - Home range: the cells holding 95% of a person's time.
+  - Camps: how often people sleep where they slept before (fidelity), and beside someone
+    (co-sleeping).
+  - Between bands: blows per 100 hours together, between bands against within.
+- *Sharing.*
+  - Food left and taken by another, per person-year.
+  - The share that goes to kin (pedigree r ≥ 0.25), against the kin share of the giver's company.
+  - Reciprocity: whether i gives to j as j gives to i (dyadic correlation, node-permutation p).
+- *Hunting together.* The share of large-prey kills with another hunter striking nearby in the
+  three ticks before, hunters per kill, and food taken from a hunter within a day of their kill.
+- *Division of labour* (Gorelick et al. 2004). Tasks: gathering, hunting, tending fire, nursing,
+  and leaving food for others.
+  - I(individual; task) / H(task), against each person doing as many acts drawn from the shared
+    mix.
+  - By sex: the female share of each task over her share of the people, with a permutation p.
+- *Punishment.* Is a striker struck by a third party within a day more often than when their own
+  record of being struck is shifted at random in time (keeping its rate and clustering)? Also: how
+  often those punishers are kin of the victim.
+- *Inequality.* Gini of eating and of children among adults.
+
+`tests/test_society.py` checks each measure on synthetic worlds:
+- It finds planted structure: two bands with camps, specialists, sex roles, reciprocal kin gifts,
+  answered blows and joint hunts.
+- It finds none in worlds without it.
+- The punishment test raises a false alarm about 5% of the time on random blows.
+- Caveat: the association p-value is approximate. When people drift with no home range, it runs
+  about twice too liberal (measured on synthetic loners). Use replicate worlds for firm
+  conclusions.
+
+In the player, the **Society** tab shows, descriptively, for the recording:
+- the groups at this moment;
+- the day's group size, time alone, gifts, joint kills, and blows and blows answered;
+- a small chart of each over the days;
+- who keeps company with whom.
+
+**Outline groups on the map** rings each group.
 
 ## Attachment: survival felt toward particular others
 
