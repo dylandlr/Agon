@@ -8,301 +8,386 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
+/* Agon player. A field instrument for watching a simulated band of people: RimWorld's readable
+   dark panels and colour-coded needs, with the exact numbers, axes and units of a lab plot.
+   Tokens: graphite panels, ochre for what is selected or live, one colour per need everywhere. */
 :root {
-  --bg: #d9dfd2; --panel: #eef1ea; --ink: #1f2433; --muted: #586070;
-  --accent: #9a6614; --line: #b8c0b0; --track: #c9d0c1;
-  box-sizing: border-box;
-  padding-top: env(safe-area-inset-top, 0px);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  --bg: #dde1d9; --panel: #f2f3ee; --panel2: #e7eae3; --ink: #1b2321; --muted: #5b6662; --faint: #8a938f;
+  --accent: #a86d0c; --accent-ink: #fff8ea; --line: #c4cbc1; --track: #d3d9d0; --hover: #e9ecdf;
+  --water: #2f86c2; --food: #5f9a2e; --energy: #b98f12; --health: #c0453a; --stress: #8a58a8; --sleep: #4d5fbf; --urge: #94703c;
+  --who: #2471a8; --where: #8a45ad;
+  --face: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif; --display: var(--face);
+  color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #1b2038; --panel: #242a48; --ink: #ece6d2; --muted: #9aa0bd;
-    --accent: #e0a83a; --line: #353c63; --track: #2e355a;
+    --bg: #111517; --panel: #192023; --panel2: #20292c; --ink: #e8e4d8; --muted: #95a09b; --faint: #67726e;
+    --accent: #e0a83a; --accent-ink: #1d1505; --line: #2c373a; --track: #2a3437; --hover: #243034;
+    --water: #4aa3df; --food: #8fbf5a; --energy: #e6c34a; --health: #e0675a; --stress: #b88ad0; --sleep: #7d8fe6; --urge: #c49a62;
+    --who: #6cc6f0; --where: #cf9cf2; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #1b2038; --panel: #242a48; --ink: #ece6d2; --muted: #9aa0bd;
-  --accent: #e0a83a; --line: #353c63; --track: #2e355a;
+  --bg: #111517; --panel: #192023; --panel2: #20292c; --ink: #e8e4d8; --muted: #95a09b; --faint: #67726e;
+  --accent: #e0a83a; --accent-ink: #1d1505; --line: #2c373a; --track: #2a3437; --hover: #243034;
+  --water: #4aa3df; --food: #8fbf5a; --energy: #e6c34a; --health: #e0675a; --stress: #b88ad0; --sleep: #7d8fe6; --urge: #c49a62;
+  --who: #6cc6f0; --where: #cf9cf2; color-scheme: dark;
 }
-*, *::before, *::after { box-sizing: inherit; }
-:root { --face: "IBM Plex Sans", system-ui, sans-serif; }
-body.pixel { --face: "Pixelify Sans", "Courier New", monospace; }
+*, *::before, *::after { box-sizing: border-box; }
+body.pixel { --display: "Pixelify Sans", "Courier New", monospace; }
 body.pixel canvas.map, body.pixel #tile-zoom { image-rendering: pixelated; image-rendering: crisp-edges; }
-body.pixel .stage, body.pixel .clock, body.pixel section.panel { border-width: 2px; border-radius: 0; }
-html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+html, body { height: 100%; }
 body {
   margin: 0; background: var(--bg); color: var(--ink);
-  font: 15px/1.5 "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font: 13px/1.45 var(--face); font-variant-numeric: tabular-nums;
 }
-.wrap { max-width: 1080px; margin: 0 auto; padding: 20px 16px 32px; }
-header h1 {
-  font: 600 28px/1.1 var(--face); margin: 0 0 4px; letter-spacing: 0.5px;
-}
-header p { margin: 0 0 18px; color: var(--muted); }
-.layout { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(260px, 1fr); gap: 20px; align-items: start; }
-@media (max-width: 760px) { .layout { grid-template-columns: 1fr; } }
-.stage {
-  background: var(--panel); border: 2px solid var(--line); padding: 10px;
-}
-canvas.map {
-  display: block; width: 100%; height: auto; aspect-ratio: 1 / 1;
-  background: #000;
-}
-.mapwrap { position: relative; overflow: hidden; }
-#minimap { position: absolute; right: 8px; bottom: 44px; width: 150px; height: 150px; border: 2px solid #203036; border-radius: 3px;
-  image-rendering: pixelated; cursor: crosshair; box-shadow: 0 2px 8px rgba(0,0,0,.35); z-index: 3; }
-.mapwrap canvas.map { transform-origin: 0 0; will-change: transform; }
-.mapwrap.zoomed canvas.map { cursor: grab; }
-.mapwrap.dragging canvas.map { cursor: grabbing; }
-.hud .zm { display: inline-flex; gap: 2px; align-items: center; }
-.hud #zoom-lv { min-width: 22px; text-align: center; font-size: 10px; }
-.hud #follow { letter-spacing: 0; font-size: 10px; }
-.colonists { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; margin-bottom: 8px; }
-.colonist { width: 44px; padding: 2px 2px 3px; background: #262a36; border: 1px solid #3c4252; border-radius: 4px;
-  color: #f2ecd9; font: 600 9px/1.15 var(--face); text-align: center; cursor: pointer; display: flex; flex-direction: column; align-items: stretch; }
-.colonist canvas { width: 36px; height: 36px; display: block; margin: 0 auto; }
-.model-strip { background: #5f8f6c; border-radius: 4px; padding: 4px 0 0; margin: 6px 0; text-align: center; }
-.model-strip canvas { width: 216px; height: 104px; image-rendering: pixelated; }
+button, select { font: 500 12.5px/1 var(--face); color: var(--ink); background: var(--panel2); border: 1px solid var(--line);
+  border-radius: 4px; padding: 6px 10px; cursor: pointer; }
+button:hover, select:hover { border-color: var(--accent); }
+button.primary, button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button:disabled { opacity: 0.45; cursor: default; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---- the app: a top bar, the map with its transport below, a dock of panels on the right */
+.app { height: 100vh; height: 100dvh; display: grid; grid-template-columns: minmax(0, 1fr) clamp(340px, 30vw, 460px);
+  grid-template-rows: auto minmax(0, 1fr) auto; }
+.topbar { grid-column: 1 / -1; display: flex; align-items: center; gap: 18px; padding: 8px 14px; background: var(--panel); border-bottom: 1px solid var(--line); min-width: 0; }
+.brand { font: 600 17px/1 var(--display); letter-spacing: 0.02em; white-space: nowrap; margin: 0; }
+.brand small { font: 400 12px/1 var(--face); color: var(--muted); margin-left: 8px; letter-spacing: 0; }
+#source { margin: 0; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
+.clock { display: flex; align-items: baseline; gap: 10px; white-space: nowrap; }
+.clock .time { font: 600 26px/1 var(--display); letter-spacing: 0.02em; }
+.clock .date { color: var(--ink); font-size: 12.5px; font-weight: 500; }
+.clock .sky { color: var(--muted); font-size: 12px; max-width: 26ch; overflow: hidden; text-overflow: ellipsis; }
+.nav-chunks { font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+.stage { grid-column: 1; grid-row: 2; display: flex; flex-direction: column; min-height: 0; min-width: 0; background: #0b0e0f; position: relative; }
+.colonists { display: flex; gap: 3px; padding: 5px 6px; overflow-x: auto; background: rgba(12, 15, 16, 0.92); border-bottom: 1px solid #222b2e; scrollbar-width: thin; flex: none; }
+.colonist { flex: none; width: 54px; padding: 3px 3px 4px; background: #1a2124; border: 1px solid #2f3a3e; border-radius: 4px;
+  color: #ece6d6; font: 600 10px/1.15 var(--face); text-align: center; display: flex; flex-direction: column; align-items: stretch; gap: 2px; }
+.colonist:hover { border-color: #e0a83a; }
+.colonist canvas { width: 40px; height: 40px; display: block; margin: 0 auto; }
 .colonist .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.colonist .b { display: block; height: 3px; background: rgba(255, 255, 255, 0.12); margin-top: 2px; }
+.colonist .b { display: block; height: 3px; background: rgba(255, 255, 255, 0.1); border-radius: 2px; overflow: hidden; }
 .colonist .b i { display: block; height: 100%; }
-.colonist .hp i { background: #6cc070; } .colonist .md i { background: #e0b04a; }
-.colonist.sel { border-color: #ffe066; box-shadow: 0 0 0 1px #ffe066; }
-.colonist.dead { opacity: 0.45; filter: grayscale(1); }
+.colonist .hp i { background: #e0675a; } .colonist .md i { background: #b88ad0; }
+.colonist.sel { border-color: #e0a83a; box-shadow: inset 0 0 0 1px #e0a83a; background: #2a2618; }
+.colonist.dead { opacity: 0.4; filter: grayscale(1); }
 .colonist.alarm { animation: alarm 0.7s ease-in-out infinite alternate; }
 @keyframes alarm { to { border-color: #ff5a4a; box-shadow: 0 0 7px #ff5a4a; } }
-.letters { position: absolute; right: 6px; top: 6px; display: flex; flex-direction: column; gap: 4px; width: min(44%, 170px); }
-.letter { display: grid; grid-template-columns: 8px 1fr auto; gap: 6px; align-items: center; padding: 4px 6px; text-align: left;
-  background: rgba(22, 24, 32, 0.84); color: #f2ecd9; border: 0; border-left: 4px solid var(--lc); border-radius: 3px; font: 600 11px/1.2 var(--face); cursor: pointer; }
+.mapwrap { position: relative; overflow: hidden; flex: 1; min-height: 0; }
+canvas.map { display: block; width: 100%; height: 100%; object-fit: contain; background: #0b0e0f; }
+.mapwrap.zoomed canvas.map { cursor: grab; }
+.mapwrap.dragging canvas.map { cursor: grabbing; }
+#minimap { position: absolute; right: 10px; bottom: 52px; width: 156px; height: 156px; border: 1px solid #3a474b; border-radius: 4px;
+  image-rendering: pixelated; cursor: crosshair; box-shadow: 0 4px 14px rgba(0,0,0,.5); z-index: 3; }
+.letters { position: absolute; right: 10px; top: 10px; display: flex; flex-direction: column; gap: 4px; width: min(40%, 230px); z-index: 2; }
+.letter { display: grid; grid-template-columns: 8px 1fr auto; gap: 7px; align-items: center; padding: 6px 8px; text-align: left;
+  background: rgba(17, 21, 23, 0.9); color: #ece6d6; border: 1px solid #2f3a3e; border-left: 3px solid var(--lc); border-radius: 4px; font: 500 11.5px/1.25 var(--face); }
 .letter i { width: 8px; height: 8px; border-radius: 50%; background: var(--lc); }
-.letter small { color: #a9a99b; font-weight: 500; }
-.hud { position: absolute; right: 6px; bottom: 6px; display: flex; gap: 8px; align-items: center; padding: 4px 6px;
-  background: rgba(22, 24, 32, 0.84); color: #f2ecd9; border-radius: 4px; font: 600 12px/1 var(--face); }
-.hud .spd { display: inline-flex; gap: 2px; }
-.hud button { background: transparent; color: #f2ecd9; border: 1px solid rgba(255, 255, 255, 0.22); padding: 3px 5px; font-size: 9px; letter-spacing: -1px; }
-.hud button[aria-pressed="true"] { background: var(--accent); color: #1b2038; border-color: var(--accent); }
-body.pixel .colonist, body.pixel .letter, body.pixel .hud, body.pixel .hud button { border-radius: 0; }
-@media (prefers-reduced-motion: reduce) { .colonist.alarm { animation: none; border-color: #ff5a4a; } }
-@media (max-width: 520px) { .letters { display: none; } .hud { font-size: 10px; } }
-.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
-.toggle { display: inline-flex; gap: 6px; align-items: center; font: 600 14px/1 var(--face); cursor: pointer; }
-button, select {
-  font: 600 14px/1 var(--face); color: var(--ink);
-  background: var(--bg); border: 2px solid var(--line); padding: 8px 12px; cursor: pointer;
-}
-button:hover, select:hover { border-color: var(--accent); }
-button.primary { background: var(--accent); color: #1b2038; border-color: var(--accent); min-width: 84px; }
-:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
-input[type=range] { flex: 1 1 200px; accent-color: var(--accent); min-width: 140px; }
-canvas.strip { display: block; width: 100%; height: 14px; margin-top: 8px; image-rendering: pixelated; }
-.clock { background: var(--panel); border: 2px solid var(--line); padding: 14px 16px; }
-.clock .time { font: 600 54px/1 var(--face); }
-.clock .date { color: var(--muted); margin-top: 6px; }
-.clock .sky { margin-top: 2px; }
-section.panel { background: var(--panel); border: 2px solid var(--line); padding: 12px 16px; margin-top: 14px; }
-section.panel h2 { font: 600 17px/1.2 var(--face); margin: 0 0 8px; }
-/* The inspector is a drawer over the right side with its own scrolling, so opening it or
-   following links never moves the page. */
-section.panel.inspector { position: fixed; top: 12px; right: 12px; bottom: 12px; width: min(440px, calc(100vw - 24px));
-  margin: 0; overflow-y: auto; z-index: 8; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35); overscroll-behavior: contain; }
-.insp-head { position: sticky; top: -12px; background: var(--panel); padding: 4px 0; z-index: 1; }
-.insp-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-.insp-head button { padding: 4px 8px; font-size: 12px; }
-.insp-actions { display: flex; gap: 6px; }
-.techtree .tech { font-size: 12px; padding: 1px 0; } .techtree .tech.far { opacity: 0.45; } .techtree .tech.done b { color: var(--accent, #9a6a1c); }
+.letter small { color: #95a09b; font-weight: 400; }
+.hud { position: absolute; left: 10px; bottom: 10px; right: 10px; display: flex; gap: 10px; align-items: center; justify-content: space-between; pointer-events: none; z-index: 2; }
+.hud > * { pointer-events: auto; }
+.hud .zm, .hud .spd { display: inline-flex; gap: 2px; align-items: center; padding: 3px; background: rgba(17, 21, 23, 0.9); border: 1px solid #2f3a3e; border-radius: 5px; }
+.hud button { background: transparent; color: #ece6d6; border: 1px solid transparent; padding: 5px 8px; font-size: 11.5px; }
+.hud button:hover { border-color: #e0a83a; }
+.hud button[aria-pressed="true"] { background: #e0a83a; color: #1d1505; border-color: #e0a83a; }
+.hud #zoom-lv { min-width: 52px; text-align: center; font-size: 11px; color: #95a09b; }
+#hud-time { display: none; }
+.ov-legend { position: absolute; left: 10px; top: 10px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; max-width: 55%;
+  font-size: 11.5px; color: #d9d4c6; background: rgba(17, 21, 23, 0.86); border-radius: 4px; padding: 0 8px; z-index: 2; }
+.ov-legend:not(:empty) { padding: 6px 8px; border: 1px solid #2f3a3e; }
+.ov-legend .ramp { display: inline-block; width: 140px; height: 8px; border: 1px solid #3a474b; vertical-align: -1px; }
+.ov-legend i.swatch { width: 10px; height: 10px; }
+
+/* ---- transport: step, play, speed, and the timeline (day and night, deaths, fires) as the scrub track */
+.transport { grid-column: 1; grid-row: 3; background: var(--panel); border-top: 1px solid var(--line); padding: 8px 12px 10px; display: grid; gap: 8px; min-width: 0; }
+.deck { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.deck #play { min-width: 74px; }
+.deck select { padding: 6px 6px; }
+.timeline { position: relative; flex: 1; min-width: 120px; height: 26px; margin: 0 6px; }
+.timeline canvas.strip { position: absolute; left: 0; right: 0; top: 8px; width: 100%; height: 10px; border-radius: 2px; image-rendering: pixelated; }
+.timeline input[type=range] { position: absolute; inset: 0; width: 100%; height: 26px; margin: 0; background: transparent; -webkit-appearance: none; appearance: none; cursor: pointer; }
+.timeline input[type=range]::-webkit-slider-runnable-track { height: 26px; background: transparent; }
+.timeline input[type=range]::-moz-range-track { height: 26px; background: transparent; }
+.timeline input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 3px; height: 26px; background: var(--accent); border-radius: 1px; box-shadow: 0 0 0 1px var(--panel); }
+.timeline input[type=range]::-moz-range-thumb { width: 3px; height: 26px; background: var(--accent); border: 0; border-radius: 1px; }
+.tickno { font-size: 11.5px; color: var(--muted); white-space: nowrap; min-width: 9ch; text-align: right; }
+.tools { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
+.ovl { display: inline-flex; flex-wrap: wrap; gap: 2px; align-items: center; }
+.ovl .lbl { font-size: 11.5px; color: var(--muted); margin-right: 4px; }
+.ovl button { padding: 4px 8px; font-size: 11.5px; border-radius: 3px; }
+.toggle { display: inline-flex; gap: 5px; align-items: center; font-size: 12px; cursor: pointer; color: var(--ink); }
+.toggle input { accent-color: var(--accent); margin: 0; }
+.note { color: var(--muted); font-size: 12px; margin: 0; }
+#slowed { color: var(--accent); }
+
+/* ---- the dock: tabs over panels, each scrolling on its own */
+.dock { grid-column: 2; grid-row: 2 / 4; display: flex; flex-direction: column; min-height: 0; background: var(--panel); border-left: 1px solid var(--line); }
+.tabs { display: flex; border-bottom: 1px solid var(--line); flex: none; background: var(--panel2); }
+.tabs button { flex: 1; border: 0; border-radius: 0; background: transparent; padding: 10px 4px 9px; font-weight: 500; color: var(--muted); border-bottom: 2px solid transparent; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); background: var(--panel); }
+.tabs button .n { font-size: 10.5px; color: var(--faint); margin-left: 3px; }
+.pane { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 14px 18px; overscroll-behavior: contain; scrollbar-width: thin; }
+.pane[hidden] { display: none; }
+.pane h2 { font: 600 15px/1.2 var(--display); margin: 0 0 8px; }
+.pane .empty-pane { color: var(--muted); padding: 18px 4px; }
+#inspector:not([hidden]) ~ .empty-pane { display: none; }
+section.panel { margin: 0; }
+.insp-head { position: sticky; top: -12px; background: var(--panel); padding: 6px 0; z-index: 2; display: flex; justify-content: space-between; align-items: center; gap: 8px; border-bottom: 1px solid var(--line); margin: -12px 0 8px; }
+.insp-head h2 { margin: 0; font-size: 13px; color: var(--muted); font-family: var(--face); font-weight: 500; }
+.insp-head button { padding: 4px 8px; font-size: 11.5px; }
+.insp-actions { display: flex; gap: 4px; }
+
+/* ---- the mind card: what the selected person is doing, weighing, feeling, and how its needs ran */
+.mind { display: grid; gap: 10px; margin-bottom: 12px; }
+.mind .who-row { display: grid; grid-template-columns: 48px 1fr; gap: 10px; align-items: center; }
+.mind .who-row canvas { width: 48px; height: 48px; background: var(--panel2); border-radius: 4px; image-rendering: pixelated; }
+.mind .nm { font: 600 16px/1.15 var(--display); }
+.mind .sub { color: var(--muted); font-size: 12px; }
+.mind .now { background: var(--panel2); border-left: 3px solid var(--accent); border-radius: 0 4px 4px 0; padding: 7px 10px; font-size: 12.5px; line-height: 1.5; }
+.mind .now .verb { font-weight: 600; }
+.mind .lbl { font-size: 11.5px; color: var(--muted); margin: 0 0 4px; }
+.opts { display: grid; grid-template-columns: max-content 1fr 3.4em; gap: 3px 8px; align-items: center; font-size: 12px; }
+.opts .bar2 { height: 8px; background: var(--track); border-radius: 1px; position: relative; overflow: hidden; }
+.opts .bar2 i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--faint); }
+.opts .chosen .bar2 i { background: var(--accent); } .opts .chosen { font-weight: 600; }
+.opts .v { text-align: right; color: var(--muted); }
+.needs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 14px; }
+.need { display: grid; grid-template-columns: 1fr auto; gap: 2px 6px; font-size: 12px; }
+.need .track { grid-column: 1 / -1; height: 6px; background: var(--track); border-radius: 1px; position: relative; }
+.need .track i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 1px; background: var(--c); }
+.need .track b { position: absolute; top: -2px; bottom: -2px; width: 1px; background: var(--muted); opacity: 0.6; }
+.need .v { color: var(--muted); }
+.need.warn .v { color: var(--c); font-weight: 600; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip { font-size: 11.5px; padding: 2px 7px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel2); white-space: nowrap; }
+.chip.c { border-color: color-mix(in srgb, var(--c) 55%, var(--line)); color: var(--ink); background: color-mix(in srgb, var(--c) 14%, var(--panel2)); }
+.plot { width: 100%; height: auto; display: block; }
+.plot text { font: 10px var(--face); fill: var(--muted); }
+.plot .axis { stroke: var(--muted); stroke-width: 0.8; fill: none; }
+.plot .grid { stroke: var(--line); stroke-width: 0.6; }
+.plot .night { fill: var(--track); opacity: 0.55; }
+.plot .now { stroke: var(--accent); stroke-width: 1; }
+.plot-key { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11.5px; color: var(--muted); }
+.plot-key span::before { content: ""; display: inline-block; width: 10px; height: 2px; background: var(--c); vertical-align: 3px; margin-right: 4px; }
+.speech { font-size: 12.5px; background: var(--panel2); border-radius: 4px; padding: 6px 9px; }
+.speech .snd { color: var(--muted); font-style: italic; }
+
+/* ---- the inspector's long form, the people list, the log */
+.model-strip { background: #5f8f6c; border-radius: 4px; padding: 4px 0 0; margin: 6px 0; text-align: center; }
+.model-strip canvas { width: 216px; height: 104px; image-rendering: pixelated; }
+.techtree .tech { font-size: 12px; padding: 1px 0; } .techtree .tech.far { opacity: 0.45; } .techtree .tech.done b { color: var(--accent); }
 .zoomwrap { display: flex; gap: 10px; align-items: flex-end; margin: 4px 0 6px; }
 #tile-zoom { width: 132px; height: 132px; border: 1px solid var(--line); background: #222; }
 i.swatch { display: inline-block; width: 9px; height: 9px; margin-right: 4px; vertical-align: 0; border: 1px solid rgba(0,0,0,.3); }
 svg.glyph { vertical-align: -2px; margin-right: 1px; } svg.glyph rect { fill: #1b2038; } svg.glyph rect.gbg { fill: #f4f1e4; stroke: #1b2038; stroke-width: 0.15; }
-.inspector h3 { font: 600 13px/1.2 var(--face); margin: 12px 0 4px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted, #6b6b5f); }
-.inspector dl { display: grid; grid-template-columns: max-content 1fr; gap: 2px 10px; margin: 0; font-size: 13px; }
-.inspector dt { color: var(--muted, #6b6b5f); }
+.inspector h3 { font: 600 12.5px/1.2 var(--face); margin: 16px 0 6px; color: var(--ink); padding-top: 10px; border-top: 1px solid var(--line); }
+.inspector dl { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 0; font-size: 12.5px; }
+.inspector dt { color: var(--muted); }
 .inspector dd { margin: 0; }
-.inspector .trait { display: grid; grid-template-columns: 9.5em 1fr 3.5em; gap: 6px; align-items: center; font-size: 12px; }
-.inspector .trait i { display: block; height: 6px; background: var(--accent, #9a6a1c); }
-.inspector .trait span.track { background: var(--line, #c9c6b5); display: block; height: 6px; }
-.inspector ol { margin: 0; padding-left: 28px; font-size: 12px; max-height: 220px; overflow-y: auto; }
-.inspector p.fine { font-size: 12px; color: var(--muted, #6b6b5f); margin: 6px 0 0; }
-.agent { cursor: pointer; }
+.inspector .trait { display: grid; grid-template-columns: 9.5em 1fr 3.5em; gap: 6px; align-items: center; font-size: 12px; cursor: help; }
+.inspector .trait i { display: block; height: 6px; background: var(--accent); }
+.inspector .trait span.track { background: var(--track); display: block; height: 6px; }
+.inspector .trait.cond { grid-template-columns: 9.5em 4em 1fr; }
+.inspector .trait:hover span:first-child { text-decoration: underline dotted; }
+.inspector ol { margin: 0; padding-left: 24px; font-size: 12px; max-height: 240px; overflow-y: auto; }
+.inspector p.fine { font-size: 11.5px; color: var(--muted); margin: 6px 0 0; }
+.inspector .tag { font-size: 11px; padding: 0 5px; border-radius: 3px; text-align: center; }
+.inspector .tag.good { background: #3f8f4f; color: #fff; } .inspector .tag.mut { background: #7a5ab8; color: #fff; } .inspector .tag.bad { background: #a8433a; color: #fff; }
+.inspector a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 .viewer { display: grid; grid-template-columns: 132px 1fr; gap: 12px; align-items: start; margin-top: 4px; }
-.meas { border-collapse: collapse; margin: 4px 0; } .meas td { padding: 1px 6px 1px 0; } .meas td + td { text-align: right; font-variant-numeric: tabular-nums; }
-.viewer svg { width: 132px; height: 230px; background: color-mix(in srgb, var(--line, #c9c6b5) 25%, transparent); }
+.meas { border-collapse: collapse; margin: 4px 0; } .meas td { padding: 1px 6px 1px 0; } .meas td + td { text-align: right; }
+.viewer svg { width: 132px; height: 230px; background: color-mix(in srgb, var(--line) 25%, transparent); }
 .viewer [data-region] { cursor: help; }
 .viewer [data-region].on { stroke: #ffe066; stroke-width: 1.2; }
 .viewer svg.bm [data-region].on { stroke: none; filter: brightness(1.25) drop-shadow(0 0 0.6px #ffe066); }
-.modes { display: flex; gap: 6px; margin: 6px 0 2px; }
-.modes button { padding: 4px 10px; font-size: 12px; }
-.modes button[aria-pressed="true"] { background: var(--accent, #9a6a1c); color: #fff; }
+.modes { display: flex; gap: 4px; margin: 6px 0 2px; flex-wrap: wrap; }
+.modes button { padding: 4px 9px; font-size: 11.5px; }
 .regions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
-.regions button { padding: 2px 6px; font-size: 11px; border-width: 1px; }
+.regions button { padding: 2px 6px; font-size: 11px; }
 .regions button.on { outline: 2px solid #ffe066; }
 .detail { font-size: 12px; line-height: 1.45; }
-.detail b { display: block; font: 600 13px/1.3 var(--face); margin-bottom: 2px; }
-.slot { display: grid; grid-template-columns: 4.8em 1fr; gap: 6px; font-size: 12px; padding: 3px 0; border-top: 1px solid var(--line, #c9c6b5); }
-.slot span:first-child { color: var(--muted, #6b6b5f); }
-.slot.empty span:last-child { color: var(--muted, #6b6b5f); font-style: italic; }
+.detail b { display: block; font: 600 12.5px/1.3 var(--face); margin-bottom: 2px; }
+.slot { display: grid; grid-template-columns: 4.8em 1fr; gap: 6px; font-size: 12px; padding: 3px 0; border-top: 1px solid var(--line); }
+.slot span:first-child { color: var(--muted); }
+.slot.empty span:last-child { color: var(--muted); font-style: italic; }
 .inv { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
-.inv div { border: 1px solid var(--line, #c9c6b5); padding: 4px; font-size: 11px; text-align: center; min-height: 34px; }
+.inv div { border: 1px solid var(--line); border-radius: 3px; padding: 4px; font-size: 11px; text-align: center; min-height: 34px; }
 .inv i { display: block; width: 10px; height: 10px; margin: 0 auto 2px; }
 .inv div.empty { opacity: 0.35; }
-a.who, span.who { color: #2b86c4; font-weight: 600; text-decoration: none; white-space: nowrap; }
+a.who, span.who { color: var(--who); font-weight: 600; text-decoration: none; white-space: nowrap; }
 a.who:hover { text-decoration: underline; }
-a.who i, span.who i { display: inline-block; width: 8px; height: 8px; margin-right: 3px; vertical-align: 0; }
-a.place { color: #a052c8; font-weight: 600; text-decoration: none; }
+a.who i, span.who i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 3px; vertical-align: 0; }
+a.place { color: var(--where); font-weight: 500; text-decoration: none; }
 a.place:hover { text-decoration: underline; }
-@media (prefers-color-scheme: dark) { a.who, span.who { color: #6cc6f0; } a.place { color: #cf9cf2; } }
-.inspector .trait { cursor: help; }
-.inspector .trait.cond { grid-template-columns: 9.5em 4em 1fr; }
-.inspector .tag { font-size: 11px; padding: 0 5px; border-radius: 3px; text-align: center; }
-.inspector .tag.good { background: #3f8f4f; color: #fff; } .inspector .tag.mut { background: #7a5ab8; color: #fff; } .inspector .tag.bad { background: #a8433a; color: #fff; }
-.inspector .trait:hover span:first-child { text-decoration: underline dotted; }
 .legend-links { font-size: 12px; margin: 4px 0 0; }
-.thought { border-left: 3px solid var(--accent, #9a6a1c); padding: 4px 8px; font-size: 12px; line-height: 1.5; margin: 6px 0; }
-.inspector a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
-.tip { position: fixed; z-index: 10; max-width: 320px; pointer-events: none; padding: 8px 10px; font-size: 12px; line-height: 1.45;
-  background: var(--panel, #fffdf6); color: var(--ink, #222); border: 2px solid var(--line, #c9c6b5); box-shadow: 0 4px 14px rgba(0,0,0,0.25); }
-.tip b { display: block; font: 600 13px/1.3 var(--face); margin-bottom: 3px; }
-.tip .k { color: var(--muted, #6b6b5f); }
-.agent.selected { outline: 2px solid var(--accent, #9a6a1c); outline-offset: 2px; }
-.agent { display: grid; grid-template-columns: 26px 1fr auto; gap: 8px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); }
+.thought { border-left: 3px solid var(--accent); padding: 4px 8px; font-size: 12px; line-height: 1.5; margin: 6px 0; }
+.tip { position: fixed; z-index: 10; max-width: 340px; pointer-events: none; padding: 8px 10px; font-size: 12px; line-height: 1.45;
+  background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 4px; box-shadow: 0 6px 18px rgba(0,0,0,0.35); }
+.tip b { display: block; font: 600 12.5px/1.3 var(--face); margin-bottom: 3px; }
+.tip .k { color: var(--muted); }
+.agent { display: grid; grid-template-columns: 30px 1fr auto; gap: 10px; align-items: center; padding: 7px 6px; border-top: 1px solid var(--line); cursor: pointer; border-radius: 3px; }
+.agent:hover { background: var(--hover); }
 .agent:first-of-type { border-top: 0; }
-.agent canvas { width: 28px; height: 28px; }
-.agent .name { font-weight: 500; }
-.agent .sub { color: var(--muted); font-size: 13px; }
-.bar { height: 6px; background: var(--track); margin-top: 3px; }
-.bar > i { display: block; height: 100%; background: var(--accent); }
-.morals { display: grid; grid-template-columns: repeat(6, 8px); gap: 2px; align-items: end; height: 22px; }
-.morals i { display: block; background: var(--muted); }
-.legend { color: var(--muted); font-size: 13px; margin: 0 0 6px; }
-ol.events { list-style: none; margin: 0; padding: 0; max-height: 640px; overflow-y: auto; }
-ol.events li.tick { font: 600 14px/1.4 var(--face); color: var(--accent); padding-top: 10px; }
+.agent.selected { background: color-mix(in srgb, var(--accent) 14%, transparent); box-shadow: inset 3px 0 0 var(--accent); }
+.agent canvas { width: 30px; height: 30px; }
+.agent .name { font-weight: 600; }
+.agent .sub { color: var(--muted); font-size: 12px; }
+.agent .sub + .sub { margin-top: 1px; }
+.bar { height: 4px; background: var(--track); margin-top: 4px; border-radius: 1px; }
+.bar > i { display: block; height: 100%; background: var(--health); border-radius: 1px; }
+.morals { display: grid; grid-template-columns: repeat(6, 6px); gap: 2px; align-items: end; height: 22px; }
+.morals i { display: block; background: var(--faint); }
+.legend { color: var(--muted); font-size: 12px; margin: 0 0 8px; }
+.seg { display: flex; gap: 2px; margin: 0 0 8px; }
+.seg button { flex: 1; padding: 5px 6px; font-size: 11.5px; }
+ol.events { list-style: none; margin: 0; padding: 0; }
+ol.events li { padding: 5px 0; border-top: 1px solid var(--line); font-size: 12.5px; }
+ol.events li:first-child { border-top: 0; }
+ol.events li.tick { font: 600 12.5px/1.4 var(--display); color: var(--accent); padding-top: 10px; position: sticky; top: -12px; background: var(--panel); z-index: 1; }
 ol.events li.said { padding-left: 12px; }
 ol.events li:not(.tick):not(.empty) { padding-left: 8px; border-left: 3px solid transparent; line-height: 1.45; }
-ol.events li.move { border-left-color: #8aa0b8; } ol.events li.food { border-left-color: #6fae50; }
+ol.events li.move { border-left-color: #8aa0b8; } ol.events li.food { border-left-color: var(--food); }
 ol.events li.social { border-left-color: #c08ad0; } ol.events li.fight, ol.events li.danger { border-left-color: #e05252; }
-ol.events li.sleep { border-left-color: #5a6ab0; } ol.events li.rest { border-left-color: var(--line); }
+ol.events li.sleep { border-left-color: var(--sleep); } ol.events li.rest { border-left-color: var(--line); }
 ol.events li.ev { border-left-color: #e0b04a; font-style: italic; } ol.events li.ev.danger { border-left-color: #e05252; }
-ol.events li.tick { position: sticky; top: 0; background: var(--panel, var(--bg)); z-index: 1; }
-.agent .sub + .sub { margin-top: 1px; }
-ol.events li { padding: 4px 0; border-top: 1px solid var(--line); font-size: 14px; }
-ol.events li:first-child { border-top: 0; }
-ol.events time { font-family: var(--face); color: var(--accent); margin-right: 8px; }
-.empty { color: var(--muted); font-size: 14px; }
-.note { color: var(--muted); font-size: 13px; margin-top: 8px; }
-/* Map overlays, as in colony sims: the ground dims and one quantity is painted over it */
-.ovl { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 10px; }
-.ovl .lbl { font: 600 13px/1 var(--face); color: var(--muted); margin-right: 2px; }
-.ovl button { padding: 4px 9px; font-size: 12px; border-width: 1px; }
-.ovl button[aria-pressed="true"] { background: var(--accent); color: #1b2038; border-color: var(--accent); }
-.ov-legend { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 6px; min-height: 18px; }
-.ov-legend .ramp { display: inline-block; width: 150px; height: 8px; border: 1px solid var(--line); vertical-align: -1px; }
-.ov-legend i.swatch { width: 10px; height: 10px; }
-.stage, .clock, section.panel { border-width: 1px; border-radius: 6px; }
-canvas.map { border-radius: 3px; outline: 1px solid rgba(0, 0, 0, 0.35); }
+ol.events time { color: var(--accent); margin-right: 8px; }
+.empty { color: var(--muted); font-size: 12.5px; }
+#fw-box svg { width: 100%; height: auto; }
+
+/* narrow screens: one column, the page scrolls, the map square */
+@media (max-width: 900px) {
+  .app { height: auto; grid-template-columns: 1fr; grid-template-rows: auto auto auto auto; }
+  .topbar { flex-wrap: wrap; gap: 6px 14px; }
+  #source { flex-basis: 100%; order: 3; white-space: normal; }
+  .clock { flex-wrap: wrap; white-space: normal; min-width: 0; max-width: 100%; } .clock .sky { max-width: 100%; }
+  .stage { grid-row: 2; } .mapwrap { flex: none; aspect-ratio: 1 / 1; }
+  .transport { grid-row: 3; }
+  .dock { grid-column: 1; grid-row: 4; border-left: 0; border-top: 1px solid var(--line); }
+  .pane { max-height: none; overflow: visible; }
+  .letters { display: none; }
+  #minimap { width: 88px; height: 88px; bottom: 46px; }
+  .hud .spd { display: none; }
+  .deck { flex-wrap: wrap; }
+  .timeline { flex-basis: 100%; order: 5; margin: 0; }
+  .tickno { margin-left: auto; }
+}
+@media (prefers-reduced-motion: reduce) { .colonist.alarm { animation: none; border-color: #ff5a4a; } }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <h1>Agon: Eos playback</h1>
+<div class="app">
+  <header class="topbar">
+    <h1 class="brand">Agon<small>Eos player</small></h1>
     <p id="source"></p>
+    <div class="clock" aria-live="off">
+      <div class="time" id="time">00:00</div>
+      <div class="date" id="date"></div>
+      <div class="sky" id="sky"></div>
+    </div>
   </header>
-  <div class="layout">
-    <div>
-      <div class="stage">
-        <div class="colonists" id="colonists" role="group" aria-label="People: click one to inspect"></div>
-        <div class="mapwrap">
-          <canvas class="map" id="map" aria-label="Map of the world at the current tick"></canvas>
-          <div class="letters" id="letters" aria-live="polite"></div>
-          <div class="hud"><span class="zm" role="group" aria-label="Zoom"><button id="zoom-out" title="Zoom out (-)" aria-label="Zoom out">&minus;</button><span id="zoom-lv">1&times;</span><button id="zoom-in" title="Zoom in (=)" aria-label="Zoom in">+</button><button id="follow" aria-pressed="false" title="Keep the camera on the selected person (F)">Follow</button><button id="translate" aria-pressed="false" title="Show what the agents say and write in English (their lexicon), or in their own script" hidden>Translate</button></span><span id="hud-time"></span>
-            <span class="spd" role="group" aria-label="Speed"><button data-spd="0" title="Pause (Space)" aria-label="Pause">&#10074;&#10074;</button><button data-spd="1" title="1&times; (key 1)" aria-label="Speed 1">&#9654;</button><button data-spd="2" title="3&times; (key 2)" aria-label="Speed 3">&#9654;&#9654;</button><button data-spd="3" title="6&times; (key 3)" aria-label="Speed 6">&#9654;&#9654;&#9654;</button><button data-spd="4" title="15&times; (key 4)" aria-label="Speed 15">&#9654;&#9654;&#9654;&#9654;</button></span>
-          </div>
-        </div>
-        <div class="tip" id="tip" role="tooltip" hidden></div>
-        <div class="controls">
-          <button id="back" aria-label="Previous tick">Back</button>
-          <button id="play" class="primary">Play</button>
-          <button id="fwd" aria-label="Next tick">Next</button>
-          <select id="speed" aria-label="Playback speed (keys 1 to 4)" title="Ticks per second; one tick is half an hour. Keys 1-4.">
-            <option value="1">1&times; &middot; a day in 48 s</option>
-            <option value="3" selected>3&times; &middot; 16 s a day</option>
-            <option value="6">6&times; &middot; 8 s a day</option>
-            <option value="15">15&times; &middot; 3 s a day</option>
-          </select>
-          <label class="toggle" title="Drop to 1&times; when someone dies, is attacked by a predator or is struck, or a child is born"><input type="checkbox" id="slow-danger" checked> Slow on danger</label>
-          <span class="note" id="slowed" aria-live="polite" hidden></span>
-          <label class="toggle"><input type="checkbox" id="web"> Social web</label>
-          <label class="toggle"><input type="checkbox" id="fw-on"> Food web</label>
-          <input type="range" id="scrub" min="0" value="0" aria-label="Tick">
-        </div>
-        <div class="ovl" role="group" aria-label="Map overlay">
-          <span class="lbl">Overlay</span>
-          <button data-ov="none" aria-pressed="true">None</button>
-          <button data-ov="temperature" aria-pressed="false">Temperature</button>
-          <button data-ov="food" aria-pressed="false">Food</button>
-          <button data-ov="minerals" aria-pressed="false">Minerals</button>
-          <button data-ov="danger" aria-pressed="false">Danger</button>
-          <button data-ov="elevation" aria-pressed="false">Elevation</button>
-          <button data-ov="trails" aria-pressed="false">Trails</button>
-          <button data-ov="knowledge" aria-pressed="false">What one knows</button>
-        </div>
-        <div class="ovl" role="group" aria-label="Art style">
-          <span class="lbl">Look</span>
-          <button data-art="painted" aria-pressed="true">Painted</button>
-          <button data-art="pixel" aria-pressed="false">Pixel</button>
-        </div>
-        <div class="ovl" role="group" aria-label="Map layer" id="layer-box" hidden>
-          <span class="lbl">Layer</span>
-          <button data-layer="surface" aria-pressed="true">Surface</button>
-          <button data-layer="caves" aria-pressed="false" title="Key C">Caves <span id="below-n"></span></button>
-        </div>
-        <div class="ov-legend" id="ov-legend" aria-live="polite"></div>
-        <canvas class="strip" id="strip" aria-hidden="true"></canvas>
-        <p class="note" id="webnote" hidden></p>
-        <div id="fw-box" hidden>
-          <svg id="foodweb" viewBox="0 0 640 320" role="img" aria-label="Food web: who has fed on whom in this recording"></svg>
-          <p class="note">Food web, so far in this recording: arrows run from food to eater (energy flows up), wider = more often.
-            Brown: hunted or caught; green: gathered and eaten; red: attacks on people; orange dashed: prey that fought back.
-            Circles are sized by how many are alive now. Animals do not graze in this world (plants regrow on their own), so
-            plants feed only people. On the map, rings mark the last day's kills, catches and attacks. Hover a line or a circle.</p>
-        </div>
-        <p class="note" id="biomes" hidden></p>
-        <p class="note">Dark bands are night. Red marks deaths, orange marks fires, light marks kills. Space plays or pauses; arrow keys step; O cycles the map overlays.</p>
+  <main class="stage">
+    <div class="colonists" id="colonists" role="group" aria-label="People: click one to inspect"></div>
+    <div class="mapwrap">
+      <canvas class="map" id="map" aria-label="Map of the world at the current tick"></canvas>
+      <div class="ov-legend" id="ov-legend" aria-live="polite"></div>
+      <div class="letters" id="letters" aria-live="polite"></div>
+      <div class="hud">
+        <span class="zm" role="group" aria-label="Camera"><button id="zoom-out" title="Zoom out (-)" aria-label="Zoom out">&minus;</button><span id="zoom-lv">1&times;</span><button id="zoom-in" title="Zoom in (=)" aria-label="Zoom in">+</button><button id="follow" aria-pressed="false" title="Keep the camera on the selected person (F)">Follow</button><button id="translate" aria-pressed="false" title="Show what the agents say and write in English (their lexicon), or in their own script" hidden>Translate</button></span><span id="hud-time"></span>
+        <span class="spd" role="group" aria-label="Speed"><button data-spd="0" title="Pause (Space)" aria-label="Pause">&#10074;&#10074;</button><button data-spd="1" title="1&times; (key 1)" aria-label="Speed 1">&#9654;</button><button data-spd="2" title="3&times; (key 2)" aria-label="Speed 3">&#9654;&#9654;</button><button data-spd="3" title="6&times; (key 3)" aria-label="Speed 6">&#9654;&#9654;&#9654;</button><button data-spd="4" title="15&times; (key 4)" aria-label="Speed 15">&#9654;&#9654;&#9654;&#9654;</button></span>
       </div>
     </div>
-    <aside>
-      <div class="clock">
-        <div class="time" id="time">00:00</div>
-        <div class="date" id="date"></div>
-        <div class="sky" id="sky"></div>
+    <div class="tip" id="tip" role="tooltip" hidden></div>
+  </main>
+  <footer class="transport">
+    <div class="deck">
+      <button id="back" aria-label="Previous tick" title="Previous tick (Left arrow)">&#9664;&#9664;</button>
+      <button id="play" class="primary">Play</button>
+      <button id="fwd" aria-label="Next tick" title="Next tick (Right arrow)">&#9654;&#9654;</button>
+      <select id="speed" aria-label="Playback speed (keys 1 to 4)">
+        <option value="1">1&times;</option><option value="3">3&times;</option><option value="6">6&times;</option><option value="15">15&times;</option>
+      </select>
+      <div class="timeline" title="The recording: dark is night, red a death, orange a fire, light a kill. Drag to scrub.">
+        <canvas class="strip" id="strip" aria-hidden="true"></canvas>
+        <input type="range" id="scrub" min="0" value="0" aria-label="Tick">
       </div>
+      <span class="tickno" id="tickno"></span>
+    </div>
+    <div class="tools">
+      <div class="ovl" role="group" aria-label="Map overlay">
+        <span class="lbl">Overlay</span>
+        <button data-ov="none" aria-pressed="true">None</button>
+        <button data-ov="temperature" aria-pressed="false">Temperature</button>
+        <button data-ov="food" aria-pressed="false">Food</button>
+        <button data-ov="minerals" aria-pressed="false">Minerals</button>
+        <button data-ov="danger" aria-pressed="false">Danger</button>
+        <button data-ov="elevation" aria-pressed="false">Elevation</button>
+        <button data-ov="trails" aria-pressed="false">Trails</button>
+        <button data-ov="knowledge" aria-pressed="false">What one knows</button>
+      </div>
+      <div class="ovl" role="group" aria-label="Art style">
+        <span class="lbl">Look</span>
+        <button data-art="painted" aria-pressed="true">Painted</button>
+        <button data-art="pixel" aria-pressed="false">Pixel</button>
+      </div>
+      <div class="ovl" role="group" aria-label="Map layer" id="layer-box" hidden>
+        <span class="lbl">Layer</span>
+        <button data-layer="surface" aria-pressed="true">Surface</button>
+        <button data-layer="caves" aria-pressed="false" title="Key C">Caves <span id="below-n"></span></button>
+      </div>
+      <label class="toggle"><input type="checkbox" id="web"> Social web</label>
+      <label class="toggle"><input type="checkbox" id="fw-on"> Food web</label>
+      <label class="toggle" title="Drop to 1&times; when someone dies, is attacked by a predator or is struck, or a child is born"><input type="checkbox" id="slow-danger" checked> Slow on danger</label>
+      <span class="note" id="slowed" aria-live="polite" hidden></span>
+    </div>
+    <p class="note" id="webnote" hidden></p>
+  </footer>
+  <aside class="dock">
+    <div class="tabs" role="tablist" aria-label="Panels">
+      <button role="tab" id="tab-agent" data-tab="agent" aria-selected="true" aria-controls="pane-agent">Inspect</button>
+      <button role="tab" id="tab-log" data-tab="log" aria-selected="false" aria-controls="pane-log">Log</button>
+      <button role="tab" id="tab-people" data-tab="people" aria-selected="false" aria-controls="pane-people">People</button>
+      <button role="tab" id="tab-language" data-tab="language" aria-selected="false" aria-controls="pane-language">Language</button>
+      <button role="tab" id="tab-world" data-tab="world" aria-selected="false" aria-controls="pane-world">World</button>
+    </div>
+    <div class="pane" id="pane-agent" role="tabpanel" aria-labelledby="tab-agent">
       <section class="panel inspector" id="inspector" hidden aria-live="polite">
         <div class="insp-head"><h2 id="insp-title">Agent inspector</h2><span class="insp-actions"><button id="insp-tile" hidden title="Inspect the tile this agent is on">Tile</button><button id="insp-back" hidden></button><button id="insp-close" aria-label="Close the inspector">Close</button></span></div>
         <div id="insp-body"></div>
       </section>
-      <section class="panel">
-        <h2>Agents</h2>
-        <p class="legend">Click an agent here or on the map to inspect it; click an empty tile (or shift-click any tile) to inspect the ground. <span class="who">Blue names</span> and <a class="place" href="#" onclick="return false">purple places</a> are links.</p>
-        <p class="legend">Bars on the right: empathy, kin care, envy, guilt, reciprocity, vengefulness.</p>
-        <div id="agents"></div>
-      </section>
-      <section class="panel">
-        <h2>Language</h2>
-        <div id="language"></div>
-      </section>
-      <section class="panel">
-        <h2>What happened</h2>
-        <div class="controls" role="group" aria-label="How much to show" style="margin: 0 0 10px">
-          <button id="mode-all" class="primary" aria-pressed="true">Everything</button>
-          <button id="mode-notable" aria-pressed="false">Notable only</button>
-          <button id="mode-watched" aria-pressed="false" title="Only the person selected on the map, over the last day">Selected person</button>
-        </div>
-        <p class="fine" id="events-note" style="margin: -4px 0 8px"></p>
-        <ol class="events" id="events"></ol>
-      </section>
-    </aside>
-  </div>
+      <p class="empty-pane">Click someone on the map or in the bar above it to see what they are doing, weighing and feeling. Click empty ground (or shift-click) to inspect a tile.</p>
+    </div>
+    <div class="pane" id="pane-log" role="tabpanel" aria-labelledby="tab-log" hidden>
+      <div class="seg" role="group" aria-label="How much to show">
+        <button id="mode-all" class="primary" aria-pressed="true">Everything</button>
+        <button id="mode-notable" aria-pressed="false">Notable only</button>
+        <button id="mode-watched" aria-pressed="false" title="Only the person selected on the map, over the last day">Selected person</button>
+      </div>
+      <p class="note" id="events-note" style="margin: 0 0 8px"></p>
+      <ol class="events" id="events"></ol>
+    </div>
+    <div class="pane" id="pane-people" role="tabpanel" aria-labelledby="tab-people" hidden>
+      <p class="legend">Click someone to inspect them. <span class="who">Blue names</span> and <a class="place" href="#" onclick="return false">purple places</a> are links throughout. Bars on the right: empathy, kin care, envy, guilt, reciprocity, vengefulness.</p>
+      <div id="agents"></div>
+    </div>
+    <div class="pane" id="pane-language" role="tabpanel" aria-labelledby="tab-language" hidden>
+      <div id="language"></div>
+    </div>
+    <div class="pane" id="pane-world" role="tabpanel" aria-labelledby="tab-world" hidden>
+      <h2>World</h2>
+      <p class="note" id="biomes" hidden></p>
+      <div id="fw-box" hidden>
+        <h2 style="margin-top: 14px">Food web</h2>
+        <svg id="foodweb" viewBox="0 0 640 320" role="img" aria-label="Food web: who has fed on whom in this recording"></svg>
+        <p class="note">Arrows run from food to eater (energy flows up), wider = more often.
+          Brown: hunted or caught; green: gathered and eaten; red: attacks on people; orange dashed: prey that fought back.
+          Circles are sized by how many are alive now. On the map, rings mark the last day's kills, catches and attacks. Hover a line or a circle.</p>
+      </div>
+      <p class="note" style="margin-top: 12px">Keys: Space plays or pauses; arrow keys step; 1-4 set the speed; + and - zoom; F follows the selected person; O cycles the map overlays; C switches to the caves where there are any.</p>
+    </div>
+  </aside>
 </div>
 <script>/*__BODY_MODEL__*/</script>
 <script>
@@ -416,22 +501,50 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   const VIEW_LEVELS = G <= 48 ? [G, Math.ceil(G / 1.5), Math.ceil(G / 2), Math.ceil(G / 3)] : [96, 64, 44, 30, 20];
   let zi = G <= 48 ? 0 : 2, camR = 0, camC = 0, follow = false, camReady = false;   // camReady: playback state exists
   let VR0 = 0, VR1 = G, VC0 = 0, VC1 = G;
-  const viewN = () => Math.min(G, VIEW_LEVELS[zi]);
-  map.width = viewN() * T; map.height = viewN() * T;
-  function camClamp() { const n = viewN(); camR = Math.max(0, Math.min(G - n, camR)); camC = Math.max(0, Math.min(G - n, camC)); }
+  const viewN = () => Math.min(G, VIEW_LEVELS[zi]);              // cells along the view's shorter side
+  // The view fills the map area: cells stay square, so a wide area shows more columns than rows (and
+  // where the whole map fits, it is letterboxed). ASPECT is the area's height over its width.
+  let ASPECT = 1;
+  const viewR = () => Math.min(G, ASPECT <= 1 ? viewN() : Math.round(viewN() * ASPECT));
+  const viewC = () => Math.min(G, ASPECT <= 1 ? Math.round(viewN() / ASPECT) : viewN());
+  const wholeMap = () => viewR() >= G && viewC() >= G;
+  function measureView() { const w = map.parentElement; if (w && w.clientWidth > 0 && w.clientHeight > 0) ASPECT = w.clientHeight / w.clientWidth; }
+  measureView();
+  map.width = viewC() * T; map.height = viewR() * T;
+  // where the canvas's picture is on screen (object-fit: contain letterboxes it inside the element)
+  function mapRect() {
+    const b = map.getBoundingClientRect(), s = Math.min(b.width / map.width, b.height / map.height) || 1;
+    const w = map.width * s, h = map.height * s;
+    return { left: b.left + (b.width - w) / 2, top: b.top + (b.height - h) / 2, width: w, height: h };
+  }
+  function camClamp() { camR = Math.max(0, Math.min(G - viewR(), camR)); camC = Math.max(0, Math.min(G - viewC(), camC)); }
   function camBegin(i, frac) {                       // every frame: follow, size, what is in view, the translation
     if (follow && selected !== null && F[i] && F[i].agents[selected] && typeof placeOf === "function") {
-      const [r, c] = placeOf(F[i].agents[selected], selected, i, frac, i > 0 ? F[i - 1] : null), n = viewN();
-      camR = r + 0.5 - n / 2; camC = c + 0.5 - n / 2;
+      const [r, c] = placeOf(F[i].agents[selected], selected, i, frac, i > 0 ? F[i - 1] : null);
+      camR = r + 0.5 - viewR() / 2; camC = c + 0.5 - viewC() / 2;
     }
-    const n = viewN(); if (map.width !== n * T) { map.width = n * T; map.height = n * T; }
+    const nr = viewR(), nc = viewC(); if (map.width !== nc * T || map.height !== nr * T) { map.width = nc * T; map.height = nr * T; }
     camClamp();
-    VR0 = Math.max(0, Math.floor(camR) - 3); VR1 = Math.min(G, Math.ceil(camR + n) + 3);
-    VC0 = Math.max(0, Math.floor(camC) - 2); VC1 = Math.min(G, Math.ceil(camC + n) + 2);
+    VR0 = Math.max(0, Math.floor(camR) - 3); VR1 = Math.min(G, Math.ceil(camR + nr) + 3);
+    VC0 = Math.max(0, Math.floor(camC) - 2); VC1 = Math.min(G, Math.ceil(camC + nc) + 2);
     ctx.setTransform(1, 0, 0, 1, -Math.round(camC * P) * (T / P), -Math.round(camR * P) * (T / P));
   }
-  const cellOfEvent = (ev) => { const b = map.getBoundingClientRect(), n = viewN();
-    return [Math.floor(camR + (ev.clientY - b.top) / b.height * n), Math.floor(camC + (ev.clientX - b.left) / b.width * n)]; };
+  const pointOfEvent = (ev) => { const b = mapRect();
+    return [camR + (ev.clientY - b.top) / b.height * viewR(), camC + (ev.clientX - b.left) / b.width * viewC()]; };
+  // the person whose drawn figure is under the pointer (crowds stand apart in a cell, so by figure, not cell)
+  function agentAtEvent(ev) {
+    const [y, x] = pointOfEvent(ev), f = F[cur];
+    let best = -1, bd = 0.5;
+    (f ? f.agents : []).forEach((a, k) => {
+      if (a.existed === false || !AT[k] || (CAVES && !!a.below !== (LAYER === "caves"))) return;
+      const lie = !a.alive || a.asleep || a.downed;
+      const dx = (x - (AT[k][1] + 0.5)) / (lie ? 1.4 : 1), dy = y - (AT[k][0] + (lie ? 0.7 : 0.5));
+      const d = Math.hypot(dx, dy * (lie ? 1.6 : 0.8));
+      if (d < bd || (d === bd && a.alive)) { bd = d; best = k; }
+    });
+    return best;
+  }
+  const cellOfEvent = (ev) => { const [y, x] = pointOfEvent(ev); return [Math.floor(y), Math.floor(x)]; };
   const blitBase = (cv, unit) => ctx.drawImage(cv, VC0 * unit, VR0 * unit, (VC1 - VC0) * unit, (VR1 - VR0) * unit,
                                                VC0 * unit, VR0 * unit, (VC1 - VC0) * unit, (VR1 - VR0) * unit);
   ctx.imageSmoothingEnabled = true;
@@ -447,6 +560,9 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   let mode = "all";
   let selected = null;                            // the agent being inspected
   let hovered = null;                             // the agent under the pointer: a thin white outline (Mudborne)
+  let AT = [];                                    // where each person was last drawn, in cells (gliding, crowd-slotted)
+  const LBL = new Map();                          // map labels: key -> { cand, ox, oy } (last placement)
+  let lblTime = performance.now();
   let selectedTile = null;                        // or the tile being inspected: [row, column]
   let inspMode = "anatomy", inspRegion = "chest", inspHist = "decisions";  // character viewer: which view, which body part
 
@@ -995,10 +1111,49 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   function wornGround(i) {
     if (reduced) return;
     const w = wearAt(i);
-    for (let q = 0; q < G * G; q++) {
-      const t = DATA.terrain[q]; if (w[q] < 0.25 || !(t === "0" || t === "1" || t === "5" || t === "6")) continue;
+    for (let r = VR0; r < VR1; r++) for (let c = VC0; c < VC1; c++) {
+      const q = r * G + c, t = DATA.terrain[q]; if (w[q] < 0.25 || !(t === "0" || t === "1" || t === "5" || t === "6")) continue;
       ctx.drawImage(wearStamps()[w[q] > 0.8 ? 2 : w[q] > 0.5 ? 1 : 0], (q % G) * P, Math.floor(q / G) * P);
     }
+  }
+  // beds: where someone lay (asleep, down, or dead), the grass is pressed flat and yellowed in the
+  // shape of a body, deeper the longer they lay, springing back over about eight game hours; in snow a
+  // blue-grey hollow, in sand a scuffed dip. Drawn in art pixels (P per cell), under everyone.
+  const BEDS = new Map();
+  function bedsAt(i) {
+    let b = BEDS.get(i);
+    if (b) return b;
+    const K = Math.min(400, Math.max(4, Math.round(480 / TM))), m = new Map();
+    for (let j = Math.max(0, i - K); j <= i; j++) {
+      const off = crowdOf(j).off;
+      F[j].agents.forEach((a, k) => {
+        if (a.existed === false || a.below || !(a.asleep || a.downed || !a.alive) || (!a.alive && !a.was_alive)) return;
+        const key = `${k}|${a.r},${a.c}`, o = off[k] || [0, 0], e = m.get(key);
+        if (e) { e.n++; e.last = j; e.x = (a.c + 0.5 + o[1]) * P; e.y = (a.r + o[0]) * P + 10; }
+        else m.set(key, { r: a.r, c: a.c, n: 1, last: j, x: (a.c + 0.5 + o[1]) * P, y: (a.r + o[0]) * P + 10, seed: k });
+      });
+    }
+    b = { list: [...m.values()], K };
+    BEDS.set(i, b); if (BEDS.size > 300) BEDS.delete(BEDS.keys().next().value);
+    return b;
+  }
+  function bedPrints(i, f) {
+    const { list, K } = bedsAt(i), full = Math.max(2, Math.round(120 / TM));
+    list.forEach((e) => {
+      if (e.c < VC0 - 1 || e.c > VC1 || e.r < VR0 - 1 || e.r > VR1) return;
+      const t = DATA.terrain[e.r * G + e.c], snow = f.snow && +f.snow[e.r * G + e.c] >= 1;
+      const col = snow ? "150, 166, 192" : t === "0" || t === "1" || t === "5" ? "201, 196, 122" : t === "6" ? "120, 132, 84" : t === "4" ? "150, 124, 88" : null;
+      if (!col) return;
+      const age = (i - e.last) / K, depth = Math.min(1, e.n / full), al = 0.5 * depth * (1 - age);
+      if (al < 0.03) return;
+      ctx.fillStyle = `rgba(${col}, ${al})`;
+      ctx.beginPath(); ctx.ellipse(e.x, e.y, 8, 4, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = `rgba(${col}, ${Math.min(1, al * 1.4)})`;                    // blades laid flat, lengthwise
+      for (let q = 0; q < 7; q++) { const yy = Math.round(e.y - 3 + 6 * hash(e.seed, q, 31)), xx = Math.round(e.x - 7 + 10 * hash(q, e.seed, 37));
+        ctx.fillRect(xx, yy, 3 + Math.round(2 * hash(e.seed, q, 41)), 1); }
+      ctx.strokeStyle = `rgba(40, 46, 30, ${0.25 * al})`; ctx.lineWidth = 0.6;     // the pressed rim
+      ctx.beginPath(); ctx.ellipse(e.x, e.y, 8.4, 4.4, 0, 0, TAU); ctx.stroke();
+    });
   }
   const SIZE_OF = (k) => { const n = ((DATA.fauna || [])[k] || {}).name; return ["mammoth", "aurochs", "horse", "bear"].includes(n) ? 1 : 0; };
   // ---------- people: a measured body, drawn in a colony-sim manner (a large head on a simple figure,
@@ -2141,7 +2296,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       if (a.alive && a.dark && !a.asleep) cellDraw(ctx, r, c, (g) => {   // afraid in the dark, groping
         g.fillStyle = "#e8edff"; g.font = "bold 0.34px sans-serif"; g.fillText("?", 0.8, 0.22); });
     });
-    f.agents.forEach((a) => { if (a.below && a.alive && a.msg.some((m) => m > 0)) { if (ART === "pixel") { ctx.save(); ctx.imageSmoothingEnabled = false; ctx.scale(T / P, T / P); pixSpeech(a); ctx.restore(); } else drawSpeech(a, a.r, a.c); } });
+    AT = at;
     // darkness, broken by burning branches, by daylight at the mouths and, dimly, by what one feels
     if (!caveDark || caveDark.width !== map.width) { caveDark = document.createElement("canvas"); caveDark.width = map.width; caveDark.height = map.height; }
     const oc = caveDark.getContext("2d");
@@ -2155,12 +2310,11 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     f.agents.forEach((a, k) => { if (a.below && a.alive && at[k]) hole(at[k][0], at[k][1], a.torch ? (CAVES.torch_light + 0.7) * T : 1.4 * T, a.torch ? 0.95 : 0.55); });
     if (!f.night) (CAVES.mouths || []).forEach(([r, c]) => hole(r, c, 1.8 * T, 0.8));
     ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(caveDark, 0, 0); ctx.restore();
-    f.agents.forEach((a, k) => { if (a.below && a.alive && at[k]) nameTag(k, at[k][0], at[k][1], f.t); });
-    drawMotes(true);
     if (selectedTile !== null) { ctx.strokeStyle = "#cf9cf2"; ctx.lineWidth = 2; ctx.strokeRect(selectedTile[1] * T - 1, selectedTile[0] * T - 1, T + 2, T + 2); }
     if (ART !== "pixel" && selected !== null && at[selected]) brackets(at[selected][0], at[selected][1]);
     f.events.map((id) => evById.get(id)).filter((e) => e && e.pos && e.below && /death|kill|predator/.test(e.type))
       .forEach((e) => { ctx.strokeStyle = e.type === "death" ? "#ff6b6b" : "#fff3c4"; ctx.lineWidth = 1; ctx.strokeRect(e.pos[1] * T + 0.5, e.pos[0] * T + 0.5, T - 1, T - 1); });
+    drawLabels(f, i, frac, true);
   }
   function caveValue(f, r, c) {                       // the hover note on the cave map
     const u = caveAt(r, c);
@@ -2267,14 +2421,16 @@ const DATA = /*__PLAYBACK_DATA__*/null;
              separation: pairs ? total / pairs : null };
   }
 
+  // the middle of a person's figure as last drawn (gliding, in its crowd slot), in canvas pixels
+  const drawnCentre = (a, k) => (AT[k] ? [(AT[k][1] + 0.5) * T, (AT[k][0] + 0.55) * T] : [a.c * T + T / 2, a.r * T + T / 2]);
   function drawWeb(f) {
-    const centre = (a) => [a.c * T + T / 2, a.r * T + T / 2];
+    const centre = (a, k) => drawnCentre(a, k);
     ctx.save();
     (f.ties || []).forEach((tie) => {
       const [i, j, kin, bond, ij, ji] = tie;
       const a = f.agents[i], b = f.agents[j];
       if (!a.alive || !b.alive) return;
-      const [x1, y1] = centre(a), [x2, y2] = centre(b);
+      const [x1, y1] = centre(a, i), [x2, y2] = centre(b, j);
       const line = (colour, width, dash, alpha, off) => {
         ctx.globalAlpha = alpha; ctx.strokeStyle = colour; ctx.lineWidth = width * T / 12; ctx.setLineDash(dash.map((d) => d * T / 12));
         ctx.beginPath(); ctx.moveTo(x1 + off * T / 12, y1 + off * T / 12); ctx.lineTo(x2 + off * T / 12, y2 + off * T / 12); ctx.stroke();
@@ -2530,11 +2686,12 @@ const DATA = /*__PLAYBACK_DATA__*/null;
         if (v > 0) { ctx.fillStyle = `rgba(245, 248, 255, ${0.14 + 0.08 * v})`; ctx.fillRect(c * T, r * T, T, T); }
       }
       drawGround(f);
+      if (!reduced) pixelScale(() => bedPrints(i, f));
     }
     drawOverlay(f, i);
     GROUND_FRAME = f;
     if (ART === "pixel") {                           // shadows first, all on one surface, laid once
-      pixelScale(() => { wornGround(i); footPrints(i); });
+      pixelScale(() => { wornGround(i); bedPrints(i, f); footPrints(i); });
       if (shadowCv.width !== map.width || shadowCv.height !== map.height) { shadowCv.width = map.width; shadowCv.height = map.height; }
       shadowG.setTransform(1, 0, 0, 1, 0, 0); shadowG.clearRect(0, 0, shadowCv.width, shadowCv.height);
       SHADOW_MODE = 1;
@@ -2558,6 +2715,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       if (ty && (ty.has("struck_by_agent") || ty.has("predator_attack"))) hitFlash(r, c, frac);
     };
     f.agents.forEach((a, k) => { if (a.existed !== false) at[k] = placeOf(a, k, i, frac, fp); });
+    AT = at;
     if (ART === "pixel") {                           // one y-sorted scene: trees, animals and people by where they stand
       const scene = pixCreatures(f, flick, true);
       // canopy cutout (RuneScape, Stardew Valley): trees in front of the selected person thin out round them
@@ -2616,7 +2774,6 @@ const DATA = /*__PLAYBACK_DATA__*/null;
           ctx.fillRect(cc * P + 11 + Math.cos(ang) * d, rr * P + 9 - Math.sin(ang) * d + 4 * ph * ph, 1, 1); }
       }
     }));
-    f.agents.forEach((a) => { if (a.alive && a.msg.some((m) => m > 0)) { if (ART === "pixel") pixelScale(() => pixSpeech(a)); else drawSpeech(a, a.r, a.c); } });
     // clouds: shadows where thick; rain or snow falling where thicker (rain_threshold = 5 of 9)
     if (f.clouds && overlay === "none") for (let r = VR0; r < VR1; r++) for (let c = VC0; c < VC1; c++) {
       const v = +f.clouds[r * G + c];
@@ -2635,8 +2792,6 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     // light: night falls and lifts over an hour, warm at the turn; fires and torches light pools
     drawDaylight(f, i);
     drawGlow(f, i);
-    f.agents.forEach((a, k) => { if (a.existed !== false && a.alive && at[k]) nameTag(k, at[k][0], at[k][1], f.t); });
-    drawMotes(false);
     if ($("web").checked) drawWeb(f);
     if ($("fw-on").checked) drawFoodMarks(f);
     if (selectedTile !== null) {
@@ -2646,6 +2801,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     // highlight this tick's notable events
     f.events.map((id) => evById.get(id)).filter((e) => e && e.pos && !e.below && /death|kill|ignite|lightning|predator/.test(e.type))
       .forEach((e) => { ctx.strokeStyle = e.type === "death" ? "#ff6b6b" : "#fff3c4"; ctx.lineWidth = 1; ctx.strokeRect(e.pos[1] * T + 0.5, e.pos[0] * T + 0.5, T - 1, T - 1); });
+    drawLabels(f0, i, frac, false);
   }
 
   // ---------- sidebar
@@ -2868,8 +3024,21 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   const involves = (e, k) => e.agent === k || (e.victims || []).includes(k) || (e.child || []).includes(k)
     || (e.targets || []).includes(k) || (e.by || []).includes(k) || (e.near || []).includes(k);
 
+  // ---------- the dock's tabs
+  function openTab(name) {
+    document.querySelectorAll(".tabs [data-tab]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === name)));
+    document.querySelectorAll(".dock .pane").forEach((p) => { p.hidden = p.id !== `pane-${name}`; });
+    if (typeof updateSide === "function" && camReady) updateSide(cur);
+  }
+  document.querySelectorAll(".tabs [data-tab]").forEach((b) => b.addEventListener("click", () => openTab(b.dataset.tab)));
+  document.querySelector(".tabs").addEventListener("keydown", (ev) => {
+    if (ev.key !== "ArrowRight" && ev.key !== "ArrowLeft") return;
+    const tabs = [...document.querySelectorAll(".tabs [data-tab]")], j = tabs.findIndex((b) => b.getAttribute("aria-selected") === "true");
+    const nx = tabs[(j + (ev.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length]; nx.focus(); openTab(nx.dataset.tab); ev.stopPropagation(); ev.preventDefault();
+  });
   function select(k) {
     selected = selected === k ? null : k;
+    if (selected !== null) openTab("agent");
     selectedTile = null;
     if (CAVES && selected !== null && F[cur].agents[selected] && !!F[cur].agents[selected].below !== (LAYER === "caves"))
       setLayer(F[cur].agents[selected].below ? "caves" : "surface");
@@ -3159,7 +3328,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     cameFrom = from;
     const same = selectedTile && selectedTile[0] === r && selectedTile[1] === c;
     selectedTile = same ? null : [r, c];
-    if (!same) selected = null;
+    if (!same) { selected = null; openTab("agent"); }
     rows.forEach((row, j) => row.classList.toggle("selected", j === selected));
     $("inspector").hidden = selected === null && selectedTile === null;
     show(cur);
@@ -3377,6 +3546,74 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       .map(([n, v]) => `<div class="trait"><span>${esc(n)}</span><span class="track"><i style="width:${Math.round(100 * v / tot)}%"></i></span><span>+${(v / 1e4 * 100).toFixed(1)}%</span></div>`).join("")
       + "<p class='fine'>Stress points added by each source over the last game hour. It falls on its own, faster with company, attached people in view and deep sleep.</p>";
   }
+  // ---------- the mind card, at the top of a person's inspector: what it is doing and why, the options
+  // it weighed (the policy's own probabilities), what it feels, its needs in exact numbers, what it
+  // said, and a plot of its needs over the last day (MATLAB-style: labelled axes, gridlines, night
+  // shaded, a cursor at now)
+  const NEEDS = [["Food", "food", (a) => a.food, 0.3, false], ["Water", "water", (a) => a.water, 0.3, false],
+    ["Energy", "energy", (a) => a.energy, 0.25, false], ["Rest", "sleep", (a) => (a.sleepiness === undefined ? null : 1 - a.sleepiness), 0.3, false],
+    ["Health", "health", (a) => a.health, 0.4, false], ["Stress", "stress", (a) => a.stress, 0.5, true],
+    ["Bladder", "urge", (a) => a.urge, 0.7, true], ["Warmth", "water", (a) => (a.temp === undefined ? null : a.temp), null, null]];
+  function needsPlot(i, k) {
+    const span = Math.max(4, Math.round(1440 / TM)), j0 = Math.max(0, i - span + 1);
+    const step = Math.max(1, Math.ceil((i - j0 + 1) / 240));
+    const W = 400, H = 136, L = 30, R = 8, Tp = 8, B = 22, pw = W - L - R, ph = H - Tp - B;
+    const X = (j) => L + pw * (j - (i - span + 1)) / Math.max(1, span - 1), Y = (v) => Tp + ph * (1 - v);
+    let out = `<svg class="plot" viewBox="0 0 ${W} ${H}" role="img" aria-label="Needs over the last day">`;
+    for (let j = j0; j <= i; j++) if (F[j].night) out += `<rect class="night" x="${X(j - 0.5).toFixed(1)}" y="${Tp}" width="${(pw / Math.max(1, span - 1) + 0.4).toFixed(1)}" height="${ph}"/>`;
+    for (const v of [0, 0.25, 0.5, 0.75, 1]) out += `<line class="grid" x1="${L}" x2="${L + pw}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${L - 4}" y="${Y(v) + 3}" text-anchor="end">${Math.round(v * 100)}</text>`;
+    const hrs = span * TM / 60, every = hrs > 12 ? 6 : hrs > 4 ? 2 : 1;
+    for (let h = 0; h <= hrs + 1e-6; h += every) { const x = L + pw * (1 - h / hrs);
+      out += `<line class="grid" x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${Tp}" y2="${Tp + ph}"/><text x="${x.toFixed(1)}" y="${H - 7}" text-anchor="middle">${h ? `\u2212${h} h` : "now"}</text>`; }
+    out += `<rect class="axis" x="${L}" y="${Tp}" width="${pw}" height="${ph}"/>`;
+    const series = [["food", (a) => a.food], ["water", (a) => a.water], ["energy", (a) => a.energy], ["sleep", (a) => (a.sleepiness === undefined ? null : 1 - a.sleepiness)], ["stress", (a) => a.stress], ["health", (a) => a.health]];
+    series.forEach(([need, get]) => {
+      let d = "", pen = false;
+      for (let j = j0; j <= i; j += step) { const a = F[j].agents[k], v = a && a.existed !== false && a.alive ? get(a) : null;
+        if (v === null || v === undefined) { pen = false; continue; }
+        d += `${pen ? "L" : "M"}${X(j).toFixed(1)},${Y(Math.max(0, Math.min(1, v))).toFixed(1)}`; pen = true; }
+      if (d) out += `<path d="${d}" fill="none" stroke="${NEED_COL[need]}" stroke-width="1.6" stroke-linejoin="round"><title>${need === "sleep" ? "rest (1 \u2212 sleepiness)" : need}</title></path>`;
+    });
+    out += `<line class="now" x1="${X(i)}" x2="${X(i)}" y1="${Tp}" y2="${Tp + ph}"/></svg>`;
+    out += `<div class="plot-key">${[["food", "food"], ["water", "water"], ["energy", "energy"], ["sleep", "rest"], ["stress", "stress"], ["health", "health"]]
+      .map(([n, t]) => `<span style="--c:${NEED_COL[n]}">${t}</span>`).join("")}<span style="--c:var(--track)">night</span></div>`;
+    return out;
+  }
+  function mindCard(i, k) {
+    const f = F[i], a = f.agents[k], meta = DATA.agents[k], m = f.minds && f.minds[k];
+    const pa = i > 0 ? F[i - 1].agents[k] : null;
+    const age = a.age !== undefined ? `${Math.floor(a.age)}-year-old ` : "";
+    let h = `<div class="mind"><div class="who-row"><canvas width="96" height="96" data-fig="${k}" aria-hidden="true"></canvas><div>`
+      + `<div class="nm">${esc(label(k, f.t))}</div><div class="sub">${esc(age + (a.sex || "person"))}, ${esc(doingShort(a))}${a.below ? ", underground" : ""}</div></div></div>`;
+    if (a.alive && a.existed !== false) h += `<div class="now">${linkify(narrateAgent(a, pa, k, f), f.t)}</div>`;
+    if (m && a.alive) {
+      const top = m.top.slice(0, 4), chosenIn = top.some(([n]) => n === a.action);
+      h += `<div><p class="lbl">Weighed (the policy's own odds)${m.value !== undefined ? `; expects its future to go ${m.value.toFixed(2)}` : ""}</p><div class="opts">`
+        + top.concat(chosenIn ? [] : [[a.action, null]]).map(([n, p2]) => `<span class="${n === a.action ? "chosen" : ""}">${esc(ACT(n))}${n === a.action ? " (chosen)" : ""}</span>`
+          + `<span class="bar2 ${n === a.action ? "chosen" : ""}"><i style="width:${p2 === null ? 0 : Math.round(p2 * 100)}%;${n === a.action ? "background:var(--accent)" : ""}"></i></span><span class="v">${p2 === null ? "&lt;" + Math.round(top[top.length - 1][1] * 100) : Math.round(p2 * 100)}%</span>`).join("")
+        + `</div>${m.why && m.why.length ? `<p class="lbl" style="margin-top:6px">Leaned on</p><div class="chips">${m.why.map(([g, w]) => `<span class="chip">${esc(g)} ${Math.round(w * 100)}%</span>`).join("")}</div>` : ""}</div>`;
+    }
+    if (a.alive) {
+      const feels = feelingShort(a, k, f);
+      const names = (DATA.consts || {}).stress_sources, H2 = Math.max(1, Math.round(60 / TM)), sum = names ? names.map(() => 0) : [];
+      if (names) for (let j = Math.max(0, i - H2 + 1); j <= i; j++) { const w = F[j].agents[k] && F[j].agents[k].sw; if (w) w.forEach((v, q) => { sum[q] += v; }); }
+      const src = names ? names.map((n, q) => [n, sum[q]]).filter(([, v]) => v > 0).sort((p2, q) => q[1] - p2[1]).slice(0, 3) : [];
+      h += `<div><p class="lbl">Feels</p><div class="chips">${feels.length ? feels.map(([t, n]) => `<span class="chip c" style="--c:${NEED_COL[n]}">${esc(t)}</span>`).join("") : src.length ? "" : `<span class="chip">at ease</span>`}`
+        + src.map(([n]) => `<span class="chip c" style="--c:${NEED_COL.stress}" title="Raised its stress in the last hour">${esc(n)}</span>`).join("") + `</div></div>`;
+      h += `<div class="needs">${NEEDS.map(([t, n, get, warn, high]) => {
+        const v = get(a); if (v === null || v === undefined) return "";
+        if (t === "Warmth") return `<div class="need"><span>Body temp.</span><span class="v">${v > 0 ? "+" : ""}${(+v).toFixed(2)} ${Math.abs(v) < 0.3 ? "(comfortable)" : v < 0 ? "(cold)" : "(hot)"}</span></div>`;
+        const bad = high ? v >= warn : v <= warn;
+        return `<div class="need${bad ? " warn" : ""}" style="--c:${NEED_COL[n]}"><span>${t}</span><span class="v">${(v * 100).toFixed(0)}%</span>`
+          + `<span class="track"><i style="width:${Math.max(0, Math.min(100, v * 100)).toFixed(1)}%"></i><b style="left:${warn * 100}%" title="${high ? "Trouble above" : "Trouble below"} ${warn * 100}%"></b></span></div>`; }).join("")}</div>`;
+    }
+    if (a.alive && a.msg && a.msg.some((x) => x > 0)) {
+      const heard = (a.heard_by || []).map((j) => agentLink(j, f.t)).join(", ");
+      h += `<div class="speech"><span class="snd">${esc(spokenOf(a.msg))}</span>${GROUNDED ? ` &ldquo;${esc(glossOf(a.msg))}&rdquo;` : ""}${heard ? `<div class="sub">Heard by ${heard}</div>` : `<div class="sub">No one heard it.</div>`}</div>`;
+    }
+    if (a.existed !== false && (a.alive || a.was_alive)) h += `<div><p class="lbl">Needs over the last day (%)</p>${needsPlot(i, k)}</div>`;
+    return h + "</div>";
+  }
   function updateInspector(i) {
     if (selectedTile !== null) return tileView(i);
     if (selected === null) return;
@@ -3393,7 +3630,8 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       $("insp-body").innerHTML = "<p class='fine'>Not yet born at this moment.</p>";
       return;
     }
-    html += `<h3>${esc(label(k, f.t))}${meta.archetype ? ` (${esc(meta.archetype)})` : ""}</h3>` + row([
+    html += mindCard(i, k);
+    html += `<h3>Record${meta.archetype ? `: ${esc(meta.archetype)}` : ""}</h3>` + row([
       ["Status", a.alive ? (a.asleep ? "alive, asleep" : "alive") : `died at ${a.age} years`],
       ["Sex", a.sex], ["Age", `${a.age} years`],
       ["Eyes", meta.appearance ? eyeOf(meta)[0] : null],
@@ -3476,6 +3714,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       html += decisionsView(i, k);
     }
     $("insp-body").innerHTML = html;
+    drawSidebarFigures(".mind canvas[data-fig]");
     const mc = document.getElementById("insp-model");
     if (mc && a.alive) {                              // the actual map sprite, as drawn now: front, side, back
       const g = mc.getContext("2d"); g.imageSmoothingEnabled = false;
@@ -3622,12 +3861,47 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     }
     return m;
   }
+  // ---------- crowds: people sharing a cell stand apart in it, in formation slots (one cell is
+  // ~cell_km across, room for many, but only so many figures read at this size): 1 in the middle, 2
+  // side by side, 3 a triangle, 4 a square, 5-6 two rows of three, 7-9 a 3 x 3 block. Past nine the
+  // rest stand behind the block (a count badge says how many are there). Lying people take a wider
+  // slot. Slots are kept per frame and blended over the tick, so a crowd re-forms smoothly.
+  const FORM = [[], [[0, 0]], [[0, -0.27], [0, 0.27]], [[-0.13, -0.27], [-0.13, 0.27], [0.17, 0]],
+    [[-0.15, -0.25], [-0.15, 0.25], [0.15, -0.25], [0.15, 0.25]],
+    [[-0.16, -0.32], [-0.16, 0], [-0.16, 0.32], [0.16, -0.16], [0.16, 0.16]],
+    [[-0.16, -0.32], [-0.16, 0], [-0.16, 0.32], [0.16, -0.32], [0.16, 0], [0.16, 0.32]]];
+  const BLOCK = []; for (const dr of [-0.22, 0, 0.22]) for (const dc of [-0.33, 0, 0.33]) BLOCK.push([dr, dc]);
+  const formation = (n) => (n < FORM.length ? FORM[n] : n <= 9 ? BLOCK.slice(0, n)
+    : BLOCK.concat(Array.from({ length: n - 9 }, (_, j) => [-0.3, -0.2 + 0.4 * ((j % 5) / 4)])));
+  const SLOTS = new Map();                                  // frame -> [[dr, dc] per agent], and crowd sizes
+  function crowdOf(i) {
+    let s = SLOTS.get(i);
+    if (s) return s;
+    const f = F[i], off = f.agents.map(() => [0, 0]), size = f.agents.map(() => 1), groups = new Map();
+    f.agents.forEach((a, k) => { if (a.existed === false) return;
+      const key = `${a.r},${a.c},${a.below ? 1 : 0}`; if (!groups.has(key)) groups.set(key, []); groups.get(key).push(k); });
+    groups.forEach((ks) => {
+      if (ks.length < 2) return;
+      const lying = (k) => { const a = f.agents[k]; return !a.alive || a.asleep || a.downed; };
+      ks.sort((p, q) => (lying(p) - lying(q)) || p - q);     // standing first (the back rows), lying in front
+      const slots = formation(ks.length);
+      ks.forEach((k, j) => { off[k] = slots[j].slice(); if (lying(k)) off[k][1] *= 0.6; size[k] = ks.length; });
+    });
+    s = { off, size, groups };
+    SLOTS.set(i, s); if (SLOTS.size > 400) SLOTS.delete(SLOTS.keys().next().value);
+    return s;
+  }
   // where a person is drawn: gliding between cells, lunging at a blow or a touch, bobbing in the step
   function placeOf(a, k, i, frac, fp) {
     const pa = fp && fp.agents[k], moved = (x, y) => x && y && (x.r !== y.r || x.c !== y.c);
     const carryIn = i >= 2 && moved(F[i - 2].agents[k], F[i - 1].agents[k]) && moved(pa, a);
     const carryOut = i + 1 < F.length && moved(a, F[i + 1].agents[k]) && moved(pa, a);
     let [r, c] = tweenPos(a, pa, frac, carryIn, carryOut);
+    {                                                       // the crowd slot, blended from the last tick's
+      const o1 = crowdOf(i).off[k] || [0, 0], o0 = i > 0 && fp && (playing || stepAnim) && !reduced ? (crowdOf(i - 1).off[k] || [0, 0]) : o1;
+      const e = Math.max(0, Math.min(1, frac)), s = e * e * (3 - 2 * e);
+      r += o0[0] + (o1[0] - o0[0]) * s; c += o0[1] + (o1[1] - o0[1]) * s;
+    }
     if (frac < 1 && !reduced && a.alive && !a.asleep) {
       const m = /^(strike|touch)_(\w+)$/.exec(a.action || "");
       if (m && STEP_OF[m[2]]) { const s = Math.sin(Math.PI * frac) * (m[1] === "strike" ? 0.3 : 0.15); r += STEP_OF[m[2]][0] * s; c += STEP_OF[m[2]][1] * s; }
@@ -3655,6 +3929,233 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     }
     ctx.stroke(); ctx.restore();
   }
+  // ---------- labels over the map: what people say, their names, what the selected one is doing and
+  // feeling, and how many stand in a crowd. Laid out together each frame, after everything else is
+  // drawn, at the people's drawn (gliding, crowd-slotted) positions: each label tries a set of places
+  // round its person and takes the one that overlaps nothing already placed and covers fewest figures,
+  // preferring the place it had last frame; placed labels glide to new places instead of jumping. A
+  // label moved off its person keeps a leader line to them. Sizes are in screen pixels, so text stays
+  // legible at every zoom. Speech carries its speaker's name, so names and bubbles never collide;
+  // names that cannot be placed without overlapping are dropped (the crowd badge still counts them).
+  const DOING = { rest: "resting", sleep: "lying down", eat: "eating", drink: "drinking", grasp: "gathering", release: "putting down",
+    seek_water: "heading for water", seek_food: "looking for food", flee: "fleeing", seek_shelter: "making for shelter",
+    mate: "courting", delve: "going below", relieve: "relieving itself" };
+  function doingShort(a) {
+    if (!a.alive) return "dead";
+    if (a.downed) return "down, hurt";
+    if (a.asleep) return "asleep";
+    const did = a.act || "", w = a.action || "";
+    if (did === "move") return /^seek_water/.test(w) ? "walking to water" : /^seek_food/.test(w) ? "walking to food" : w === "flee" ? "fleeing" : "walking";
+    if (did === "gather") return "gathering"; if (did === "kill") return "killed prey"; if (/^strike/.test(did)) return "fighting";
+    if (did === "touch") return "touching someone"; if (did === "mate") return "mating";
+    return DOING[w] || DOING[did] || (w || did || "idle").replace(/_/g, " ");
+  }
+  function feelingShort(a, k, f) {                          // the most pressing feeling, worst first
+    const out = [];
+    if (!a.alive) return out;
+    if ((a.water ?? 1) < 0.3) out.push(["thirsty", "water"]);
+    if ((a.food ?? 1) < 0.3) out.push(["hungry", "food"]);
+    if ((a.health ?? 1) < 0.4) out.push(["hurt", "health"]);
+    if (a.sick) out.push(["sick", "health"]);
+    if ((a.sleepiness ?? 0) > 0.7) out.push(["exhausted", "sleep"]);
+    if ((a.urge ?? 0) > 0.7) out.push(["bursting", "urge"]);
+    if ((a.temp ?? 0) < -0.5) out.push(["cold", "water"]); else if ((a.temp ?? 0) > 0.6) out.push(["hot", "health"]);
+    if ((a.stress ?? 0) > 0.5) { const s = stressTop(k, f); out.push([`stressed${s ? `: ${s}` : ""}`, "stress"]); }
+    return out;
+  }
+  const NEED_COL = { water: "#4aa3df", food: "#8fbf5a", energy: "#e6c34a", health: "#d8584a", stress: "#b07cc6", sleep: "#6c7fd8", urge: "#b8925a" };
+  function wrapText(g, text, maxW) {
+    const words = text.split(" "), lines = []; let line = "";
+    words.forEach((w) => { const t = line ? `${line} ${w}` : w; if (g.measureText(t).width > maxW && line) { lines.push(line); line = w; } else line = t; });
+    if (line) lines.push(line);
+    return lines.slice(0, 3);
+  }
+  const UI_FONT = "'IBM Plex Sans', system-ui, sans-serif";
+  // The labels have their own canvas over the map at the screen's resolution, so text is sharp even
+  // where the map is magnified pixel art.
+  const lblCv = document.createElement("canvas"); lblCv.id = "labels"; lblCv.setAttribute("aria-hidden", "true");
+  lblCv.style.cssText = "position:absolute;left:0;top:0;pointer-events:none;z-index:1";
+  map.after(lblCv);
+  const lblCtx = lblCv.getContext("2d");
+  function drawLabels(f, i, frac, below) {
+    const rect = mapRect(), S = rect.width > 0 ? map.width / rect.width : 1;   // canvas px per screen px
+    const ctx = lblCtx, dpr = window.devicePixelRatio || 1, wb = map.parentElement.getBoundingClientRect();
+    const cw = Math.max(1, Math.round(rect.width * dpr)), chh = Math.max(1, Math.round(rect.height * dpr));
+    if (lblCv.width !== cw || lblCv.height !== chh) { lblCv.width = cw; lblCv.height = chh; }
+    lblCv.style.left = `${rect.left - wb.left}px`; lblCv.style.top = `${rect.top - wb.top}px`;
+    lblCv.style.width = `${rect.width}px`; lblCv.style.height = `${rect.height}px`;
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cw, chh);
+    const kz = cw / map.width;                                  // label pixels per map pixel
+    ctx.setTransform(kz, 0, 0, kz, -Math.round(camC * P) * (T / P) * kz, -Math.round(camR * P) * (T / P) * kz);
+    drawMotes(below, ctx, S);
+    const now = performance.now(), dt = Math.min(200, now - lblTime); lblTime = now;
+    const glide = reduced ? 1 : 1 - Math.exp(-dt / 70);
+    const farOut = viewN() >= 64;
+    const vx0 = camC * T, vy0 = camR * T, vx1 = vx0 + viewC() * T, vy1 = vy0 + viewR() * T;
+    const who = f.agents.map((a, k) => [a, k]).filter(([a, k]) => a.existed !== false && AT[k] && !!a.below === below
+      && (a.alive || a.was_alive) && AT[k][1] >= VC0 - 1 && AT[k][1] <= VC1 && AT[k][0] >= VR0 - 1 && AT[k][0] <= VR1);
+    const head = (k) => [(AT[k][1] + 0.5) * T, (AT[k][0] + (ART === "pixel" ? -0.1 : 0.05)) * T];
+    const feet = (k) => [(AT[k][1] + 0.5) * T, (AT[k][0] + 1) * T];
+    const bodies = who.map(([a, k]) => { const [x, y] = feet(k), lie = !a.alive || a.asleep || a.downed;
+      return lie ? [x - 0.48 * T, y - 0.55 * T, 0.96 * T, 0.5 * T] : [x - 0.28 * T, y - 1.05 * T, 0.56 * T, 1.0 * T]; });
+    const placed = [];
+    const ov = (a, b) => Math.max(0, Math.min(a[0] + a[2], b[0] + b[2]) - Math.max(a[0], b[0])) * Math.max(0, Math.min(a[1] + a[3], b[1] + b[3]) - Math.max(a[1], b[1]));
+    function place(key, w, h, cands, own, must) {           // pick a candidate box [x, y] (top-left) by cost
+      const prev = LBL.get(key);
+      let best = null;
+      cands.forEach(([x, y, pen], ci) => {
+        const box = [x, y, w, h], A = w * h;
+        let cost = pen + (prev && prev.cand === ci ? -2 : 0);
+        placed.forEach((p) => { cost += 400 * ov(box, p) / A; });
+        bodies.forEach((b, j) => { if (j !== own) cost += 6 * ov(box, b) / A; });
+        const out = Math.max(0, vx0 - x) + Math.max(0, x + w - vx1) + Math.max(0, vy0 - y) + Math.max(0, y + h - vy1);
+        if (out > 0) cost += 20 + 40 * out / Math.min(w, h);
+        if (!best || cost < best.cost) best = { ci, x, y, cost };
+      });
+      if (!must && best.cost >= 60) { LBL.delete(key); return null; }   // would sit on another label: drop it
+      best.x = Math.max(vx0 + 2 * S, Math.min(vx1 - w - 2 * S, best.x));   // never off the edge of the view
+      best.y = Math.max(vy0 + 2 * S, Math.min(vy1 - h - 2 * S, best.y));
+      // glide from the last placement (kept relative to the person, so it never trails behind them)
+      const ax = cands.ax, ay = cands.ay;
+      let ox = best.x - ax, oy = best.y - ay;
+      if (prev && prev.ox !== undefined) { ox = prev.ox + (ox - prev.ox) * glide; oy = prev.oy + (oy - prev.oy) * glide; }
+      LBL.set(key, { cand: best.ci, ox, oy, seen: i });
+      const box = [ax + ox, ay + oy, w, h]; placed.push([best.x, best.y, w, h]);
+      return box;
+    }
+    const pill = (x, y, w, h, rad) => { roundRect(ctx, x, y, w, h, rad); };
+    ctx.save(); ctx.textBaseline = "alphabetic";
+    // speech: this tick's words, or the last tick's fading out while the tick turns
+    const speech = [];
+    who.forEach(([a, k]) => {
+      if (!a.alive) return;
+      if (a.msg && a.msg.some((m) => m > 0)) speech.push([a, k, a.msg, 1]);
+      else if (i > 0 && (playing || stepAnim)) { const p = F[i - 1].agents[k]; if (p && p.alive && p.msg && p.msg.some((m) => m > 0)) { const al = 1 - Math.min(1, frac) * 1.2; if (al > 0.05) speech.push([a, k, p.msg, al]); } }
+    });
+    speech.sort((p, q) => (q[1] === selected) - (p[1] === selected) || (q[1] === hovered) - (p[1] === hovered) || q[3] - p[3]);
+    const sayers = new Set();
+    const PAD = 7 * S, R = 6 * S, F1 = 12.5 * S, F2 = 10.5 * S, MAXW = 190 * S, GAP = 6 * S;
+    // Two forms: the selected or hovered speaker gets the full bubble (its name, how the words sound,
+    // and what they mean, wrapped); everyone else a one-line chip, "Name  what they said", so a
+    // talkative crowd stays readable.
+    const drawBubble = (a, k, msg, al) => {
+      const meta = DATA.agents[k], col = agentColour(meta), name = label(k, f.t).replace(/ \(#\d+\)$/, "");
+      const full = k === selected || k === hovered;
+      const tr = GROUNDED && TRANSLATE, body = tr ? glossOf(msg) : "", sound = spokenOf(msg), syms = msg.filter((m) => m > 0);
+      ctx.font = `600 ${F2}px ${UI_FONT}`; const nameW = ctx.measureText(name).width;
+      ctx.font = `italic 400 ${F2}px ${UI_FONT}`; const soundW = full ? ctx.measureText(sound).width : 0;
+      ctx.font = `500 ${full ? F1 : F2 * 1.08}px ${UI_FONT}`;
+      const lines = tr ? (full ? wrapText(ctx, body, MAXW) : [body]) : [];
+      const gs = (full ? 3.2 : 2.6) * S, glyphW = syms.length * (3 * gs + 3 * S);
+      const bodyW = tr ? Math.max(...lines.map((l) => ctx.measureText(l).width)) : glyphW;
+      if (!full) {                                          // the chip
+        const pd = 5 * S, w = pd * 2 + 3 * S + nameW + 6 * S + bodyW, h = F2 * 1.08 + 2 * pd;
+        const [hx, hy] = head(k), cands = [];
+        for (const lv of [0, 1, 2, 3]) for (const [dx, pen] of [[0, 0], [-0.6, 1.5], [0.6, 1.5], [-1.05, 3], [1.05, 3]])
+          cands.push([hx - w / 2 + dx * w, hy - GAP - h - lv * (h + 3 * S), pen + lv * 3]);
+        cands.push([hx + 0.45 * T, hy, 6], [hx - 0.45 * T - w, hy, 6]);
+        cands.ax = hx; cands.ay = hy;
+        const [x, y] = place(`s${k}`, w, h, cands, who.findIndex(([, q]) => q === k), true);
+        ctx.globalAlpha = al;
+        const over = hx > x + 4 * S && hx < x + w - 4 * S && y + h <= hy + 1 && hy - (y + h) < GAP * 2;
+        ctx.fillStyle = "#f6f1e3"; ctx.strokeStyle = "rgba(24, 22, 18, 0.9)"; ctx.lineWidth = 1.1 * S;
+        if (over) { ctx.beginPath(); ctx.moveTo(hx - 4 * S, y + h - 1); ctx.lineTo(hx, hy - 1 * S); ctx.lineTo(hx + 4 * S, y + h - 1); ctx.closePath(); ctx.fill(); ctx.stroke(); }
+        else { const ex = Math.max(x, Math.min(x + w, hx)), ey = Math.max(y, Math.min(y + h, hy));
+          ctx.save(); ctx.strokeStyle = "rgba(246, 241, 227, 0.8)"; ctx.lineWidth = 1.2 * S; ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(hx, hy); ctx.stroke();
+          ctx.fillStyle = col; ctx.beginPath(); ctx.arc(hx, hy, 2 * S, 0, TAU); ctx.fill(); ctx.restore(); }
+        pill(x, y, w, h, 4 * S); ctx.fill(); ctx.stroke();
+        if (over) ctx.fillRect(hx - 3 * S, y + h - 2 * S, 6 * S, 3 * S);
+        ctx.fillStyle = col; ctx.fillRect(x + 1.1 * S, y + 3 * S, 2.6 * S, h - 6 * S);
+        ctx.font = `600 ${F2}px ${UI_FONT}`; ctx.fillStyle = "#6b604c"; ctx.fillText(name, x + pd + 3 * S, y + pd + F2 * 0.9);
+        const bx = x + pd + 3 * S + nameW + 6 * S;
+        if (tr) { ctx.font = `500 ${F2 * 1.08}px ${UI_FONT}`; ctx.fillStyle = "#14130f"; ctx.fillText(body, bx, y + pd + F2 * 0.92); }
+        else syms.forEach((m, j) => drawGlyph(ctx, m, bx + j * (3 * gs + 3 * S), y + (h - 3 * gs) / 2, gs));
+        ctx.globalAlpha = 1; sayers.add(k); return;
+      }
+      const headW = 8 * S + nameW + 6 * S + soundW;
+      const w = Math.max(bodyW, headW) + 2 * PAD + 3 * S, h = PAD * 2 + F2 + 4 * S + (tr ? lines.length * F1 * 1.2 : 3 * gs + 2 * S);
+      const [hx, hy] = head(k);
+      const cands = [];
+      for (const lv of [0, 1, 2]) for (const [dx, pen] of [[0, 0], [-0.75, 1.5], [0.75, 1.5], [-1.15, 3], [1.15, 3]])
+        cands.push([hx - w / 2 + dx * w, hy - GAP - h - lv * (h + GAP), pen + lv * 4]);
+      cands.push([hx + 0.5 * T + GAP, hy, 7], [hx - 0.5 * T - GAP - w, hy, 7]);
+      cands.ax = hx; cands.ay = hy;
+      const box = place(`s${k}`, w, h, cands, who.findIndex(([, q]) => q === k), true);
+      const [x, y] = box;
+      ctx.globalAlpha = al;
+      // the tail: a wedge when the bubble sits over its speaker, a leader line when it had to move away
+      const over = hx > x + R && hx < x + w - R && y + h <= hy + 1;
+      ctx.fillStyle = "#f6f1e3"; ctx.strokeStyle = "rgba(24, 22, 18, 0.9)"; ctx.lineWidth = 1.25 * S;
+      if (over && hy - (y + h) < GAP * 2.5) {
+        ctx.beginPath(); ctx.moveTo(hx - 5 * S, y + h - 1); ctx.lineTo(hx, hy - 1 * S); ctx.lineTo(hx + 5 * S, y + h - 1); ctx.closePath(); ctx.fill(); ctx.stroke();
+      } else {
+        const lx = Math.max(x + R, Math.min(x + w - R, hx)), ly = y + h <= hy ? y + h : y >= hy ? y : y + h / 2;
+        const ex = lx === hx ? lx : (lx < hx ? x + w : x), ey = lx === hx ? ly : Math.max(y + R, Math.min(y + h - R, hy));
+        ctx.save(); ctx.strokeStyle = "rgba(246, 241, 227, 0.85)"; ctx.lineWidth = 1.5 * S; ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(hx, hy); ctx.stroke();
+        ctx.fillStyle = col; ctx.beginPath(); ctx.arc(hx, hy, 2.2 * S, 0, TAU); ctx.fill(); ctx.restore();
+      }
+      ctx.save(); ctx.shadowColor = "rgba(0, 0, 0, 0.35)"; ctx.shadowBlur = 6 * S; ctx.shadowOffsetY = 2 * S;
+      pill(x, y, w, h, R); ctx.fill(); ctx.restore(); pill(x, y, w, h, R); ctx.stroke();
+      if (over && hy - (y + h) < GAP * 2.5) { ctx.fillRect(hx - 4 * S, y + h - 2 * S, 8 * S, 3 * S); }   // join the wedge to the bubble
+      ctx.fillStyle = col; ctx.fillRect(x + 1.2 * S, y + R * 0.6, 3 * S, h - R * 1.2);                    // the speaker's colour, a spine
+      ctx.font = `600 ${F2}px ${UI_FONT}`; ctx.fillStyle = "#2a2620"; ctx.fillText(name, x + PAD + 3 * S, y + PAD + F2 * 0.85);
+      ctx.font = `italic 400 ${F2}px ${UI_FONT}`; ctx.fillStyle = "#857a66"; ctx.fillText(sound, x + PAD + 3 * S + nameW + 6 * S, y + PAD + F2 * 0.85);
+      const by = y + PAD + F2 + 4 * S;
+      if (tr) { ctx.font = `500 ${F1}px ${UI_FONT}`; ctx.fillStyle = "#14130f"; lines.forEach((l, j) => ctx.fillText(l, x + PAD + 3 * S, by + F1 * (0.95 + 1.2 * j))); }
+      else syms.forEach((m, j) => drawGlyph(ctx, m, x + PAD + 3 * S + j * (3 * gs + 3 * S), by + 1 * S, gs));
+      ctx.globalAlpha = 1; sayers.add(k);
+    };
+    speech.forEach(([a, k, msg, al]) => drawBubble(a, k, msg, al));
+    // crowd badges: how many stand in one cell, where there are more than the eye can count at a glance
+    const crowd = crowdOf(i);
+    crowd.groups.forEach((ks) => {
+      const live = ks.filter((k) => AT[k] && !!f.agents[k].below === below && (f.agents[k].alive || f.agents[k].was_alive));
+      if (live.length < 4) return;
+      const a0 = f.agents[live[0]], x = (a0.c + 1) * T - 2 * S, y = a0.r * T - 6 * S, txt = `${live.length}`;
+      ctx.font = `700 ${10.5 * S}px ${UI_FONT}`; const w = ctx.measureText(txt).width + 12 * S, h = 15 * S;
+      const cands = [[x - w / 2, y - h / 2, 0]]; cands.ax = x; cands.ay = y;
+      const box = place(`c${a0.r},${a0.c}`, w, h, cands, -1, true);
+      ctx.fillStyle = "#e0a83a"; pill(box[0], box[1], w, h, h / 2); ctx.fill(); ctx.strokeStyle = "rgba(24, 22, 18, 0.9)"; ctx.lineWidth = 1.2 * S; ctx.stroke();
+      ctx.fillStyle = "#1d1a14"; ctx.textAlign = "center"; ctx.fillText(txt, box[0] + w / 2, box[1] + h * 0.72); ctx.textAlign = "left";
+    });
+    // names, the selected first (with what it is doing and feeling), then the hovered, then the rest
+    const order = who.slice().sort(([, p], [, q]) => (q === selected) - (p === selected) || (q === hovered) - (p === hovered));
+    order.forEach(([a, k]) => {
+      const sel = k === selected, hov = k === hovered;
+      if (sayers.has(k) && !sel) return;                    // its name is on its bubble
+      if (farOut && !sel && !hov) return;
+      const name = label(k, f.t), col = agentColour(DATA.agents[k]);
+      const detail = sel || hov;
+      const doing = detail ? doingShort(a) : "", feels = detail ? feelingShort(a, k, f) : [];
+      const FN = (detail ? 11.5 : 10.5) * S, FD = 10.5 * S, ph = 5 * S;
+      ctx.font = `600 ${FN}px ${UI_FONT}`; const nw = ctx.measureText(name).width;
+      ctx.font = `400 ${FD}px ${UI_FONT}`;
+      const line2 = detail ? [doing, ...feels.map((x) => x[0])].join(", ") : "";
+      const l2 = detail ? ctx.measureText(line2).width : 0;
+      const w = Math.max(nw + 10 * S, l2) + 2 * ph, h = detail ? FN + FD * 1.25 + 2 * ph : FN + 2 * ph - 1 * S;
+      const [fx, fy] = feet(k);
+      const cands = [[fx - w / 2, fy + 2 * S, 0], [fx - w / 2, fy + 2 * S + h + 2 * S, 3], [fx + 0.3 * T, fy - h / 2, 2], [fx - 0.3 * T - w, fy - h / 2, 2]];
+      if (!sayers.has(k)) cands.push([fx - w / 2, head(k)[1] - h - 4 * S, 4]);
+      cands.ax = fx; cands.ay = fy;
+      const box = place(`n${k}`, w, h, cands, who.findIndex(([, q]) => q === k), sel || hov);
+      if (!box) return;
+      const [x, y] = box;
+      ctx.globalAlpha = a.alive ? (a.asleep && !detail ? 0.7 : 1) : 0.6;
+      ctx.fillStyle = sel ? "rgba(30, 27, 22, 0.94)" : "rgba(22, 24, 28, 0.78)"; pill(x, y, w, h, 4 * S); ctx.fill();
+      if (sel) { ctx.strokeStyle = "#e0a83a"; ctx.lineWidth = 1.3 * S; ctx.stroke(); }
+      ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x + ph + 3.5 * S, y + ph + FN * 0.48, 3.2 * S, 0, TAU); ctx.fill();
+      ctx.font = `600 ${FN}px ${UI_FONT}`; ctx.fillStyle = "#f2ecdc"; ctx.fillText(name, x + ph + 10 * S, y + ph + FN * 0.85);
+      if (detail) {
+        ctx.font = `400 ${FD}px ${UI_FONT}`; let cx = x + ph; const cy = y + ph + FN + FD * 1.05;
+        ctx.fillStyle = "#c9c0aa"; ctx.fillText(doing, cx, cy); cx += ctx.measureText(doing).width;
+        feels.forEach(([t, need]) => { ctx.fillStyle = "#8e8572"; ctx.fillText(", ", cx, cy); cx += ctx.measureText(", ").width;
+          ctx.fillStyle = NEED_COL[need] || "#e0a83a"; ctx.fillText(t, cx, cy); cx += ctx.measureText(t).width; });
+      }
+      ctx.globalAlpha = 1;
+    });
+    ctx.restore();
+    if (LBL.size > 600) for (const [key, v] of LBL) if (v.seen < i - 50 || v.seen > i + 50) LBL.delete(key);
+  }
   // floating notes: what just happened to someone, rising and fading over about a second
   const MOTE = { eat: ["+food", "#9be07a"], drink: ["+water", "#8fd0ff"], gather: ["+", "#e8d98a"], took_food: ["gift", "#ffd36b"],
     struck_by_agent: ["hit!", "#ff6b5a"], predator_attack: ["bitten!", "#ff6b5a"], kill: ["kill", "#ffb36b"], mated: ["♥", "#ff9ec4"],
@@ -3674,16 +4175,17 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     });
     if (motes.length > 60) motes = motes.slice(-60);
   }
-  function drawMotes(layerBelow) {
+  function drawMotes(layerBelow, ctx, S) {                          // on the label layer, in screen-sized type
     const now = performance.now();
     motes = motes.filter((m) => now - m.born < 1300);
     ctx.save(); ctx.textAlign = "center";
-    ctx.font = `700 ${Math.round(T * (ART === "pixel" ? 0.46 : 0.42))}px ${ART === "pixel" ? "'Pixelify Sans', monospace" : "'IBM Plex Sans', sans-serif"}`;
+    ctx.font = `700 ${12 * S}px ${ART === "pixel" ? "'Pixelify Sans', monospace" : "'IBM Plex Sans', sans-serif"}`;
     motes.forEach((m) => {
       if (m.below !== layerBelow) return;
-      const age = Math.max(0, now - m.born) / 1300, x = m.c * T + T / 2, y = m.r * T - 4 - age * T * 0.9;
+      const p = AT[m.k] && Math.abs(AT[m.k][0] - m.r) < 2.5 && Math.abs(AT[m.k][1] - m.c) < 2.5 ? AT[m.k] : [m.r, m.c];
+      const age = Math.max(0, now - m.born) / 1300, x = p[1] * T + T * 0.95, y = p[0] * T + T * 0.1 - age * T * 0.9;
       ctx.globalAlpha = age < 0.75 ? 1 : (1 - age) / 0.25;
-      ctx.lineWidth = 3; ctx.strokeStyle = "rgba(15, 16, 24, 0.85)"; ctx.strokeText(m.txt, x, y); ctx.fillStyle = m.col; ctx.fillText(m.txt, x, y);
+      ctx.lineWidth = 3 * S; ctx.strokeStyle = "rgba(15, 16, 24, 0.85)"; ctx.strokeText(m.txt, x, y); ctx.fillStyle = m.col; ctx.fillText(m.txt, x, y);
     });
     ctx.restore();
   }
@@ -3799,7 +4301,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     const fmt = (s) => (s >= 3600 ? `${(s / 3600).toFixed(1)} h` : s >= 60 ? `${Math.floor(s / 60)} min ${Math.round(s % 60)} s` : `${Math.round(s)} s`);
     sel.innerHTML = mult.map((m, j) => {
       const tps = TM < 30 ? m * 1.44 / TM : m;
-      return `<option value="${tps}"${j === 0 ? " selected" : ""}>${m}&times; &middot; a day in ${fmt(1440 / TM / tps)}</option>`;
+      return `<option value="${tps}"${j === 0 ? " selected" : ""} title="A day in ${fmt(1440 / TM / tps)}">${m}&times; (a day in ${fmt(1440 / TM / tps)})</option>`;
     }).join("");
     sel.title = TM < 30 ? `RimWorld's speeds: 1× is 1.44 game minutes a second; a tick here is ${TM} min. Keys 1-4.`
       : "Ticks per second; one tick is half an hour. Keys 1-4.";
@@ -3820,31 +4322,30 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   const wrap = map.parentElement;
   let drag = null, dragged = false;
   function applyCam() {
-    camClamp();
+    measureView(); camClamp();
     map.style.transform = "";
-    map.style.imageRendering = ART === "pixel" || viewN() < G ? "pixelated" : "";
-    wrap.classList.toggle("zoomed", viewN() < G);
-    $("zoom-lv").textContent = G <= 48 ? `${(G / viewN()).toFixed(1).replace(/\.0$/, "")}\u00d7` : `${viewN()} cells`;
+    map.style.imageRendering = ART === "pixel" || !wholeMap() ? "pixelated" : "";
+    wrap.classList.toggle("zoomed", !wholeMap());
+    $("zoom-lv").textContent = G <= 48 ? `${(G / viewN()).toFixed(1).replace(/\.0$/, "")}\u00d7` : `${viewC()} \u00d7 ${viewR()}`;
     if (camReady) drawFrame(cur, flick, playing ? acc : 1);
   }
   function zoomTo(nz, cx, cy) {                                   // cx, cy: the point to keep still (in wrap px)
-    const b = map.getBoundingClientRect(), n0 = viewN();
+    const b = mapRect(), r0 = viewR(), c0 = viewC();
     const fx = cx === undefined ? 0.5 : cx / b.width, fy = cy === undefined ? 0.5 : cy / b.height;
-    const wr = camR + fy * n0, wc = camC + fx * n0;                // the world point under the cursor
+    const wr = camR + fy * r0, wc = camC + fx * c0;                // the world point under the cursor
     zi = Math.max(0, Math.min(VIEW_LEVELS.length - 1, nz));
-    const n = viewN(); camR = wr - fy * n; camC = wc - fx * n;
+    camR = wr - fy * viewR(); camC = wc - fx * viewC();
     applyCam();
   }
   function centreOnSelected() {
     if (selected === null || !F[cur] || !F[cur].agents[selected]) return;
-    const a = F[cur].agents[selected], n = viewN();
-    camR = a.r + 0.5 - n / 2; camC = a.c + 0.5 - n / 2; camClamp();
+    const a = F[cur].agents[selected];
+    camR = a.r + 0.5 - viewR() / 2; camC = a.c + 0.5 - viewC() / 2; camClamp();
   }
   function centreOnBand() {                                       // start where the people are
     const al = F[0].agents.filter((a) => a.alive && a.existed !== false);
     if (!al.length) return;
-    const n = viewN();
-    camR = al.reduce((t, a) => t + a.r, 0) / al.length + 0.5 - n / 2; camC = al.reduce((t, a) => t + a.c, 0) / al.length + 0.5 - n / 2; camClamp();
+    camR = al.reduce((t, a) => t + a.r, 0) / al.length + 0.5 - viewR() / 2; camC = al.reduce((t, a) => t + a.c, 0) / al.length + 0.5 - viewC() / 2; camClamp();
   }
   centreOnBand();
   $("zoom-in").addEventListener("click", () => zoomTo(zi + 1));
@@ -3856,17 +4357,18 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       show(cur); updateSide(cur); if (typeof updateInspector === "function") updateInspector(cur); });
   }
   $("follow").addEventListener("click", () => { follow = !follow; $("follow").setAttribute("aria-pressed", String(follow)); if (follow && viewN() === G) zoomTo(Math.min(2, VIEW_LEVELS.length - 1)); centreOnSelected(); applyCam(); });
-  wrap.addEventListener("wheel", (ev) => { if (!ev.ctrlKey && !ev.metaKey) { ev.preventDefault(); const b = map.getBoundingClientRect(); zoomTo(zi + (ev.deltaY < 0 ? 1 : -1), ev.clientX - b.left, ev.clientY - b.top); } }, { passive: false });
-  map.addEventListener("mousedown", (ev) => { if (viewN() < G) { drag = [ev.clientX, ev.clientY, camR, camC]; dragged = false; } });
+  wrap.addEventListener("wheel", (ev) => { if (!ev.ctrlKey && !ev.metaKey) { ev.preventDefault(); const b = mapRect(); zoomTo(zi + (ev.deltaY < 0 ? 1 : -1), ev.clientX - b.left, ev.clientY - b.top); } }, { passive: false });
+  map.addEventListener("mousedown", (ev) => { if (!wholeMap()) { drag = [ev.clientX, ev.clientY, camR, camC]; dragged = false; } });
   window.addEventListener("mousemove", (ev) => {
     if (!drag) return;
-    const dx = ev.clientX - drag[0], dy = ev.clientY - drag[1], b = map.getBoundingClientRect(), n = viewN();
+    const dx = ev.clientX - drag[0], dy = ev.clientY - drag[1], b = mapRect();
     if (Math.abs(dx) + Math.abs(dy) > 4) { dragged = true; wrap.classList.add("dragging"); if (follow) { follow = false; $("follow").setAttribute("aria-pressed", "false"); } }
-    camR = drag[2] - dy / b.height * n; camC = drag[3] - dx / b.width * n; applyCam();
+    camR = drag[2] - dy / b.height * viewR(); camC = drag[3] - dx / b.width * viewC(); applyCam();
   });
   window.addEventListener("mouseup", () => { drag = null; wrap.classList.remove("dragging"); });
   map.addEventListener("click", (ev) => { if (dragged) { ev.stopImmediatePropagation(); dragged = false; } }, true);
   window.addEventListener("resize", applyCam);
+  if (window.ResizeObserver) new ResizeObserver(() => applyCam()).observe(wrap);   // the colonist bar or the dock can change the map's room
   // the overview (RimWorld's world view in miniature): the whole map, what the camera shows, and where
   // everyone is; click or drag on it to move the camera. Shown whenever the camera shows part of the map.
   const mini = document.createElement("canvas"); mini.id = "minimap"; mini.width = G; mini.height = G;
@@ -3876,17 +4378,17 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   { const mg2 = miniBase.getContext("2d"), PIXG = ["#5f8f6c", "#4c7a62", "#7d6f80", "#1f9e9e", "#cdb491", "#c9d3cf", "#5a7d66", "#2a2622"];
     for (let r = 0; r < G; r++) for (let c = 0; c < G; c++) { mg2.fillStyle = PIXG[+DATA.terrain[r * G + c]] || "#555"; mg2.fillRect(c, r, 1, 1); } }
   function drawMini(i) {
-    mini.hidden = viewN() >= G;
+    mini.hidden = wholeMap();
     if (mini.hidden) return;
-    const g2 = mini.getContext("2d"), n = viewN();
+    const g2 = mini.getContext("2d");
     g2.drawImage(miniBase, 0, 0);
     (F[i] ? F[i].agents : []).forEach((a, k) => { if (!a.alive || a.existed === false) return;
       g2.fillStyle = k === selected ? "#fff1d6" : hexOf(agentColour(DATA.agents[k])); g2.fillRect(a.c - 1, a.r - 1, 3, 3); });
-    g2.strokeStyle = "#fff1d6"; g2.lineWidth = Math.max(1, G / 120); g2.strokeRect(camC, camR, n, n);
+    g2.strokeStyle = "#fff1d6"; g2.lineWidth = Math.max(1, G / 120); g2.strokeRect(camC, camR, viewC(), viewR());
   }
   let miniDrag = false;
-  const miniGo = (ev) => { const b = mini.getBoundingClientRect(), n = viewN();
-    camR = (ev.clientY - b.top) / b.height * G - n / 2; camC = (ev.clientX - b.left) / b.width * G - n / 2;
+  const miniGo = (ev) => { const b = mini.getBoundingClientRect();
+    camR = (ev.clientY - b.top) / b.height * G - viewR() / 2; camC = (ev.clientX - b.left) / b.width * G - viewC() / 2;
     if (follow) { follow = false; $("follow").setAttribute("aria-pressed", "false"); }
     applyCam(); };
   mini.addEventListener("mousedown", (ev) => { ev.stopPropagation(); miniDrag = true; miniGo(ev); });
@@ -3900,6 +4402,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   camReady = true;
   let followBelow = null, prevShown = -1, lastSide = 0;
   const show = (i) => { cur = Math.max(0, Math.min(F.length - 1, i)); scrub.value = cur;
+    $("tickno").textContent = `tick ${cur + 1} of ${F.length}`;
     if (CAVES) {
       const n = F[cur].agents.filter((a) => a.alive && a.below).length;
       $("below-n").textContent = n ? `(${n})` : "";
@@ -3951,7 +4454,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     (f.ties || []).forEach((tie) => {
       const [i, j] = tie, a = f.agents[i], b = f.agents[j];
       if (!a.alive || !b.alive) return;
-      const x1 = a.c * T + T / 2, y1 = a.r * T + T / 2, x2 = b.c * T + T / 2, y2 = b.r * T + T / 2;
+      const [x1, y1] = drawnCentre(a, i), [x2, y2] = drawnCentre(b, j);
       const L2 = (x2 - x1) ** 2 + (y2 - y1) ** 2 || 1;
       const u = Math.max(0, Math.min(1, ((mx - x1) * (x2 - x1) + (my - y1) * (y2 - y1)) / L2));
       const d = Math.hypot(mx - (x1 + u * (x2 - x1)), my - (y1 + u * (y2 - y1)));
@@ -4005,8 +4508,8 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     const tip = $("tip");
     {
       const [r, c] = cellOfEvent(ev);
-      const here = (F[cur].agents || []).findIndex((a) => a.alive && a.existed !== false && a.r === r && a.c === c && (!CAVES || !!a.below === (LAYER === "caves")));
-      const h = here >= 0 ? here : null;
+      const here = agentAtEvent(ev);
+      const h = here >= 0 && F[cur].agents[here].alive ? here : null;
       if (h !== hovered) { hovered = h; drawFrame(cur, flick, playing ? acc : 1); }
     }
     if (!$("web").checked) {
@@ -4020,7 +4523,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       tip.style.top = `${Math.min(ev.clientY + 14, window.innerHeight - tip.offsetHeight - 8)}px`;
       return;
     }
-    const box = map.getBoundingClientRect();
+    const box = mapRect();
     const tie = tieAt((ev.clientX - box.left) / box.width * map.width + Math.round(camC * P) * (T / P),
                       (ev.clientY - box.top) / box.height * map.height + Math.round(camR * P) * (T / P));
     if (!tie) { tip.hidden = true; return; }
@@ -4046,16 +4549,14 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   });
   map.addEventListener("click", (ev) => {
     const [r, c] = cellOfEvent(ev);
-    const here = F[cur].agents.map((a, k) => [a, k]).filter(([a]) => a.existed !== false && a.r === r && a.c === c
-      && (!CAVES || !!a.below === (LAYER === "caves")));
-    const pick = here.find(([a]) => a.alive) || here[0];
-    if (pick && !ev.shiftKey) select(pick[1]);
+    const pick = agentAtEvent(ev);
+    if (pick >= 0 && !ev.shiftKey) select(pick);
     else selectTile(r, c);
   });
   map.style.cursor = "pointer";
   document.querySelectorAll(".ovl [data-ov]").forEach((b) => b.addEventListener("click", () => setOverlay(b.dataset.ov)));
   $("web").addEventListener("change", () => { $("webnote").hidden = !$("web").checked; drawFrame(cur, flick); });
-  $("fw-on").addEventListener("change", () => { $("fw-box").hidden = !$("fw-on").checked; show(cur); });
+  $("fw-on").addEventListener("change", () => { $("fw-box").hidden = !$("fw-on").checked; if ($("fw-on").checked) openTab("world"); show(cur); });
   $("foodweb").addEventListener("mousemove", (ev) => {
     const el = ev.target.closest("[data-fw]"), tip = $("tip");
     if (!el) { tip.hidden = true; return; }
@@ -4127,7 +4628,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     if (!reduced && Math.floor(ts / 250) !== flick) { flick = Math.floor(ts / 250); if (!stepAnim) drawFrame(cur, flick, playing ? acc : 1); }
     requestAnimationFrame(loop);
   }
-  function drawSidebarFigures() { document.querySelectorAll(".agent canvas[data-fig], .colonist canvas[data-fig]").forEach((cv) => {
+  function drawSidebarFigures(which = ".agent canvas[data-fig], .colonist canvas[data-fig]") { document.querySelectorAll(which).forEach((cv) => {
     const k = +cv.dataset.fig, first = F.map((f) => f.agents[k]).find((x) => x && x.existed !== false && x.alive) || F[0].agents[k];
     const g = cv.getContext("2d"); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cv.width, cv.height);
     const who = { ...first, alive: true, asleep: false, downed: false, torch: false, health: 1, action: "rest", act: "" };
@@ -4163,7 +4664,8 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   window.__agonDrawAt = (i, frac) => drawFrame(i, flick, frac);       // for checking poses in tests
   window.__agonSprite = (o) => (o.style === "measured" || o.style === "colony" ? bodySprite(o) : pawnSprite(o));
   window.__agonFauna = (n, step = 0) => smallSprite(n, PIX_SPRITE[n] || "#888", step);   // for size sheets                          // for sprite sheets
-  window.__agonHover = (k) => { hovered = k; };                         // for checking the hover outline
+  window.__agonHover = (k) => { hovered = k; };
+  window.__agonSelect = (k) => select(k);                         // for checking the hover outline
   requestAnimationFrame((ts) => { last = ts; loop(ts); });
 })();
 </script>

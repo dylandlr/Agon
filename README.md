@@ -641,6 +641,45 @@ numbers before, at the worst and 40 days after, and the deaths during the shock.
 30-minute walk across, and huddling, groups standing against predators and contact infection all
 count neighbours within one cell. There is no crowding cost.
 
+## The player (playback page)
+
+The page is laid out as an app. The top bar holds the clock. The map fills the middle and its
+camera shows as many cells as the space allows. Below the map is the transport: step, play, speed,
+and a timeline that doubles as the scrub track (night is dark, deaths red, fires orange). A dock of
+tabs sits on the right: Inspect, Log, People, Language and World.
+
+- **Labels on the map.** Speech bubbles, names and crowd counts are laid out together on their own
+  sharp, screen-resolution layer, at people's drawn positions, so they follow walkers smoothly.
+  - Each label tries several places round its person. It takes the one that overlaps no other label
+    and covers the fewest figures, keeping last frame's place when it can and gliding to a new one
+    otherwise.
+  - A label that had to move keeps a leader line to its person.
+  - The selected or hovered speaker gets a full bubble: name, how the words sound, and the
+    translation, wrapped. Everyone else gets a one-line chip. Speech carries the speaker's name, so
+    names never sit on bubbles.
+  - Names that can't be placed without overlapping are dropped. The selected person's name tag also
+    says what it is doing and its most pressing feelings, coloured by need.
+- **Crowds.** People sharing a cell stand in formation slots: two side by side, three in a triangle,
+  four in a square, up to a 3 × 3 block, with lying people in front. Past nine, the rest stand
+  behind. The slots blend over the tick, so a crowd re-forms smoothly.
+  - Four or more in one cell get a count badge.
+  - Clicking and hovering pick the figure under the pointer, not the cell.
+  - The social web's lines run between drawn figures.
+- **Beds.** Where someone lay (asleep, down or dead), grass is pressed flat and yellowed in a
+  body-shaped oval. In snow it is a blue-grey hollow, in sand a scuffed dip. The mark deepens over
+  two hours of lying and springs back over eight.
+- **Mind card** (top of a person's inspector):
+  - What it chose and what came of it, with the target and place.
+  - The options it weighed, with the policy's own probabilities (the chosen one highlighted), and
+    what it leaned on.
+  - Feeling chips: needs past their trouble line, plus the last hour's stress sources.
+  - Every need as an exact percentage, with its trouble line marked.
+  - What it said, and who heard it.
+  - A plot of food, water, energy, rest, stress and health over the last day, with labelled axes,
+    gridlines, night shaded and a cursor at now.
+- **One colour per need everywhere:** water blue, food green, energy yellow, health red, stress
+  violet, rest indigo.
+
 ## Map overlays (playback)
 
 Like a colony sim's data views, the playback can dim the ground and paint one quantity over it.
