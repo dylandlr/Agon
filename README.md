@@ -1,4 +1,4 @@
-# lifesim: emergent early societies
+# Agon: Eos - emergent early societies
 
 Phase 1 implementation of the project design: a deterministic JAX world, a
 single agent learning to survive with recurrent PPO, and an event-sourced
