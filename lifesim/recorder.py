@@ -434,6 +434,8 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
     if hasattr(info, "downed"):                             # fell and cannot stand; got back up
         now_down = np.asarray(info.downed)
         was_down = mem.get("downed", np.zeros_like(now_down))
+        if len(was_down) < len(now_down):                 # the world grew its slots (lifesim/grow.py)
+            was_down = np.concatenate([was_down, np.zeros(len(now_down) - len(was_down), bool)])
         for i in np.flatnonzero(now_down & ~was_down):
             emit(i, "downed", [(pid(last(i, "struck_by_agent", "predator_attack", "hurt_by_prey", "fall", "stung",
                                         within=max(2, int(round(2 * per))))), "the wound")])

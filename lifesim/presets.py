@@ -19,10 +19,13 @@ PRESETS = {
     # is 64 km across): 30x less compute per game day than "society", so a 1e8-step budget lives ~50
     # game years per world instead of ~2, enough for many generations. Coarser in time (a tick is half
     # an hour of doing one thing), and each cell's plants are those of a 4 km^2 patch.
-    # 32 slots, not 16: with 16 a scripted band filled every slot and the cap, not the world, stopped
-    # its children (only deaths of age; one of three seeds aged out by day 87); with 32 the world's
-    # thirst, hunger and disease set the numbers (10 to 32) and 3 of 3 seeds lived 320 days.
-    "society30": dict(agents=32, founders=8, reproduction=True, reward_mode="survival",
+    # 64 slots: a cap for training worlds that the world, not the cap, should bind. With 16 a scripted
+    # band filled every slot and only died of age (one of three seeds aged out by day 87); with 32 it
+    # still reached the cap at its peaks; with 64 it reached 64 too, so this is the highest that is
+    # affordable rather than one never reached: the logs count conceptions the cap stopped
+    # (conceptions_blocked_by_slot_cap; raise --agents if it is not ~0). Continuous worlds grow their
+    # slots as needed (scripts/continuous_world.py, lifesim/grow.py), so they have no cap at all.
+    "society30": dict(agents=64, founders=8, reproduction=True, reward_mode="survival",
                       grid=32, steps=128, encoder="conv", slate="caveman", world="living", world_model=True,
                       episode_years=10, tick_minutes=30.0),
     # A band large enough for culture to accumulate: 64 slots (24 founders) on a 300 x 300 world

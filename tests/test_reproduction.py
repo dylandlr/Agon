@@ -346,3 +346,27 @@ def test_a_conception_the_slot_cap_stopped_is_counted():
     _, infos = run(cfg, s, [MATE, MATE], 1)
     i = infos[0][1]
     assert bool(i.mated[0]) and not bool(i.conceived.any()) and bool(i.no_room[0])
+
+
+def test_a_world_can_grow_its_slots_mid_run_and_children_fill_them():
+    """lifesim/grow.py: everyone keeps who they are, where they are, whom they know and are related
+    to; the new slots are unborn; the bigger world steps on, and a birth can land in a new slot."""
+    from lifesim import grow as G
+    cfg, s = _world(n=2, founders=2)
+    s, _ = run(cfg, s, [REST, REST], 3)
+    s = s._replace(drop_owner=s.drop_owner.at[0, 0].set(1 + 2 * 1))   # agent 1 dropped food below
+    big = G.bigger(cfg)
+    g = G.grow_state(s, cfg, big, jax.random.PRNGKey(9))
+    assert g.pos.shape == (4, 2) and g.memory.shape[:2] == (4, 4) and g.relatedness.shape == (4, 4)
+    np.testing.assert_array_equal(np.asarray(g.pos[:2]), np.asarray(s.pos))
+    np.testing.assert_array_equal(np.asarray(g.memory[:2, :2]), np.asarray(s.memory))
+    np.testing.assert_array_equal(np.asarray(g.terrain), np.asarray(s.terrain))
+    assert list(np.asarray(g.alive)) == [True, True, False, False] and not np.asarray(g.existed[2:]).any()
+    assert int(g.t) == int(s.t) and int(g.drop_owner[0, 0]) == 1 + 4 * 1
+    assert G.free_slots(s) == 0 and G.free_slots(g) == 2
+    _, infos = run(big, g, [MATE, MATE, REST, REST], 1)
+    i = infos[0][1]
+    assert bool(i.conceived[0]) and not bool(i.no_room.any())       # room now: the cap no longer stops her
+    params = {"w": jnp.arange(6.0).reshape(2, 3)}
+    p = G.pad_agents(params, 2, 4, fill="first")["w"]
+    assert p.shape == (4, 3) and float(p[3, 2]) == 2.0

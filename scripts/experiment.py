@@ -128,7 +128,7 @@ def run(cmd, log):
                 elif "chunk" in r:
                     p = r["population"]
                     print(f"  chunk {r['chunk']:>3} {r['to']:>20}  alive {p['alive']:>2}  "
-                          f"births so far {r['births_so_far']}  generation {p['max_generation']}", flush=True)
+                          f"births so far {r['births_so_far']}  generation {p['max_generation']}  slots {r.get('slots')}", flush=True)
             elif line.strip() and not line.startswith(("backend=", "using checkpoint")):
                 print("  " + line.rstrip(), flush=True)
         return proc.wait()
@@ -181,7 +181,7 @@ def gate(root, adult_days=15.0, day_length=None):
              "(--skip-gate runs them anyway)."]
     if capped:
         lines.append(f"  slot cap: {capped} conceptions found every slot taken, so the cap, not the world, "
-                     "limited births: raise --agents")
+                     "limited births (a world grows when nearly full; this many arrived faster than it could)")
     return ok, lines
 
 

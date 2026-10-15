@@ -25,7 +25,7 @@ a run started with older code refuses to resume with new code, so versions never
 Every job takes `PRESET` (default `society`), and each preset's results go to their own folder,
 `$SCRATCH/runs/exp_<code version>_<preset>`, so presets never mix.
 
-- `society30`: 32 slots, 8 founders, a 32 x 32 map, half-hour ticks, with reproduction, the
+- `society30`: 64 slots (continuous worlds grow past that), 8 founders, a 32 x 32 map, half-hour ticks, with reproduction, the
   world model and the caveman slate. Recommended for the first emergence runs.
   - 100M agent-steps is about 50 game years per training world, and a 400-day continuous world is
     19,200 ticks per world.

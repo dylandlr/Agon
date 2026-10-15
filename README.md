@@ -1517,11 +1517,20 @@ adulthood with it.
   allowed (70 x gene, spread 10%), so a cohort born together died together, which with the slot
   cap below made bands age out in waves. Hunger, cold, disease, predators and childbirth stay their
   own causes, modelled as they happen.
-- **Slot cap.** Arrays have a fixed size in JAX, so a world has `n_agents` slots and a child needs
-  a free one. A conception the cap stopped is counted (`no_room` in the step info,
-  `conceptions_blocked_by_slot_cap` in training logs, `blocked_by_slot_cap` in continuous worlds,
-  `conceptions_blocked_by_slot_cap` in viability runs). If it is above zero, the cap, not food,
-  water or disease, is limiting the population: raise `--agents`.
+- **Slots, and no population cap in continuous worlds.** JAX compiles a world for fixed array
+  sizes, so a compiled world has `n_agents` slots and a child needs a free one. A continuous world
+  grows instead: when fewer than an eighth of its slots (at least 2) are free, the chunk ends, every
+  structure sized by the slots (world state, brains, optimiser moments, the learner's memory,
+  recurrent state, buffered experience) is copied into one twice the size, and the step is compiled
+  again (`lifesim/grow.py`; `--no-grow` keeps the size, `--grow-headroom` sets the threshold). Brains
+  do not depend on the slot count, so the same trained agents live on. New slots are unborn until a
+  child is born into one; the trace pads earlier ticks; each chunk's summary gives its `slots`.
+  The only limit is memory: some state grows with the square of the slots (memory of and
+  attachment to each other, kinship).
+  Training worlds keep a fixed cap, set high (`society30`: 64) and raised with `--agents`. A
+  conception the cap stopped is counted (`no_room` in the step info,
+  `conceptions_blocked_by_slot_cap` in training logs and viability runs, `blocked_by_slot_cap` in
+  continuous worlds); above zero in training, the cap, not food, water or disease, limited births.
 - **Pregnancy** lasts 0.75 biological years (36 ticks); she needs 30% more
   food and water. Childbirth kills the mother 1% of the time (2% if weak).
 - **Birth:** the child appears at the mother's cell in a free slot (never used
