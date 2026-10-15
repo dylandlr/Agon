@@ -444,7 +444,9 @@ def main():
     ap.add_argument("--tick-minutes", type=float, default=None,
                     help="game minutes per tick (default: the run's own, else 30; 1 = RimWorld-like)")
     ap.add_argument("--agents", type=int, default=6)
-    ap.add_argument("--grid", type=int, default=32)
+    ap.add_argument("--grid", type=int, default=None,
+                    help="map size (default 32; with --run, the run's own, or this to put trained agents on another "
+                         "map: their senses are local and the remembered map is pooled to a fixed size)")
     ap.add_argument("--hidden", type=int, default=128)
     ap.add_argument("--encoder", choices=["conv", "mlp"], default="mlp")
     ap.add_argument("--days", type=float, default=2.0)
@@ -467,8 +469,10 @@ def main():
 
     if args.run and not args.random and not args.decisions and (Path(args.run) / "history.json").exists():
         hist = json.load(open(Path(args.run) / "history.json"))["args"]
-        args.agents, args.grid = hist["agents"], hist["grid"]
+        args.agents = hist["agents"]
+        args.grid = args.grid or hist["grid"]
         args.encoder = hist.get("encoder", args.encoder)
+    args.grid = args.grid or 32
     env_cfg = EnvConfig(grid_size=args.grid, n_agents=args.agents, skills=args.slate == "caveman")
     if args.run and not args.random and not args.decisions and (Path(args.run) / "history.json").exists():
         h = json.load(open(Path(args.run) / "history.json"))["args"]
