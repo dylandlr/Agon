@@ -173,6 +173,21 @@ section.panel { margin: 0; }
 .plot-key { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11.5px; color: var(--muted); }
 .plot-key span::before { content: ""; display: inline-block; width: 10px; height: 2px; background: var(--c); vertical-align: 3px; margin-right: 4px; }
 .speech { font-size: 12.5px; background: var(--panel2); border-radius: 4px; padding: 6px 9px; }
+.rels { display: grid; gap: 8px; }
+.rel { background: var(--panel2); border-radius: 4px; padding: 8px 10px; }
+.rel-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: 13px; margin-bottom: 6px; }
+.rel-bars { display: grid; gap: 3px; }
+.rm { display: grid; grid-template-columns: 9em 1fr 3em; gap: 8px; align-items: center; font-size: 11.5px; color: var(--muted); cursor: help; }
+.rm .track { height: 5px; background: var(--track); border-radius: 1px; position: relative; overflow: hidden; }
+.rm .track i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 1px; }
+.rm .v { text-align: right; color: var(--ink); }
+details.moments { margin-top: 6px; font-size: 12px; }
+details.moments summary { cursor: pointer; color: var(--ink); }
+details.moments summary:hover { color: var(--accent); }
+details.moments ol { list-style: none; padding: 0; margin: 6px 0 0; max-height: 220px; overflow-y: auto; }
+details.moments li { padding: 3px 0 3px 8px; border-left: 2px solid var(--line); margin: 2px 0; }
+details.moments li.bad { border-left-color: var(--health); } details.moments li.good { border-left-color: var(--food); }
+details.moments li a[data-goto] { color: var(--accent); text-decoration: none; margin-right: 6px; }
 .soc h2 { margin-top: 16px; } .soc h2:first-child { margin-top: 0; }
 .soc .grp { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); font-size: 12.5px; }
 .soc .grp:first-of-type { border-top: 0; }
@@ -3485,6 +3500,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   // ---------- decisions: what the network actually computed for each choice
   const ACT = (n) => n.replace(/_/g, " ");
   function chosenShare(m, action) {
+    if (m.p !== undefined) return `${m.p < 0.01 ? (m.p * 100).toFixed(1) : Math.round(m.p * 100)}%`;
     const hit = m.top.find(([n]) => n === action);
     return hit ? `${Math.round(hit[1] * 100)}%` : `under ${Math.round(m.top[m.top.length - 1][1] * 100)}%`;
   }
@@ -3606,8 +3622,9 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     if (a.alive && a.existed !== false) h += `<div class="now">${linkify(narrateAgent(a, pa, k, f), f.t)}</div>`;
     if (m && a.alive) {
       const top = m.top.slice(0, 4), chosenIn = top.some(([n]) => n === a.action);
+      if (m.p !== undefined && m.p < 0.05) h += `<div class="speech" style="border-left:3px solid var(--health)"><b>A slip.</b> Its own policy rated this action ${chosenShare(m, a.action)} likely: it was sampled, not chosen. Rare acts like this (a stray blow among them) come from sampling every allowed action a little, not from intent.</div>`;
       h += `<div><p class="lbl">Weighed (the policy's own odds)${m.value !== undefined ? `; expects its future to go ${m.value.toFixed(2)}` : ""}</p><div class="opts">`
-        + top.concat(chosenIn ? [] : [[a.action, null]]).map(([n, p2]) => `<span class="${n === a.action ? "chosen" : ""}">${esc(ACT(n))}${n === a.action ? " (chosen)" : ""}</span>`
+        + top.concat(chosenIn ? [] : [[a.action, m.p !== undefined ? m.p : null]]).map(([n, p2]) => `<span class="${n === a.action ? "chosen" : ""}">${esc(ACT(n))}${n === a.action ? " (chosen)" : ""}</span>`
           + `<span class="bar2 ${n === a.action ? "chosen" : ""}"><i style="width:${p2 === null ? 0 : Math.round(p2 * 100)}%;${n === a.action ? "background:var(--accent)" : ""}"></i></span><span class="v">${p2 === null ? "&lt;" + Math.round(top[top.length - 1][1] * 100) : Math.round(p2 * 100)}%</span>`).join("")
         + `</div>${m.why && m.why.length ? `<p class="lbl" style="margin-top:6px">Leaned on</p><div class="chips">${m.why.map(([g, w]) => `<span class="chip">${esc(g)} ${Math.round(w * 100)}%</span>`).join("")}</div>` : ""}</div>`;
     }
@@ -3631,6 +3648,72 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     }
     if (a.existed !== false && (a.alive || a.was_alive)) h += `<div><p class="lbl">Needs over the last day (%)</p>${needsPlot(i, k)}</div>`;
     return h + "</div>";
+  }
+  // ---------- relationships: one card per person this one has a tie with, strongest first: what the
+  // tie is (the labels), its measures as bars (bond, attachment each way, kinship), the blows each
+  // way as remembered, and a drop-down of every moment between the two in this recording (blows,
+  // touches, food left and taken, mating), each linked to that moment and to both records
+  const FRAME_OF_T = new Map(F.map((fr, j) => [fr.t, j]));
+  const OPEN_REL = new Set();                     // which drop-downs are open, kept across re-renders
+  $("insp-body").addEventListener("toggle", (ev) => { const d = ev.target.closest && ev.target.closest("details[data-rel]");
+    if (d) { if (d.open) OPEN_REL.add(d.dataset.rel); else OPEN_REL.delete(d.dataset.rel); } }, true);
+  const partiesOf = (e) => [...(e.victims || []), ...(e.targets || []), ...(e.near || []),
+    ...(e.giver !== undefined && e.giver >= 0 ? [e.giver] : []), ...(e.father !== undefined && e.father >= 0 ? [e.father] : []),
+    ...(e.partner !== undefined && e.partner >= 0 ? [e.partner] : [])];
+  const PAIR_TYPES = new Set(["strike_agent", "touch", "took_food", "release", "conceived", "mated"]);
+  function momentsBetween(k, o, i) {
+    const out = [], t = F[i].t;
+    DATA.events.forEach((e) => {
+      if (e.t > t || !PAIR_TYPES.has(e.type)) return;
+      if ((e.agent === k && partiesOf(e).includes(o)) || (e.agent === o && partiesOf(e).includes(k))) out.push(e);
+    });
+    return out.sort((x, y) => y.t - x.t);
+  }
+  function relationshipsView(i, k) {
+    const f = F[i];
+    const ties = (f.ties || []).filter(([x, y]) => x === k || y === k).map((tie) => {
+      const [x, y, kin, bond, xy, yx, axy = 0, ayx = 0] = tie, o = x === k ? y : x;
+      return { o, kin, bond, gave: x === k ? xy : yx, took: x === k ? yx : xy, mine: x === k ? axy : ayx, theirs: x === k ? ayx : axy, words: tieLabels(k, tie, f.t)[1] };
+    }).sort((p, q) => (q.mine + q.theirs + q.bond / 3) - (p.mine + p.theirs + p.bond / 3));
+    if (!ties.length) return "<h3>Relationships now</h3><p class='fine'>No ties to anyone alive.</p>";
+    const maxBond = Math.max(1, ...ties.map((r) => r.bond));
+    const bar = (label, v, max, col, title) => `<span class="rm" title="${esc(title)}"><span>${label}</span><span class="track"><i style="width:${Math.round(100 * Math.min(1, v / max))}%;background:${col}"></i></span><span class="v">${v.toFixed(2)}</span></span>`;
+    const verb = (e, o) => {
+      const me = e.agent === k, who = me ? "" : `${mention(o)} `;
+      const slip = e.p !== undefined && e.p < 0.05 ? ` (a slip: chosen with ${Math.round(e.p * 1000) / 10}% likelihood)` : e.p !== undefined ? ` (chosen with ${Math.round(e.p * 100)}% likelihood)` : "";
+      switch (e.type) {
+        case "strike_agent": return (me ? `struck ${mention(o)}` : `${who}struck them`) + (e.tool ? ` with ${e.tool.replace(/_/g, " ")}` : "") + slip;
+        case "touch": return (me ? `touched ${mention(o)}` : `${who}touched them`) + slip;
+        case "took_food": return me ? `took food ${mention(o)} had left` : `${who}took food they had left`;
+        case "release": return me ? `left food beside ${mention(o)}` : `${who}left food beside them`;
+        case "conceived": return me ? `conceived a child with ${mention(o)}` : `${who}conceived a child with them`;
+        default: return (me ? "" : who) + e.type.replace(/_/g, " ");
+      }
+    };
+    const kindOf = (e) => (e.type === "strike_agent" ? "bad" : e.type === "touch" ? "" : "good");
+    let h = `<h3>Relationships now</h3><div class="rels">`;
+    ties.forEach((r) => {
+      const ms = momentsBetween(k, r.o, i);
+      const n = (type, from) => ms.filter((e) => e.type === type && (from === undefined || (from ? e.agent === k : e.agent === r.o))).length;
+      const counts = [[n("strike_agent", true), "blow given", "blows given"], [n("strike_agent", false), "blow taken", "blows taken"],
+        [n("touch"), "touch", "touches"], [n("took_food") + n("release"), "food shared", "food shared"],
+        [n("conceived"), "child conceived", "children conceived"]].filter(([c]) => c > 0).map(([c, one, many]) => `${c} ${c === 1 ? one : many}`);
+      h += `<div class="rel"><div class="rel-head">${agentLink(r.o, f.t)}${f.agents[r.o] && !f.agents[r.o].alive ? " <span class='fine'>(died)</span>" : ""}`
+        + r.words.map((w) => ` <span class="tag ${w === "rival" ? "bad" : "good"}">${esc(w)}</span>`).join("") + `</div>`
+        + `<div class="rel-bars">`
+        + bar("Bond", r.bond, maxBond, "var(--food)", "Bond: grown by touch and food left near each other, fading with time apart")
+        + bar("Attached to them", r.mine, 1, "var(--stress)", "Attachment: how far this one feels the other's survival as its own (0 to 1)")
+        + bar("Attached back", r.theirs, 1, "var(--sleep)", "The other's attachment to this one (0 to 1)")
+        + (r.kin >= 0.05 ? bar("Kinship", r.kin, 0.5, "var(--energy)", "Relatedness r: 0.5 parent, child or full sibling; 0.25 half sibling or grandparent") : "")
+        + (r.gave > 0.05 || r.took > 0.05 ? bar("Blows", r.gave + r.took, 2, "var(--health)", `Remembered blows: struck them ${r.gave.toFixed(2)}, struck by them ${r.took.toFixed(2)} (fading with time)`) : "")
+        + `</div>`
+        + (ms.length ? `<details class="moments" data-rel="${k}-${r.o}"${OPEN_REL.has(`${k}-${r.o}`) ? " open" : ""}><summary>${ms.length} moment${ms.length === 1 ? "" : "s"} together${counts.length ? `: ${counts.join(", ")}` : ""}</summary><ol>`
+            + ms.slice(0, 60).map((e) => `<li class="${kindOf(e)}"><a href="#" data-goto="${FRAME_OF_T.has(e.t) ? FRAME_OF_T.get(e.t) : ""}" title="Go to this moment">${esc(e.time || F[FRAME_OF_T.get(e.t) || 0].time)}</a> ${linkify(verb(e, r.o), f.t)}</li>`).join("")
+            + (ms.length > 60 ? `<li class="fine">and ${ms.length - 60} earlier</li>` : "") + `</ol></details>`
+          : `<p class="fine" style="margin:4px 0 0">Nothing between them recorded in this recording: the tie comes from before it, or from time spent near each other.</p>`)
+        + `</div>`;
+    });
+    return h + `</div><p class="fine">Bond and blows are remembered and fade with time apart; the moments are what this recording saw. Click a time to go there, a name to open that person's record.</p>`;
   }
   function updateInspector(i) {
     if (selectedTile !== null) return tileView(i);
@@ -3705,18 +3788,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       const ci = condInfo(c);
       return `<div class="trait cond" data-trait="cond:${esc(c)}"><span>${esc(c)}</span><span class="tag ${ci.good ? "good" : "bad"}">${ci.good ? "good" : "bad"}</span><span>${esc(ci.rarity || "")}</span></div>`;
     }).join("") : "<p class='fine'>None: no inborn conditions, and nothing has marked it yet.</p>");
-    const ties = (f.ties || []).filter(([x, y]) => x === k || y === k).map(([x, y, kin, bond, xy, yx, axy = 0, ayx = 0]) => {
-      const other = x === k ? y : x, gave = x === k ? xy : yx, took = x === k ? yx : xy;
-      const mine = x === k ? axy : ayx, theirs = x === k ? ayx : axy;
-      const parts = [mine > 0.05 ? `attached ${mine.toFixed(2)}` : "", theirs > 0.05 ? `they are attached ${theirs.toFixed(2)}` : "",
-                     kin >= 0.1 ? `kin ${kin}` : "", bond > 0.05 ? `bond ${bond}` : "",
-                     gave > 0.05 ? `struck them ${gave}` : "", took > 0.05 ? `struck by them ${took}` : ""].filter(Boolean);
-      return [other, parts.join(", ")];
-    });
-    const named = new Map((f.ties || []).filter(([x, y]) => x === k || y === k).map((tie) => tieLabels(k, tie, f.t)));
-    html += "<h3>Relationships now</h3>" + (ties.length
-      ? `<dl>${ties.map(([o, t]) => `<dt>${link(o).html} ${(named.get(o) || []).map((w) => `<span class="tag ${w === "rival" ? "bad" : "good"}">${esc(w)}</span>`).join(" ")}</dt><dd>${esc(t)}</dd>`).join("")}</dl>`
-      : "<p class='fine'>No ties to anyone alive.</p>");
+    html += relationshipsView(i, k);
     html += `<h3>History (this recording, newest first)</h3><div class="modes" role="group" aria-label="History">
       <button data-hist="decisions" aria-pressed="${inspHist === "decisions"}">Decisions</button>
       <button data-hist="ideas" aria-pressed="${inspHist === "ideas"}">Ideas</button>
@@ -4593,6 +4665,8 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   });
   $("insp-close").addEventListener("click", () => { if (selectedTile !== null) selectTile(...selectedTile); else select(selected); });
   document.addEventListener("click", (ev) => {
+    const go = ev.target.closest("[data-goto]");
+    if (go) { ev.preventDefault(); if (go.dataset.goto !== "") { setPlaying(false); show(+go.dataset.goto); } return; }
     const l = ev.target.closest("[data-agent]");
     if (l) { ev.preventDefault(); if (selected !== +l.dataset.agent) select(+l.dataset.agent); return; }
     const tl = ev.target.closest("[data-tile]");

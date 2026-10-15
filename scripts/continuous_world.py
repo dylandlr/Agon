@@ -36,7 +36,7 @@ import jax.numpy as jnp
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from export_playback import (page_html, build_frame, knowledge_snapshot, load_population,  # noqa: E402
+from export_playback import (page_html, build_frame, knowledge_snapshot, load_population, stamp_choice,  # noqa: E402
                              make_thinker, mind_records, world_static)
 
 from lifesim import env as E  # noqa: E402
@@ -517,8 +517,9 @@ def main():
             p, c, (o[None, None], reset[None, None], m[None, None])))(params, carry, obs, full)
         logits = logits[:, 0, 0]
         ka, km = jax.random.split(k)
-        return carry, jax.random.categorical(ka, logits[:, :A]), \
-            jax.random.categorical(km, logits[:, A:].reshape(-1, E.MSG_LEN, E.VOCAB))
+        a = jax.random.categorical(ka, logits[:, :A])
+        p = jnp.take_along_axis(jax.nn.softmax(logits[:, :A], -1), a[:, None], -1)[:, 0]   # how likely it rated its own choice
+        return carry, a, jax.random.categorical(km, logits[:, A:].reshape(-1, E.MSG_LEN, E.VOCAB)), p
 
     world_fns = {}
 
@@ -612,8 +613,9 @@ def main():
             rec_now = record and (t - t0) < pb_ticks
             if rec_now:
                 carry, a, msg, probs, value, why, ideas = think(params, carry, obs, mask, jnp.asarray(t == 0), k)
+                chosen_p = np.asarray(probs)[np.arange(n), np.asarray(a)]
             else:
-                carry, a, msg = policy(params, carry, obs, mask, jnp.asarray(t == 0), k)
+                carry, a, msg, chosen_p = policy(params, carry, obs, mask, jnp.asarray(t == 0), k)
             prev = state
             state, reward, _, info = step(state, a, msg)
             if args.learn:
@@ -662,8 +664,8 @@ def main():
                 lives.start(int(c), t, state, int(generation[c]), int(np.asarray(state.mother)[c]),
                             int(np.asarray(prev.father)[int(np.asarray(state.mother)[c])]))
             # every event, recorded chunk or not, goes to the run's causal log (events.jsonl.gz)
-            evs = _stamp_events(shock_events + extract_events(info, np.asarray(a), last_event, state, prev, env_cfg),
-                                env_cfg)
+            evs = stamp_choice(_stamp_events(shock_events + extract_events(info, np.asarray(a), last_event, state, prev, env_cfg),
+                                             env_cfg), chosen_p)
             for i in in_force:                          # hardships a shock makes likelier name it as a cause
                 sh = shocks[i]
                 for ev in evs:
@@ -676,7 +678,7 @@ def main():
             if rec_now:
                 events.extend(evs)
                 frames.append(build_frame(t, prev, state, a, info, evs, env_cfg, n,
-                                          mind_records(probs, value, why, reward, info.moral_reward, ideas)))
+                                          mind_records(probs, value, why, reward, info.moral_reward, ideas, a)))
                 if (t - t0) % max(1, env_cfg.day_length // 4) == 0:
                     knowledge.append(knowledge_snapshot(t, state))
             t += 1

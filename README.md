@@ -926,6 +926,19 @@ Agents are never told about rank or custom; these analyses read them from what h
 continuous world writes `trace.npz` (per tick: positions, alive, actions, speech, and whether a
 predator, large prey or fire was in view of each speaker) beside `lives.json` and the events.
 
+**Choices and slips.** Each act an agent makes is recorded with "p": how likely its own policy
+rated that act when it was sampled. This applies to blows, touches, food left, gathering, eating,
+drinking, fire, placing and writing, in playbacks and in a continuous world's events. Policies
+sample from ~78 actions and are trained with an entropy bonus, so every allowed act keeps a little
+probability, and over thousands of decisions rare acts happen without intent.
+- Checked on the trained grounded-language agents: none of the 31 blows in 4 recordings was among
+  the striker's top three choices at the time, and the 2 blows in a fresh recording were rated
+  2.4% and 0.3% likely.
+- Blows rated under 5% count as slips. `hierarchy.py` and `society.py` leave them out and report
+  how many they dropped.
+- The inspector marks a slip as one, and shows each moment's likelihood in a relationship's list
+  of moments.
+
 **Hierarchy** (`scripts/hierarchy.py <world>`):
 - *Dominance* comes from decided encounters: blows struck, and supplants (one moves next to
   another, who moves away at once while the first stays).

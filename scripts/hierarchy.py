@@ -37,7 +37,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from society_data import World, perm_p, spearman  # noqa: E402
+from society_data import World, deliberate, perm_p, spearman  # noqa: E402
 
 
 # ------------------------------------------------------------------ dominance statistics
@@ -110,7 +110,7 @@ def encounters(world: World, supplants=True):
     """List of (t, winner life id, loser life id, kind)."""
     out = []
     for e in world.events:
-        if e.get("type") == "strike_agent":
+        if e.get("type") == "strike_agent" and deliberate(e):
             a = world.life_at(e["agent"], e["t"])
             for v in e.get("victims", []):
                 b = world.life_at(v, e["t"])
@@ -246,7 +246,8 @@ def analyse(world: World, window_days=40.0, day_length=None, min_encounters=1, s
         ages = np.array([lives[m]["ticks"] for m in lead_rows], float)
         rho, p = perm_p(ages, np.array(list(lead_rows.values())), spearman, 999, seed)
         lead_vs["time lived"] = {"rho": round(rho, 3), "p": round(p, 4), "n": len(lead_rows)}
-    return {"world": world.name, "encounters": len(enc), "blows": sum(1 for x in enc if x[3] == "blow"),
+    slips = sum(1 for e in world.events if e.get("type") == "strike_agent" and not deliberate(e))
+    return {"world": world.name, "encounters": len(enc), "blows": sum(1 for x in enc if x[3] == "blow"), "slips": slips,
             "supplants": sum(1 for x in enc if x[3] == "supplant"), "windows": windows,
             "stability": [round(s, 3) for s in stab], "rank_outcomes": outcomes,
             "leadership": {"net_by_life": {int(k): v for k, v in lead_rows.items()}, "against": lead_vs},
@@ -256,6 +257,7 @@ def analyse(world: World, window_days=40.0, day_length=None, min_encounters=1, s
 def render(r):
     out = [f"Hierarchy: {r['world']}",
            f"{r['encounters']} decided encounters: {r['blows']} blows, {r['supplants']} supplants"
+           + (f" ({r.get('slips')} more blows left out as slips: their striker's own policy gave them under 5%)" if r.get("slips") else "")
            + ("" if r["has_trace"] else " (no trace.npz: blows only, no leadership)")]
     for w in r["windows"]:
         head = f"  day {w['from_day']:.0f}+: {w['individuals']} individuals, {w['encounters']} encounters"

@@ -207,8 +207,27 @@ def idea_record(ideas, i):
             "trust": round(float(d["trust"]), 4)}
 
 
-def mind_records(probs, value, why, reward, social, ideas=None):
-    """Per-agent JSON-ready summaries of one decision."""
+# What an agent's own choice produced: these events carry "p", the likelihood its policy gave the
+# action it took, so a deliberate act can be told from a rare slip (a sampled action the policy
+# itself rated unlikely; with ~78 actions and an entropy bonus, every allowed action keeps some).
+ACT_EVENTS = {"strike_agent", "strike_animal", "strike_miss", "kill", "touch", "release", "gather", "eat", "drink",
+              "ignite", "fed_fire", "relieved", "place", "write"}
+
+
+def stamp_choice(evs, chosen_p):
+    """Add the chosen action's likelihood to the events an agent's own act produced."""
+    if chosen_p is None:
+        return evs
+    cp = np.asarray(chosen_p)
+    for ev in evs:
+        k = ev.get("agent", -1)
+        if ev.get("type") in ACT_EVENTS and 0 <= k < len(cp):
+            ev["p"] = round(float(cp[k]), 4)
+    return evs
+
+
+def mind_records(probs, value, why, reward, social, ideas=None, acts=None):
+    """Per-agent JSON-ready summaries of one decision (p: the likelihood of the action taken)."""
     probs, value, why = np.asarray(probs), np.asarray(value), np.asarray(why)
     reward, social = np.asarray(reward), np.asarray(social)
     out = []
@@ -219,6 +238,8 @@ def mind_records(probs, value, why, reward, social, ideas=None):
                "value": round(float(value[i]), 3),
                "why": [[MIND_GROUPS[g], round(float(why[i, g]), 2)] for g in lean if why[i, g] > 0.02],
                "felt": round(float(reward[i]), 4), "felt_others": round(float(social[i]), 4)}
+        if acts is not None:
+            rec["p"] = round(float(probs[i, int(np.asarray(acts)[i])]), 4)
         if ideas is not None:
             idea = idea_record(ideas, i)
             if idea:
@@ -565,8 +586,10 @@ def main():
         if t < skip:
             continue
         evs = _stamp_events(extract_events(info, np.asarray(a), last_event, state, prev, env_cfg), env_cfg)
+        if policy is not None:
+            stamp_choice(evs, np.asarray(probs)[np.arange(args.agents), np.asarray(a)])
         events.extend(evs)
-        minds = None if policy is None else mind_records(probs, value, why, reward, info.moral_reward, ideas)
+        minds = None if policy is None else mind_records(probs, value, why, reward, info.moral_reward, ideas, a)
         frames.append(build_frame(t, prev, state, a, info, evs, env_cfg, args.agents, minds))
         if (t - skip) % 12 == 0:
             knowledge.append(knowledge_snapshot(t, state))

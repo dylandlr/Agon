@@ -49,7 +49,8 @@ female share of person-time, with a permutation p on sex labels.
 Punishment (Fehr and Gaechter 2002, in the field Boehm 1999): after someone strikes another, is
 the striker struck by a third party within a day more often than if the times they were struck
 were shifted at random (each person's own record moved round in time, keeping its rate and
-clustering)? Also the share of those third parties who are kin of the victim.
+clustering)? Also the share of those third parties who are kin of the victim. Blows the striker's
+own policy rated under 5% likely are left out as slips (where the events record it).
 Inequality: Gini of eating rate and of children among adults who lived at least a year.
 The trajectory gives the main numbers per window, with the generations alive, so a society's
 course over the generations reads in one table.
@@ -63,7 +64,7 @@ from pathlib import Path
 
 import numpy as np
 
-from society_data import World, perm_p, spearman  # noqa: F401
+from society_data import World, deliberate, perm_p, spearman  # noqa: F401
 
 SLEEP_ACTION = 70           # lifesim/env.py SLEEP; checked against the env in tests/test_society.py
 TASKS = ["gathering", "hunting", "tending fire", "nursing", "leaving food"]
@@ -301,7 +302,7 @@ def places(world: World, lo, hi, band_of, radius=1):
     # meetings between bands, and blows in them
     blows = defaultdict(int)
     for e in world.events:
-        if e.get("type") == "strike_agent" and lo <= e["t"] < hi:
+        if e.get("type") == "strike_agent" and lo <= e["t"] < hi and deliberate(e):
             a = world.life_at(e["agent"], e["t"])
             for v in e.get("victims", []):
                 b = world.life_at(v, e["t"])
@@ -472,7 +473,7 @@ def punishment(world: World, lo, hi, r_of, perms=999, seed=0):
     day = world.day_length
     blows = []
     for e in world.events:
-        if e.get("type") == "strike_agent" and lo <= e["t"] < hi:
+        if e.get("type") == "strike_agent" and lo <= e["t"] < hi and deliberate(e):
             a = world.life_at(e["agent"], e["t"])
             for v in e.get("victims", []):
                 b = world.life_at(v, e["t"])
