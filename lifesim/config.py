@@ -130,6 +130,12 @@ class EnvConfig:
     base_height_cm: float = 165.0
     ideal_bmi: float = 22.0
     fat_gain_kg: float = 0.01        # per tick when well fed, up to 115% of ideal weight
+    # Catch-up growth: a child or youth below its frame's lean weight (stunted by hunger earlier)
+    # regrows toward it while fed, closing the gap with this time constant in biological years
+    # (catch-up growth after malnutrition is real, if often incomplete). Without it, a child hungry
+    # for a while stayed thin for life and the next generation could not conceive.
+    catch_up_years: float = 1.0
+    catch_up_until_years: float = 20.0
     fat_burn_kg: float = 0.08        # per tick when starving, down to 80% of ideal weight
     satiety_per_kg: float = 0.05     # burning 1 kg of reserves restores this much satiety
 

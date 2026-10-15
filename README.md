@@ -466,6 +466,12 @@ part of felt well-being.
 (16.7 km across at 1-minute ticks, 280 km^2; it was 32 x 32 until the plant ecology showed 4.6 km^2 cannot feed 16),
 192-tick rollouts, caveman slate, living world, world model), identically on any machine.
 The "tribe" preset (64 slots, 24 founders, 300 x 300, 400 km^2) is for culture at a larger scale.
+The "society30" preset (`--preset society30`) runs the same people on a 32 x 32 map at half-hour
+ticks: a cell is 2 km, the map 64 km across. That is 30x less compute per game day, so 100M
+agent-steps lives about 50 game years per training world instead of about 2, which leaves room
+for many generations. The scripted band persists there in 2 of 3 4-year worlds
+(`scripts/viability.py --preset society30`). Start emergence runs with it; the HPRC jobs take
+`PRESET=society30` (hprc/README.md).
 
 - `validate`: the preset; without sleep-consolidated learning; the blank slate; without the world
   model; each followed by a 10-year continuous world.

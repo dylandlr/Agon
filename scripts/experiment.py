@@ -291,6 +291,41 @@ def world_row(label, S):
             + ", ".join(f"{k} {v}" for k, v in sorted(deaths.items(), key=lambda kv: -kv[1])))
 
 
+def society_section(root, runs):
+    """Society in each run's continuous world (scripts/society.py), the last full year: groups,
+    company sought beyond chance, bands, sharing, joint hunts, division of labour, punishment; the
+    full per-year results go to <root>/society.json."""
+    sys.path.insert(0, str(HERE))
+    import society
+    from society_data import World
+    rows, full = [], {}
+    for r in runs:
+        cont = r / "continuous"
+        if not (cont / "trace.npz").exists():
+            continue
+        try:
+            res = society.analyse(World(cont, need_trace=True), window_days=40.0, nulls=39)
+        except (SystemExit, Exception) as e:                     # one bad world must not stop the report
+            print(f"  society: {r.parent.name}/{r.name}: {e}")
+            continue
+        full[f"{r.parent.name}/{r.name}"] = res
+        w = next((x for x in reversed(res["windows"]) if x["bands"]), None)
+        if w is None:
+            continue
+        b, s, h, lab, pu = w["bands"], w["sharing"], w["hunting"], w["labour"], w["punishment"]
+        f = society._f
+        rows.append(f"{r.parent.name + '/' + r.name:<30}{w['from_day']:>6.0f}{f(b['typical_group_size']):>7}{f(b['alone']):>7}"
+                    f"{f(b.get('association_ratio')):>8} ({f(b.get('gregarious_p'), 3):>5}){len(b['bands']):>6}"
+                    f"{f(s.get('gifts_per_person_year')):>9}{f(s.get('reciprocity_r')):>7}{f(h.get('joint_share')):>7}"
+                    f"{f(lab.get('dol')):>7} ({f(lab.get('dol_p'), 3):>5}){f(pu.get('punishment_ratio')):>7} ({f(pu.get('p'), 3):>5})")
+    if rows:
+        print("\n=== society in the continuous worlds (last year; scripts/society.py for every year)")
+        print(f"{'run':<30}{'day':>6}{'group':>7}{'alone':>7}{'assoc x':>8} {'(p)':>7}{'bands':>6}{'gifts/py':>9}"
+              f"{'recip':>7}{'joint':>7}{'DOL':>7} {'(p)':>7}{'punish':>7} {'(p)':>7}")
+        print("\n".join(rows))
+        (Path(root) / "society.json").write_text(json.dumps(full, indent=1, default=str))
+
+
 def report(root):
     root = Path(root)
     runs = sorted(p.parent for p in root.glob("*/*/history.json"))
@@ -311,6 +346,7 @@ def report(root):
         f = r / "continuous" / "summary.json"
         if f.exists() and json.load(open(f)):
             print(world_row(r.parent.name + "/" + r.name, json.load(open(f))))
+    society_section(root, runs)
     st = sorted((root / "stress").glob("*/summary.json"))
     if st:
         print("\n=== stress: a 10-day shock from day 40 (control: the run's own unshocked world)")

@@ -2428,6 +2428,9 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     # fat and every child born grew up emaciated, below the weight needed to conceive.
     grown = body(state._replace(age=state.age + 1), cfg)["ideal_kg"] - bod["ideal_kg"]
     growth = jnp.where(alive0 & (satiety > 0.3), jnp.maximum(grown, 0.0), 0.0)
+    deficit = jnp.maximum(bod["ideal_kg"] - state.weight, 0.0)          # catch-up growth (EnvConfig.catch_up_years)
+    growth = growth + jnp.where(alive0 & (satiety > 0.5) & (bod["years"] < cfg.catch_up_until_years),
+                                deficit / (cfg.catch_up_years * cfg.ticks_per_bio_year), 0.0)
     weight = state.weight + gain - burn + growth
     satiety = jnp.clip(satiety + burn * cfg.satiety_per_kg, 0.0, 1.0)
     hydration = jnp.clip(hydration - thirst * (1 + carrying_child), 0.0, 1.0)

@@ -15,6 +15,13 @@ PRESETS = {
     "society": dict(agents=16, founders=8, reproduction=True, reward_mode="survival",
                     grid=250, steps=192, encoder="conv", slate="caveman", world="living", world_model=True,
                     episode_years=10, tick_minutes=1.0),
+    # The same society at half-hour ticks on a 32 x 32 map (a cell is 2 km at walking pace, so the map
+    # is 64 km across): 30x less compute per game day than "society", so a 1e8-step budget lives ~50
+    # game years per world instead of ~2, enough for many generations. Coarser in time (a tick is half
+    # an hour of doing one thing), and each cell's plants are those of a 4 km^2 patch.
+    "society30": dict(agents=16, founders=8, reproduction=True, reward_mode="survival",
+                      grid=32, steps=128, encoder="conv", slate="caveman", world="living", world_model=True,
+                      episode_years=10, tick_minutes=30.0),
     # A band large enough for culture to accumulate: 64 slots (24 founders) on a 300 x 300 world
     # (RimWorld's large map; 400 km^2),
     # so food and space, not the slot count, limit numbers. About 4.5x the compute of "society".

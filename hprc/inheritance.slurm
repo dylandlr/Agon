@@ -3,7 +3,7 @@
 # every individual keeps learning; newborns start from a parent's learned brain (parent) or the brain
 # the parent was born with (innate), 3 seeds each. Needs `validate` task 0 (caveman) finished.
 #   sbatch hprc/inheritance.slurm
-# Then: python scripts/experiment.py report --root $SCRATCH/runs/exp_<code version>
+# Then: python scripts/experiment.py report --root $SCRATCH/runs/exp_<code version>_<preset>
 #SBATCH --job-name=lifesim-inheritance
 #SBATCH --array=0-5
 #SBATCH --time=08:00:00
@@ -21,6 +21,6 @@ cd "$SCRATCH/lifesim"
 export XLA_PYTHON_CLIENT_PREALLOCATE=false
 mkdir -p logs
 # One results folder per code version (experiment.py refuses to reuse runs made by other code)
-ROOT="$SCRATCH/runs/exp_$(python -c 'from lifesim.presets import code_version; print(code_version())')"
-python scripts/experiment.py inheritance --root "$ROOT" --playback-every 8 \
+ROOT="$SCRATCH/runs/exp_$(python -c 'from lifesim.presets import code_version; print(code_version())')_${PRESET:-society}"
+python scripts/experiment.py inheritance --root "$ROOT" --preset ${PRESET:-society} --playback-every 8 \
   --only $SLURM_ARRAY_TASK_ID

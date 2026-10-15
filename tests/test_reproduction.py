@@ -218,6 +218,29 @@ def test_a_fed_child_grows_lean_mass_and_a_starving_one_is_stunted():
     assert ratio[1] < 0.9                                # starving: stunted
 
 
+def test_a_stunted_child_catches_up_once_fed():
+    """Catch-up growth (EnvConfig.catch_up_years): a 6-year-old at 70% of its frame's weight, then
+    well fed, regains most of it within a couple of years; an adult past catch_up_until_years does not."""
+    import jax
+    import jax.numpy as jnp
+    from lifesim import env as E
+    from lifesim.config import EnvConfig, with_reproduction
+    cfg = with_reproduction(EnvConfig(grid_size=12, n_agents=2, climate_volatility=0.0, lightning_prob=0.0,
+                                      season_temp=(18.0,) * 4, day_temp_swing=0.0), n_founders=2)
+    s = E.reset(jax.random.PRNGKey(3), cfg)
+    ages = jnp.array([int(6 * cfg.ticks_per_bio_year), int(30 * cfg.ticks_per_bio_year)], jnp.int32)
+    s = s._replace(birth_age=ages, age=jnp.zeros(2, jnp.int32), conditions=jnp.zeros_like(s.conditions))
+    s = s._replace(weight=0.7 * E.body(s, cfg)["ideal_kg"])
+    step = jax.jit(lambda st: E.step(st, jnp.array([E.REST, E.REST]), cfg))
+    for _ in range(int(2 * cfg.ticks_per_bio_year)):
+        s = s._replace(satiety=jnp.full(2, 0.6), hydration=jnp.ones(2), energy=jnp.ones(2),
+                       health=jnp.ones(2), infection=jnp.zeros(2, jnp.int32))
+        s, *_ = step(s)
+    ratio = np.asarray(s.weight) / np.asarray(E.body(s, cfg)["ideal_kg"])
+    assert ratio[0] > 0.85                               # the child caught up past the fertility line
+    assert ratio[1] < 0.75                               # the adult did not (fat only above satiety 0.7)
+
+
 def _seq(cfg, s, plan):
     """Run a list of per-tick action lists; return the final state and each tick's info."""
     step = jax.jit(lambda st, a: E.step(fed(st), a, cfg))
