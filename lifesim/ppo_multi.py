@@ -377,6 +377,7 @@ def make_train(env_cfg: EnvConfig, cfg: MAConfig):
                 "company": info.company.sum(),
                 "births": info.born.sum(),
                 "conceptions": info.conceived.sum(),
+                "no_room": info.no_room.sum(),
                 "matings": info.mated.sum(),
                 "asleep_night": (info.slept & night_b[:, None]).sum(),
                 "asleep_day": (info.slept & ~night_b[:, None]).sum(),

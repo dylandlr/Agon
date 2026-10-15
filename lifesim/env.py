@@ -21,6 +21,7 @@ from . import conditions as cond
 from . import minerals as mn
 from . import fauna as fa
 from . import genotype as gt
+from . import ecology as eco
 from .config import EnvConfig
 
 # ---------------------------------------------------------------- terrain
@@ -49,7 +50,9 @@ SEEK_WATER, SEEK_FOOD, FLEE = SLEEP + 1, SLEEP + 2, SLEEP + 3   # 71-73: given s
 SEEK_SHELTER = SLEEP + 4                                         # 74: to known forest or cave, then rest
 N_SKILLS = 4
 DELVE = SEEK_SHELTER + 1          # 75: on a cave mouth, go down into the caves, or back up (cfg.underground)
-N_ACTIONS = DELVE + 1
+RELIEVE = DELVE + 1               # 76: relieve oneself where one stands (cfg.excretion)
+WRITE = RELIEVE + 1               # 77: scratch one's message into the ground here (cfg.writing)
+N_ACTIONS = WRITE + 1
 LAYER_OFF = 4096                  # added to a below agent's column in layered_pos: no one above is ever near
 
 # ---------------------------------------------------------------- materials
@@ -65,12 +68,23 @@ EDIBLE = jnp.zeros(N_MAT, bool).at[jnp.array([PLANT, RAW_MEAT, COOKED_MEAT, HONE
 _BASE0 = [0.0] * N_BASE_MAT
 HARDNESS = jnp.array([0.0, 0.0, 0.0, 0.3, 1.0, 0.0, 0.0] + mn.HARDNESS)   # hard on hard makes sparks; hard tools hit harder
 SHARPNESS = jnp.array([0.0, 0.0, 0.0, 0.0, 0.2, 0.0, 0.0] + mn.SHARPNESS)  # an edge hits harder and cuts more
+# Writing needs a tool and something to write on. A mark is cut with an edge (sharp enough; on stone
+# only with a point at least as hard as stone, flint, quartz, obsidian or metal) or drawn with a
+# pigment (ochre, charcoal-like coal). What takes a mark: a piece of wood lying here (put down by
+# someone, it stands as a sign), a loose stone, a rock face, or the bark of a tree. Bare earth, sand,
+# snow and water take none. A mark goes with its surface: carry off or burn the wood, and it is gone.
+PIGMENT = jnp.zeros(N_MAT).at[MIN0 + mn.IDX["ochre"]].set(1.0).at[MIN0 + mn.IDX["coal"]].set(1.0)
+SURF_NONE, SURF_WOOD, SURF_STONE, SURF_ROCK, SURF_BARK = range(5)
+SURFACE_NAMES = ["", "wood", "a stone", "rock", "bark"]
+SURF_HARD = jnp.array([9.0, 0.0, 1.0, 1.0, 0.0])            # how hard the cutting point must be (scaled by cfg)
+MARK_PAINTED = 8                                            # mark_kind = surface + 8 when drawn in pigment
 SPARK = jnp.array(_BASE0 + mn.SPARK)                                       # throws sparks struck against something hard
 MIN_FUEL = jnp.array(mn.FUEL)                                    # (M,) ticks of burning per unit (coal)
 MIN_COLOR = jnp.array(mn.COLOR)                                  # (M, 3) how each looks
 MIN_LUSTER = jnp.array(mn.LUSTER)
 N_MINERAL_CHANNELS = 5            # per cell: minerals present, and their colour (r, g, b) and lustre
 N_FAUNA_CHANNELS = 7              # per cell: animals' size, fangs, colour; mosquitoes, flies, hive, mound
+N_FLORA_CHANNELS = 6              # per cell: how well greens, fruit, nuts, roots would gather here; waste; an inscription
 assert PLACE_N == SELECT_0 + N_MAT, "one select action per material"
 _DIRS = ["n", "ne", "e", "se", "s", "sw", "w", "nw"]
 ACTION_NAMES = (["rest"] + [f"move_{d}" for d in _DIRS] + ["grasp", "eat", "drink"]
@@ -78,7 +92,7 @@ ACTION_NAMES = (["rest"] + [f"move_{d}" for d in _DIRS] + ["grasp", "eat", "drin
                 + [f"touch_{d}" for d in _DIRS]
                 + [f"select_{m}" for m in MAT_NAMES]
                 + [f"place_{d}" for d in _DIRS] + ["mate", "sleep", "seek_water", "seek_food", "flee", "seek_shelter"]
-                + ["delve"])
+                + ["delve", "relieve", "write"])
 
 MOVE_DELTAS = jnp.array([[0, 0], [-1, 0], [-1, 1], [0, 1], [1, 1],
                          [1, 0], [1, -1], [0, -1], [-1, -1]], dtype=jnp.int32)
@@ -87,10 +101,10 @@ NEIGHBORS8 = MOVE_DELTAS[1:]
 # ---------------------------------------------------------------- outcomes
 (OUT_NONE, OUT_REST, OUT_MOVE, OUT_GATHER, OUT_GATHER_LOST, OUT_EAT, OUT_DRINK,
  OUT_STRIKE_MISS, OUT_STRIKE_ANIMAL, OUT_STRIKE_AGENT, OUT_KILL, OUT_MOVE_FAILED,
- OUT_RELEASE, OUT_TOUCH, OUT_TOKEN, OUT_SELECT, OUT_PLACE, OUT_MATE, OUT_SLEEP) = range(19)
+ OUT_RELEASE, OUT_TOUCH, OUT_TOKEN, OUT_SELECT, OUT_PLACE, OUT_MATE, OUT_SLEEP, OUT_RELIEVE, OUT_WRITE) = range(21)
 OUTCOME_NAMES = ["none", "rest", "move", "gather", "gather_lost", "eat", "drink",
                  "strike_miss", "strike_animal", "strike_agent", "kill", "move_failed",
-                 "release", "touch", "token", "select", "place", "mate", "sleep"]
+                 "release", "touch", "token", "select", "place", "mate", "sleep", "relieve", "write"]
 
 # Death causes: index 1.. match the damage component order in step()
 CAUSE_NAMES = ["none", "starvation", "thirst", "exhaustion", "cold", "heat",
@@ -115,20 +129,33 @@ MEM_NAMES = ["struck_me", "gave_near_me", "touched_me", "seen_violent"]
 N_APPEARANCE = 3
 # ---------------------------------------------------------------- language
 # Every agent emits a message each tick on a channel separate from its action:
-# MSG_LEN symbols from a vocabulary of VOCAB, symbol 0 = silence. No symbol has a
-# built-in meaning; a first symbol of 0 means silence. Listeners hear the
-# N_HEARD nearest speakers within view.
-MSG_LEN = 3
-VOCAB = 16
+# MSG_LEN symbols from a vocabulary of VOCAB, symbol 0 = silence; a first symbol of 0
+# means silence. Listeners hear the N_HEARD nearest speakers within view.
+# Emergent mode (cfg.language_mode "emergent", the default): no symbol has a built-in
+# meaning. Grounded mode ("grounded"): every symbol is a word of LEXICON, and a phrase
+# naming water or food with a direction (and here / near / far) is understood: it puts
+# that place, as heard, into each listener's remembered map ("no water east" clears it).
+# What to say, when, to whom, and whom to believe is left to learning.
+MSG_LEN = 4
+VOCAB = 32
+LEXICON = ["", "water", "food", "meat", "fire", "wood", "stone", "shelter", "predator", "prey", "waste",
+           "north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest",
+           "here", "near", "far", "come", "go away", "give", "help", "follow", "yes", "no", "me", "you", "many"]
+assert len(LEXICON) == VOCAB
+W_WATER, W_FOOD = 1, 2
+W_DIR0 = 11                       # 11..18: north .. northwest, in MOVE_DELTAS order
+W_HERE, W_NEAR, W_FAR, W_NO = 19, 20, 21, 28
 N_HEARD = 3
 HEARD_FEATURES = N_HEARD * (MSG_LEN * VOCAB + 2 + N_MEM)
+READ_FEATURES = MSG_LEN * VOCAB + 2   # an inscription on one's own cell or beside it, and where it is
 # Per visible agent: memory about it, its appearance, whether it spoke last tick
 N_SOCIAL_FEATURES = N_MEM + N_APPEARANCE + 1 + 8 + 1   # ... + height, weight, scars, lasting injury, sex, pregnant, asleep, courting, attachment
 
 # Observation: terrain one-hot, plants, meat, agents, small prey, large prey,
 # predators, out-of-bounds, then social features of agents in each cell
 # Material and fire channels: cooked meat, wood, stone on the ground, burning, heat
-N_OBS_CHANNELS = N_TERRAIN + 7 + 8 + 2 + N_MINERAL_CHANNELS + N_FAUNA_CHANNELS + N_SOCIAL_FEATURES   # ... minerals, fauna, social
+N_OBS_CHANNELS = N_TERRAIN + 7 + 8 + 2 + N_MINERAL_CHANNELS + N_FAUNA_CHANNELS + N_FLORA_CHANNELS \
+    + N_SOCIAL_FEATURES   # ... minerals, fauna, flora, social
 CH_BODIES = N_TERRAIN + 12
 CH_CLIFF = N_TERRAIN + 13
 CH_HEIGHT = N_TERRAIN + 14
@@ -136,9 +163,10 @@ CH_RAIN = N_TERRAIN + 15
 CH_SNOW = N_TERRAIN + 16
 CH_MINERALS = N_TERRAIN + 17      # N_MINERAL_CHANNELS channels, then fauna, then the social features
 CH_FAUNA = CH_MINERALS + N_MINERAL_CHANNELS
-OWN_FEATURES = 22 + cond.K        # own body and conditions, first in the body vector
+CH_FLORA = CH_FAUNA + N_FAUNA_CHANNELS
+OWN_FEATURES = 23 + cond.K        # own body and conditions, first in the body vector
 SHARED_START = OWN_FEATURES + N_MAT + N_MAT + 1    # after inventory, hand and torch: time and weather
-N_BODY_FEATURES = OWN_FEATURES + N_MAT + N_MAT + 1 + 5 + N_WEATHER + HEARD_FEATURES
+N_BODY_FEATURES = OWN_FEATURES + N_MAT + N_MAT + 1 + 5 + N_WEATHER + HEARD_FEATURES + READ_FEATURES
 
 
 # ---------------------------------------------------------------- state
@@ -158,7 +186,7 @@ class State(NamedTuple):
     terrain: jnp.ndarray        # (G, G) int32
     height: jnp.ndarray         # (G, G) in [0, 1]: ground height (2.5D)
     cliff: jnp.ndarray          # (G, G) in [0, 1]: each cell's drop to its lowest neighbor
-    plants: jnp.ndarray         # (G, G)
+    plants: jnp.ndarray         # (G, G) plant food here: loose (dropped) + standing crop (flora, with ecology)
     meat: jnp.ndarray           # (G, G) raw meat lying on the ground
     cooked: jnp.ndarray         # (G, G) cooked meat on the ground
     wood: jnp.ndarray           # (G, G) dead wood on the ground
@@ -238,6 +266,14 @@ class State(NamedTuple):
     cave_floor: jnp.ndarray     # (G, G, N_MAT) what lies underground here: ore in the walls, and whatever
                                 #   was dropped, placed or killed below (stone is unlimited, the walls)
     below: jnp.ndarray          # (N,) bool: the agent is underground
+    # plant ecology and camp fouling (cfg.ecology, cfg.fouling; zeros otherwise)
+    flora: jnp.ndarray          # (G, G, 4) standing crop of greens, fruit, nuts, roots, in food units
+    flora_patch: jnp.ndarray    # (G, G, 4) how rich each patch is in each kind (fixed for the world)
+    foul: jnp.ndarray           # (G, G) waste where people have stayed, person-days per km^2
+    urge: jnp.ndarray           # (N,) 0..1 need to relieve oneself (cfg.excretion)
+    marks: jnp.ndarray          # (G, G, MSG_LEN) int32: what is written on each cell (all 0: nothing)
+    mark_time: jnp.ndarray      # (G, G) int32: when it was written (-1: never)
+    mark_kind: jnp.ndarray      # (G, G) int32: what it is written on (SURF_*), + MARK_PAINTED if drawn in pigment
     # animals
     small: Animals
     large: Animals
@@ -305,6 +341,7 @@ class StepInfo(NamedTuple):
     large_pos: jnp.ndarray             # (n_large, 2)
     collapsed_now: jnp.ndarray         # (N,) bool: fell asleep from exhaustion this tick
     conceived: jnp.ndarray             # (N,) bool: became pregnant
+    no_room: jnp.ndarray               # (N,) bool: would have conceived, but every slot was taken
     gave_birth: jnp.ndarray            # (N,) bool: mother whose child was born this tick
     born: jnp.ndarray                  # (N,) bool: slot that received a newborn this tick
     nursed: jnp.ndarray                # (N,) bool: child nursed by its mother this tick
@@ -312,12 +349,16 @@ class StepInfo(NamedTuple):
     below: jnp.ndarray                 # (N,) bool: underground after this tick
     delved: jnp.ndarray                # (N,) bool: went down or came up this tick
     dark: jnp.ndarray                  # (N,) bool: below with no light where it stands (afraid, groping)
-    stress_from: jnp.ndarray           # (N, 7) stress gained this tick by source (STRESS_SOURCES)
+    stress_from: jnp.ndarray           # (N, 8) stress gained this tick by source (STRESS_SOURCES)
     downed: jnp.ndarray                # (N,) bool: down after this tick (EnvConfig.downed)
+    relieved: jnp.ndarray              # (N,) bool: relieved itself by choice (EnvConfig.excretion)
+    gathered_kind: jnp.ndarray         # (N,) int: plant food gathered: ecology.KINDS index, 4 loose, -1 none
+    soiled: jnp.ndarray                # (N,) bool: could not hold it any longer
 
 
 GRAZERS = ("rabbit", "fowl", "tortoise", "deer", "aurochs", "boar", "horse", "mammoth")   # eat plants (cfg.grazing)
-STRESS_SOURCES = ("hurt", "danger", "unmet needs", "loneliness", "missing someone", "sleep debt", "darkness")
+STRESS_SOURCES = ("hurt", "danger", "unmet needs", "loneliness", "missing someone", "sleep debt", "darkness",
+                  "needing to relieve oneself")
 
 
 # ---------------------------------------------------------------- helpers
@@ -935,6 +976,11 @@ def reset(key: jax.Array, cfg: EnvConfig, genotype: gt.Genotype | None = None,
     base = jnp.select([terrain == FOREST, terrain == GRASS, terrain == MARSH, terrain == TUNDRA, terrain == DESERT],
                       [0.7, 0.4, 0.5, 0.15, 0.1], 0.0)
     plants = base * cfg.plant_max * cfg.plant_abundance * jax.random.uniform(ks[1], (g, g))
+    if cfg.ecology:
+        flora, flora_patch = eco.init(jax.random.fold_in(key, 61), terrain, cfg)
+        plants = flora.sum(-1)
+    else:
+        flora, flora_patch = jnp.zeros((g, g, eco.N_KINDS)), jnp.ones((g, g, eco.N_KINDS))
     pos = _spawn_band(ks[2], terrain, n, cfg.founder_spread, cfg.camp_water_radius)
     body = jax.random.uniform(ks[3], (3, n), minval=0.8, maxval=1.0)
     geno = gt.sample(ks[4], n) if genotype is None else genotype
@@ -949,6 +995,9 @@ def reset(key: jax.Array, cfg: EnvConfig, genotype: gt.Genotype | None = None,
     founders = jnp.arange(n) < (cfg.n_founders if cfg.n_founders > 0 else n)
     return State(
         key=ks[8], t=jnp.int32(0), terrain=terrain, height=height, cliff=generate_cliffs(height), plants=plants,
+        flora=flora, flora_patch=flora_patch, foul=jnp.zeros((g, g)), urge=jnp.zeros(n),
+        marks=jnp.zeros((g, g, MSG_LEN), jnp.int32), mark_time=jnp.full((g, g), -1, jnp.int32),
+        mark_kind=jnp.zeros((g, g), jnp.int32),
         meat=jnp.zeros((g, g)), cooked=jnp.zeros((g, g)),
         wood=jnp.where(terrain == FOREST, cfg.wood_max * jax.random.uniform(ks[10], (g, g)), 0.0),
         stones=jnp.zeros((g, g)), minerals=generate_minerals(jax.random.fold_in(key, 99), terrain, cfg) + cv["surface_minerals"],
@@ -1013,6 +1062,45 @@ def available_here(state: State, r, c, below=None):
         return top
     deep = state.cave_floor[r, c].T.at[STONE].set(1e6)
     return jnp.where(below[None, :], deep, top)
+
+
+def surface_at(state: State, r, c, cfg: EnvConfig):
+    """What would take a mark at (r, c) (SURF_*): wood lying there first (a board, a sign), then a
+    loose stone, then the rock face, then a tree's bark; SURF_NONE on bare ground."""
+    t = state.terrain[r, c]
+    return jnp.where(state.wood[r, c] >= cfg.sign_min, SURF_WOOD,
+           jnp.where(state.stones[r, c] >= cfg.sign_min, SURF_STONE,
+           jnp.where(t == ROCK, SURF_ROCK, jnp.where(t == FOREST, SURF_BARK, SURF_NONE))))
+
+
+def write_means(state: State, cfg: EnvConfig):
+    """(N,) whether each agent can write where it stands, (N,) on what (SURF_*) and (N,) whether in
+    pigment: something in hand (an edge that can cut that surface, or a pigment) and a surface here."""
+    n = state.pos.shape[0]
+    r, c = state.pos[:, 0], state.pos[:, 1]
+    hand = state.hand
+    holding = state.inv[jnp.arange(n), hand] > 0.05
+    surf = surface_at(state, r, c, cfg)
+    cut = holding & (SHARPNESS[hand] >= cfg.write_edge) & (HARDNESS[hand] >= SURF_HARD[surf] * cfg.write_hard)
+    paint = holding & (PIGMENT[hand] > 0) & (surf != SURF_BARK)
+    ok = (surf != SURF_NONE) & (cut | paint)
+    return ok, surf, paint & ~cut
+
+
+def loose_plants(state: State, cfg: EnvConfig):
+    """(G, G) plant food lying loose on the ground (dropped or placed), apart from what grows."""
+    if not cfg.ecology:
+        return state.plants
+    return jnp.maximum(state.plants - state.flora.sum(-1), 0.0)
+
+
+def forage_grid(state: State, cfg: EnvConfig):
+    """(G, G) how good each cell is for getting plant food, on the classic scale (0 .. plant_max).
+    With ecology: the best share of the full return rate any kind would give here, or loose food."""
+    if not cfg.ecology:
+        return state.plants
+    q = eco.quality(state.flora, cfg).max(-1)
+    return jnp.maximum(q, 1.0 - jnp.exp(-loose_plants(state, cfg))) * cfg.plant_max
 
 
 # ---------------------------------------------------------------- masks
@@ -1091,10 +1179,16 @@ def action_mask(state: State, cfg: EnvConfig) -> jnp.ndarray:
         can_delve = jnp.zeros_like(can_eat)
     skills_ok = jnp.broadcast_to(jnp.asarray(cfg.skills), (n, N_SKILLS)) & jnp.any(can_move, axis=1)[:, None] \
         & ~below[:, None]                                            # the given skills know only the surface
+    can_relieve = (state.urge >= cfg.relieve_min) if cfg.excretion else jnp.zeros_like(can_eat)
+    can_write = (~below & ~state.asleep & write_means(state, cfg)[0]) if cfg.writing else jnp.zeros_like(can_eat)
+    # Sleep needs sleep pressure (the body clock lowers the bar at night); asleep, one may sleep on
+    can_sleep = state.asleep | (state.sleepiness >= jnp.where(is_night(state.t, cfg), cfg.sleep_onset_night,
+                                                              cfg.sleep_onset))
     mask = jnp.concatenate([jnp.ones_like(can_eat)[:, None], can_move, can_grasp[:, None],
                             can_eat[:, None], can_drink[:, None], can_strike,
                             can_release[:, None], can_touch, can_select, can_place, can_mate[:, None],
-                            jnp.ones_like(can_eat)[:, None], skills_ok, can_delve[:, None]],
+                            can_sleep[:, None], skills_ok, can_delve[:, None], can_relieve[:, None],
+                            can_write[:, None]],
                            axis=1)
     dead = jnp.zeros_like(mask).at[:, REST].set(True)
     # Asleep, one can only sleep on or wake up (REST); after collapsing from exhaustion, only sleep on
@@ -1102,7 +1196,7 @@ def action_mask(state: State, cfg: EnvConfig) -> jnp.ndarray:
     asleep_row = asleep_row.at[:, REST].set(~(state.collapsed & (state.sleepiness >= cfg.sleep_wake_block)))
     mask = jnp.where(state.asleep[:, None], asleep_row, mask)
     if cfg.downed:                                                   # down: lie, eat, drink, sleep, call out
-        keep = jnp.zeros(mask.shape[1], bool).at[jnp.array([REST, GRASP, EAT, DRINK, RELEASE, SLEEP])].set(True)
+        keep = jnp.zeros(mask.shape[1], bool).at[jnp.array([REST, GRASP, EAT, DRINK, RELEASE, SLEEP, RELIEVE])].set(True)
         mask = jnp.where((downed_of(state, cfg) & ~state.asleep)[:, None], mask & keep[None, :], mask)
     return jnp.where(state.alive[:, None], mask, dead)
 
@@ -1176,7 +1270,7 @@ def resolve_skills(state: State, a, mask, cfg: EnvConfig):
     edible_in_hand = ((state.hand == PLANT) | (state.hand == COOKED_MEAT)) & (held > 0.05)
     carried = jnp.where(state.inv[:, COOKED_MEAT] > 0.05, COOKED_MEAT, PLANT)
     carrying_food = (state.inv[:, COOKED_MEAT] > 0.05) | (state.inv[:, PLANT] > 0.05)
-    plants_here = state.plants[r, c] > 0.1
+    plants_here = forage_grid(state, cfg)[r, c] > (0.1 * cfg.plant_max if cfg.ecology else 0.1)
     food_act = jnp.where(edible_in_hand, EAT,
                jnp.where(carrying_food, SELECT_0 + carried,
                jnp.where(plants_here & (state.hand == PLANT) & mask[:, GRASP], GRASP,
@@ -1225,7 +1319,7 @@ def observe(state: State, cfg: EnvConfig) -> jnp.ndarray:
                           (state.courting > 0).astype(jnp.float32)], axis=-1)       # visible to others
     heat = fire_heat(state.fire, cfg)
     chans = [jnp.where(inb[..., None], jax.nn.one_hot(state.terrain[rc, cc], N_TERRAIN), 0.0),
-             take(state.plants / cfg.plant_max)[..., None],
+             take(forage_grid(state, cfg) / cfg.plant_max)[..., None],
              take(jnp.minimum(state.meat / cfg.large_prey_meat, 1.0))[..., None],
              take(agents_grid)[..., None],
              take(_occupancy(state.small.pos, state.small.alive & ~state.small.below, g))[..., None],
@@ -1260,6 +1354,11 @@ def observe(state: State, cfg: EnvConfig) -> jnp.ndarray:
                       fly_density(state.meat, _occupancy(state.pos, state.existed & ~state.alive & ~state.below, g).astype(jnp.float32), heat),
                       jnp.minimum(state.honey, 1.0) * state.hive, jnp.minimum(state.grubs, 1.0) * state.mound], -1)
     chans.append(jnp.where(inb[..., None], jnp.concatenate([look, bugs], -1)[rc, cc], 0.0))
+    # Plants by kind (how well each would gather here) and waste, seen and smelled
+    flora_look = jnp.concatenate([eco.quality(state.flora, cfg),
+                                  (1.0 - jnp.exp(-state.foul / cfg.foul_ref))[..., None],
+                                  jnp.any(state.marks > 0, axis=-1).astype(jnp.float32)[..., None]], -1)
+    chans.append(jnp.where(inb[..., None], flora_look[rc, cc], 0.0))
     # Social features: each observer sees, in the cell of every other visible agent,
     # its own memory of that agent, the agent's appearance and last token.
     spoke = (jnp.any(state.last_msg > 0, axis=1) & state.alive).astype(jnp.float32)[:, None]
@@ -1311,7 +1410,7 @@ def observe(state: State, cfg: EnvConfig) -> jnp.ndarray:
              zero, zero, take(dead_deep)[..., None], zero, zero, zero, zero,
              jnp.where(inb[..., None], looks_d[rc, cc], 0.0),
              jnp.where(inb[..., None], jnp.concatenate([look_d, jnp.zeros((g, g, N_FAUNA_CHANNELS - 3))], -1)[rc, cc], 0.0),
-             social], axis=-1)
+             jnp.zeros((n, v, v, N_FLORA_CHANNELS)), social], axis=-1)
         # What is seen below: one's own cell and those next to it (felt), and whatever any burning
         # branch below lights (one's own or another's)
         rr_, cc_ = jnp.meshgrid(jnp.arange(g), jnp.arange(g), indexing="ij")
@@ -1351,15 +1450,82 @@ def observe(state: State, cfg: EnvConfig) -> jnp.ndarray:
         state.scars, state.lasting_injury, state.sex.astype(jnp.float32),
         state.gestation / (cfg.gestation_years * cfg.ticks_per_bio_year),
         state.sleepiness, state.asleep.astype(jnp.float32),
-        state.below.astype(jnp.float32)], axis=-1)                                     # (N, 22)
+        state.below.astype(jnp.float32), state.urge], axis=-1)                         # (N, 23)
     own = jnp.concatenate([own, state.conditions], axis=-1)                          # + its conditions
     feats = jnp.concatenate([own, state.inv / cfg.inventory_cap,
                              jax.nn.one_hot(state.hand, N_MAT),
                              (state.torch > 0).astype(jnp.float32)[:, None],
                              jnp.where(state.below[:, None] & (jnp.arange(shared.shape[0]) >= 5)[None, :],
                                        0.0, jnp.broadcast_to(shared, (n, shared.shape[0]))),   # below: no weather
-                             heard_messages(state, cfg)], axis=-1)
+                             heard_messages(state, cfg), read_marks(state, cfg)], axis=-1)
     return jnp.concatenate([win.reshape(n, -1), feats, read_mind_map(state.mind_map, state.pos, cfg)], axis=-1)
+
+
+def _marks_with_surface(marks, mark_time, mark_kind, wood, stones, cfg: EnvConfig):
+    """A mark goes with what it is on: wood carried off or burned, a stone taken, and it is gone."""
+    on = mark_kind % MARK_PAINTED
+    lost = (mark_time >= 0) & (((on == SURF_WOOD) & (wood < cfg.sign_min)) | ((on == SURF_STONE) & (stones < cfg.sign_min)))
+    return dict(marks=jnp.where(lost[..., None], 0, marks), mark_time=jnp.where(lost, -1, mark_time),
+                mark_kind=jnp.where(lost | (mark_time < 0), 0, mark_kind))
+
+
+def mark_beside(state: State, cfg: EnvConfig):
+    """(N,) whether each agent can read an inscription (on its own cell, else the first beside it,
+    above ground and awake), and (N, 2) where."""
+    g = cfg.grid_size
+    cand = state.pos[:, None, :] + MOVE_DELTAS[None]                         # own cell first
+    ok = _in_bounds(cand, g)
+    cc = jnp.clip(cand, 0, g - 1)
+    has = ok & jnp.any(state.marks[cc[..., 0], cc[..., 1]] > 0, axis=-1)
+    first = jnp.argmax(has, axis=1)
+    can = jnp.any(has, axis=1) & state.alive & ~state.below & ~state.asleep
+    return can, cc[jnp.arange(state.pos.shape[0]), first]
+
+
+def read_marks(state: State, cfg: EnvConfig) -> jnp.ndarray:
+    """(N, READ_FEATURES): the inscription one can read (one-hot symbols) and where it is."""
+    can, at = mark_beside(state, cfg)
+    words = state.marks[at[:, 0], at[:, 1]]
+    feats = jnp.concatenate([jax.nn.one_hot(words, VOCAB).reshape(-1, MSG_LEN * VOCAB),
+                             (at - state.pos).astype(jnp.float32)], axis=-1)
+    return jnp.where(can[:, None], feats, 0.0)
+
+
+def phrase_place(msgs, src, cfg: EnvConfig):
+    """Read phrases as the grounded language means them. msgs (S, MSG_LEN) from sources at src (S, 2).
+    Returns (S,) channel of the remembered map it speaks of (0 water, 1 food, -1 neither), (S,) the
+    value it gives (1 there is, 0 there is none), and (S, 2) the place: the source + direction x
+    distance (here 0, near half the view radius, far twice it; no distance said = near)."""
+    g = cfg.grid_size
+    is_thing = (msgs == W_WATER) | (msgs == W_FOOD)
+    thing_at, has_thing = jnp.argmax(is_thing, axis=1), jnp.any(is_thing, axis=1)
+    thing = msgs[jnp.arange(msgs.shape[0]), thing_at]
+    is_dir = (msgs >= W_DIR0) & (msgs < W_DIR0 + 8)
+    dir_at, has_dir = jnp.argmax(is_dir, axis=1), jnp.any(is_dir, axis=1)
+    d = MOVE_DELTAS[1 + jnp.clip(msgs[jnp.arange(msgs.shape[0]), dir_at] - W_DIR0, 0, 7)]
+    here = jnp.any(msgs == W_HERE, axis=1)
+    near, far = max(2, cfg.view_radius // 2), 2 * cfg.view_radius
+    dist = jnp.where(jnp.any(msgs == W_FAR, axis=1), far, near)
+    place = jnp.clip(src + jnp.where((here & ~has_dir)[:, None], 0, d * dist[:, None]), 0, g - 1)
+    channel = jnp.where(has_thing & (has_dir | here), jnp.where(thing == W_WATER, 0, 1), -1)
+    value = jnp.where(jnp.any(msgs == W_NO, axis=1), 0.0, 1.0)
+    return channel, value, place
+
+
+def comprehend(mind_map, heard, channel, value, place, cfg: EnvConfig):
+    """Each listener (row of heard (L, S)) takes in what each source it heard said: the place goes
+    into its remembered map, as heard (recency cfg.heard_recency, not consolidated)."""
+    L, S = heard.shape
+    li = jnp.broadcast_to(jnp.arange(L)[:, None], (L, S))
+    pr = jnp.broadcast_to(place[None, :, 0], (L, S))
+    pc = jnp.broadcast_to(place[None, :, 1], (L, S))
+    ch = jnp.broadcast_to(jnp.maximum(channel, 0)[None, :], (L, S))
+    ok = heard & (channel >= 0)[None, :]
+    old = mind_map[li, pr, pc]                                                 # (L, S, 4)
+    new = old.at[..., 0].set(jnp.where(ch == 0, value[None, :], old[..., 0]))
+    new = new.at[..., 1].set(jnp.where(ch == 1, value[None, :], old[..., 1]))
+    new = new.at[..., 2].set(jnp.maximum(old[..., 2], cfg.heard_recency))
+    return mind_map.at[li, pr, pc].set(jnp.where(ok[..., None], new, old))
 
 
 def heard_messages(state: State, cfg: EnvConfig) -> jnp.ndarray:
@@ -1694,7 +1860,9 @@ def _give_birth(ns: State, birthing, key, cfg: EnvConfig):
             mind_map=put(s.mind_map, jnp.zeros(s.mind_map.shape[1:])),
             sleepiness=put(s.sleepiness, 0.0), asleep=put(s.asleep, False), sleep_depth=put(s.sleep_depth, 0),
             collapsed=put(s.collapsed, False),
-            gestation=put(s.gestation, 0), courting=put(s.courting, 0), father=put(s.father, -1), mother=put(s.mother, i),
+            gestation=put(s.gestation, 0), courting=put(s.courting, 0), father=put(s.father, -1),
+            # children of the slot's last occupant are orphans now: they must not take the newborn for their mother
+            mother=put(jnp.where(do & (s.mother == c), -1, s.mother), i),
             relatedness=relatedness, fetus_r=fetus_r,
             memory=clear(s.memory), habituation=clear(s.habituation), attachment=clear(s.attachment),
             conditions=put(s.conditions, draw_inborn(jax.random.fold_in(k_geno, 17), 1, s.conditions[i][None],
@@ -1708,6 +1876,15 @@ def _give_birth(ns: State, birthing, key, cfg: EnvConfig):
     ns, born, _ = jax.lax.fori_loop(0, n, one, (ns, born, key))
     return ns, born
 
+
+
+def senescence_hazard(years, lifespan_mult, cfg):
+    """Deaths from senescence per biological year at this age: Gompertz, b exp(b (x - M)), with x
+    the age measured against one's own lifespan (gene and conditions) and M = max_bio_years the most
+    likely age of death. Never a fixed limit: anyone may die at any age, ever more likely with age."""
+    b = cfg.senescence_rate
+    x = years / lifespan_mult
+    return b * jnp.exp(jnp.minimum(b * (x - cfg.max_bio_years), 20.0))
 
 def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarray | None = None):
     """Resolve one tick for all agents simultaneously.
@@ -2019,6 +2196,13 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     winner = gathering & (score >= best[cid]) & (score > 0)
     r0, c0 = state.pos[:, 0], state.pos[:, 1]
     room = cfg.inventory_cap - state.inv.sum(axis=1)
+    # Plant ecology: what grows (flora) and what lies loose. A change made to plants from outside (a
+    # test, a shock) is honoured: more than the flora holds is loose food; less scales the flora down.
+    if cfg.ecology:
+        fsum0 = state.flora.sum(-1)
+        flora = state.flora * jnp.where(fsum0 > 1e-9, jnp.minimum(state.plants / jnp.maximum(fsum0, 1e-9), 1.0),
+                                        1.0)[..., None]
+        loose0 = jnp.maximum(state.plants - fsum0, 0.0)
     # Ground layers as one stack, so every material follows the same rules
     ground = jnp.concatenate([jnp.stack([state.plants, meat, state.cooked, state.wood, state.stones,
                                          state.honey, state.grubs]),
@@ -2027,7 +2211,11 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     # Grasp takes the selected material if present, otherwise whatever is most
     # plentiful here (no preference is built in); the hand then holds what was taken.
     empty_hand = held0 <= 0.05
-    most = jnp.argmax(jnp.minimum(avail_here, 3.0), axis=0)
+    plenty = avail_here
+    if cfg.ecology:                                   # growing plants count by what a grasp would get, not the stock
+        plenty = plenty.at[PLANT].set(jnp.where(below0 if cfg.underground else False, avail_here[PLANT],
+                                                forage_grid(state, cfg)[r0, c0]))
+    most = jnp.argmax(jnp.minimum(plenty, 3.0), axis=0)
     sel_present = avail_here[hand0, idx] > 0.1
     grab = jnp.where(sel_present, hand0, most).astype(jnp.int32)
     here_sel = avail_here[grab, idx]
@@ -2040,11 +2228,33 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     cut = jnp.where((grab == GRUBS) & state.mound[r0, c0],
                     cfg.grub_hand_yield * jnp.where(probing, 1.0 + cfg.probe_bonus, 1.0), cut)
     take = jnp.where(winner, jnp.minimum(jnp.minimum(here_sel, cfg.gather_amount * cut), room), 0.0)
+    if cfg.ecology:
+        # Gathering plants takes time: loose food is picked up whole; otherwise the kind that pays
+        # best here, at its return rate x how dense it is (roots faster with a digging stick)
+        yields = eco.gather_yield(flora[r0, c0], (hand0 == WOOD) & holding, cfg)        # (N, 4)
+        kind = jnp.argmax(yields, axis=1)
+        loose_here = loose0[r0, c0]
+        from_loose = loose_here > 0.05
+        # Loose food goes to one (the winner, as with anything lying there); growing plants are a
+        # patch, not an object: everyone gathering it gets their share (scaled down if the patch runs out)
+        foraging = gathering & (grab == PLANT) & ~below0 & ~from_loose & alive0
+        want = jnp.where(foraging, yields[idx, kind], 0.0)
+        slot = (r0 * g + c0) * eco.N_KINDS + kind
+        demand = jax.ops.segment_sum(want, slot, num_segments=g * g * eco.N_KINDS)
+        stock = flora.reshape(-1)[slot]
+        share = jnp.where(demand[slot] > 0, jnp.minimum(1.0, stock / jnp.maximum(demand[slot], 1e-9)), 0.0)
+        take = jnp.where(winner & (grab == PLANT) & ~below0 & from_loose,
+                         jnp.minimum(jnp.minimum(loose_here, cfg.gather_amount), room), take)
+        take = jnp.where(foraging, jnp.minimum(want * share, room), take)
+        winner = winner | (foraging & (take > 0))                         # (for the record: gathered, not lost)
+        took_kind = jnp.where(foraging & (take > 0), kind, jnp.where((grab == PLANT) & from_loose & (take > 0), 4, -1))
     take = jnp.where(pull_branch, jnp.minimum(1.0, room), take)
     # Robbing a hive: the bees sting, unless smoke (a fire's heat here) has calmed them
     stung = (take > 0) & (grab == HONEY) & state.hive[r0, c0] & (heat0[r0, c0] <= 0)
     from_ground = jnp.where(pull_branch | ((grab == STONE) & (state.terrain[r0, c0] == ROCK)) | below0, 0.0, take)
     ground = jnp.maximum(ground.at[grab, r0, c0].add(-from_ground), 0.0)
+    if cfg.ecology:
+        flora = jnp.maximum(flora.at[r0, c0, kind].add(-jnp.where((grab == PLANT) & ~from_loose, from_ground, 0.0)), 0.0)
     mined = jnp.where(below0 & (grab != STONE), take, 0.0)               # ore out of the wall, or what lay here
     cave_floor = jnp.maximum(cave_floor.at[r0, c0, grab].add(-mined), 0.0)
     inv = state.inv.at[idx, grab].add(take)
@@ -2056,7 +2266,8 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     owner = jnp.where(owner_raw >= 0, owner_raw % n, -1)
     same_floor = (owner_raw >= n) == below0                # a drop above is not one below
     recent = (state.t - state.drop_time[r0, c0]) <= cfg.gift_window
-    giver = jnp.where((take > 0) & is_food & recent & (owner >= 0) & (owner != idx) & same_floor, owner, -1)
+    picked_up = (from_loose | (grab != PLANT)) if cfg.ecology else True    # not what grows: only what was dropped
+    giver = jnp.where((take > 0) & is_food & recent & (owner >= 0) & (owner != idx) & same_floor & picked_up, owner, -1)
     gifts = (jnp.arange(n)[:, None] == giver[None, :]) & alive0[None, :]   # [i, j]: i gave food to j
     torch = jnp.where(pull_branch, cfg.torch_ticks, state.torch)
     fire = state.fire.at[r0, c0].add(-jnp.where(pull_branch, 0.5 * cfg.wood_fuel, 0.0))
@@ -2121,6 +2332,25 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     msg = jnp.clip(msg, 0, VOCAB - 1)
     spoke_now = alive0 & (msg[:, 0] > 0)                   # first symbol 0 = staying silent
     msg = jnp.where(spoke_now[:, None], msg, 0)
+    # Writing: one's message this tick (else the last one), cut or drawn on what is here (write_means)
+    if cfg.writing:
+        w_ok, w_surf, w_paint = write_means(state, cfg)
+        writing = (a == WRITE) & alive0 & ~below0 & ~state.asleep & w_ok
+    else:
+        writing, w_surf, w_paint = jnp.zeros(n, bool), jnp.zeros(n, jnp.int32), jnp.zeros(n, bool)
+    text = jnp.where(spoke_now[:, None], msg, state.last_msg)
+    writing = writing & jnp.any(text > 0, axis=1)
+    wcell = jnp.where(writing[:, None], state.pos, g)                     # out of range: dropped
+    marks = state.marks.at[wcell[:, 0], wcell[:, 1]].set(text, mode="drop")
+    mark_time = state.mark_time.at[wcell[:, 0], wcell[:, 1]].set(state.t, mode="drop")
+    mark_kind = state.mark_kind.at[wcell[:, 0], wcell[:, 1]].set((w_surf + MARK_PAINTED * w_paint).astype(jnp.int32), mode="drop")
+    age_days = (state.t - mark_time) * cfg.tick_minutes / 1440.0
+    on = mark_kind % MARK_PAINTED
+    lasts = jnp.where(mark_kind >= MARK_PAINTED, cfg.mark_days_paint,
+                      jnp.where((on == SURF_ROCK) | (on == SURF_STONE), cfg.mark_days_rock, cfg.mark_days))
+    gone = (mark_time >= 0) & (age_days > lasts)
+    marks = jnp.where(gone[..., None], 0, marks)
+    mark_time = jnp.where(gone, -1, mark_time)
     # Relationship memory: observer (row) about actor (column)
     sight_now = jnp.where(night, dark_radius(state, cfg), cfg.view_radius)  # darkness limits witnessing
     sight_now = jnp.where(below0, light0, sight_now)
@@ -2138,6 +2368,11 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     if cfg.biomes:
         water_risk = water_risk * jnp.where(open_water_beside(state.terrain, state.pos, cfg) | below0, 1.0,
                                             cfg.marsh_infection_mult)          # a cave pool is open water
+    if cfg.fouling:                                       # waste beside the water one drinks from
+        fp = jnp.pad(state.foul, 1)
+        foul_near = jnp.max(jnp.stack([fp[1 + dr:1 + dr + g, 1 + dc:1 + dc + g] for dr in (-1, 0, 1) for dc in (-1, 0, 1)]), 0)
+        dirty = jnp.minimum(1.0 + foul_near[state.pos[:, 0], state.pos[:, 1]] / cfg.foul_ref, cfg.foul_max_mult)
+        water_risk = water_risk * jnp.where(below0, 1.0, dirty)              # a cave pool is not fouled from above
     infected_now = state.infection > 0
     near = (_cheb(lpa[:, None, :], lpa[None, :, :]) <= 1) & ~jnp.eye(n, dtype=bool)
     sick_neighbors = jnp.sum(near & (infected_now & alive0)[None, :], axis=1)
@@ -2205,6 +2440,9 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     # fat and every child born grew up emaciated, below the weight needed to conceive.
     grown = body(state._replace(age=state.age + 1), cfg)["ideal_kg"] - bod["ideal_kg"]
     growth = jnp.where(alive0 & (satiety > 0.3), jnp.maximum(grown, 0.0), 0.0)
+    deficit = jnp.maximum(bod["ideal_kg"] - state.weight, 0.0)          # catch-up growth (EnvConfig.catch_up_years)
+    growth = growth + jnp.where(alive0 & (satiety > 0.5) & (bod["years"] < cfg.catch_up_until_years),
+                                deficit / (cfg.catch_up_years * cfg.ticks_per_bio_year), 0.0)
     weight = state.weight + gain - burn + growth
     satiety = jnp.clip(satiety + burn * cfg.satiety_per_kg, 0.0, 1.0)
     hydration = jnp.clip(hydration - thirst * (1 + carrying_child), 0.0, 1.0)
@@ -2274,12 +2512,29 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         & ~jnp.eye(n, dtype=bool) & alive0[None, :]
     attached_near = jnp.minimum((state.attachment * in_view).sum(1), 1.0)
     attached_away = jnp.minimum((state.attachment * (~in_view & alive0[None, :])).sum(1), 1.0)
+    # Excretion: the urge builds with what the body processes; relieved by choice, or past full anyway
+    if cfg.excretion:
+        made = cfg.urge_rate * (0.5 + state.hydration) * jnp.where(state.asleep, cfg.urge_sleep_mult, 1.0)
+        urge_now = jnp.where(alive0, state.urge + made, state.urge)
+        relieving = (a == RELIEVE) & alive0
+        if cfg.reproduction:
+            no_control = (state.age + state.birth_age) / cfg.ticks_per_bio_year < cfg.infant_continence_years
+        else:
+            no_control = jnp.zeros(n, bool)
+        soiled = alive0 & ~relieving & ((urge_now >= 1.0) | (no_control & (urge_now >= 0.5)))
+        relieved = jnp.where(relieving | soiled, jnp.minimum(urge_now, 1.0), 0.0)
+        urge = jnp.where(relieved > 0, 0.0, jnp.minimum(urge_now, 1.0))
+        urge_stress = cfg.urge_stress * jnp.clip((urge_now - 0.7) / 0.3, 0.0, 1.0) \
+            + jnp.where(soiled & ~no_control, cfg.soil_stress, 0.0)
+    else:
+        relieving = soiled = no_control = jnp.zeros(n, bool)
+        relieved, urge, urge_stress = jnp.zeros(n), state.urge, jnp.zeros(n)
     gain = fx.get("stress_gain", 1.0)
     stress_src = jnp.stack([                       # what raised stress this tick, by source (STRESS_SOURCES)
         gain * cfg.stress_from_damage * health_loss, gain * jnp.where(pred_near, cfg.stress_from_threat, 0.0),
         gain * cfg.stress_from_need * critical, cfg.loneliness_stress * geno.social_reward * lonely,
         cfg.attach_absence * attached_away, cfg.sleep_debt_stress * jnp.clip((state.sleepiness - 0.7) / 0.3, 0.0, 1.0),
-        gain * cfg.dark_stress * dark_now * ~sleeping], axis=-1) * jnp.ones((n, 1))
+        gain * cfg.dark_stress * dark_now * ~sleeping, urge_stress], axis=-1) * jnp.ones((n, 1))
     stress = state.stress * (cfg.stress_decay - cfg.social_buffering * (1.0 - lonely)
                              - cfg.attach_calm * attached_near) \
         + cfg.attach_absence * attached_away \
@@ -2287,7 +2542,7 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
                                         + jnp.where(pred_near, cfg.stress_from_threat, 0.0) + cfg.stress_from_need * critical) \
         + cfg.loneliness_stress * geno.social_reward * lonely \
         + cfg.sleep_debt_stress * jnp.clip((state.sleepiness - 0.7) / 0.3, 0.0, 1.0) \
-        + fx.get("stress_gain", 1.0) * cfg.dark_stress * dark_now * ~sleeping \
+        + fx.get("stress_gain", 1.0) * cfg.dark_stress * dark_now * ~sleeping + urge_stress \
         - jnp.where(sleeping, cfg.sleep_stress_relief * depth, 0.0)
     stress = jnp.clip(stress, 0.0, 1.0)
     pain_aversion = state.pain_aversion + geno.temperament_drift * cfg.trauma_rate * health_loss \
@@ -2296,7 +2551,18 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
 
     # ---------------------------------------------------------- aging and death
     age = state.age + alive0.astype(jnp.int32)
-    old = (age + state.birth_age) >= (cfg.max_age * geno.lifespan * fx.get("lifespan", 1.0)).astype(jnp.int32)
+    # No fixed death age: senescence is a Gompertz hazard, h(x) = b exp(b (x - M)) per biological
+    # year, whose most likely age of death M is max_bio_years scaled by the lifespan gene and
+    # conditions. Other deaths (hunger, cold, disease, predators...) are modelled as they happen,
+    # so this is only the intrinsic part. It is drawn once per biological day (each agent on its own
+    # phase) rather than every tick, so the chance stays above float32's resolution at fine ticks.
+    tpy_ = cfg.ticks_per_bio_year
+    every = max(1, int(round(tpy_ / 365.0)))
+    total_age = age + state.birth_age
+    hazard = senescence_hazard(total_age / tpy_, geno.lifespan * fx.get("lifespan", 1.0), cfg)
+    p_old = 1.0 - jnp.exp(-hazard * every / tpy_)
+    old = alive0 & (total_age % every == 0) \
+        & (jax.random.uniform(jax.random.fold_in(keys[0], 91), (n,)) < p_old)
     dead_now = alive0 & ((health <= 0.0) | old)
     alive = alive0 & ~dead_now
     cause = jnp.where(old, CAUSE_AGE, 1 + jnp.argmax(components, axis=-1))
@@ -2318,7 +2584,12 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         both = (mating[:, None] & willing[None, :]) | (willing[:, None] & mating[None, :])
         pair = both & adj & female[:, None] & ~female[None, :] \
             & adult[:, None] & adult[None, :]                           # [woman, man], both chose it
-        fertile_f = female & alive & adult & (years < cfg.menopause_years) & (state.gestation == 0) \
+        # Lactational amenorrhea: a mother with a living child young enough to nurse does not ovulate
+        # (it returns if the child dies). With gestation and the wait to conceive this spaces births
+        # about 3.4 biological years apart, as among foragers (3-4).
+        infant = alive0 & (state.mother >= 0) & (years < cfg.lactation_infertile_years)
+        has_infant = jnp.zeros(n, bool).at[jnp.clip(state.mother, 0)].max(infant)
+        fertile_f = female & alive & adult & (years < cfg.menopause_years) & (state.gestation == 0) & ~has_infant \
             & (weight >= cfg.min_condition * bod["ideal_kg"]) & ~sick & (state.stress < cfg.stress_heal_block) \
             & (fx.get("fertile", 1.0) > 0)
         fertile_m = ~female & alive & adult & ~sick & (fx.get("fertile", 1.0) > 0)
@@ -2327,7 +2598,9 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         conceive = jnp.any(pair, axis=1) & fertile_f & fertile_m[partner] \
             & (jax.random.uniform(k_c, (n,)) < cfg.conception_prob)
         free = (~alive).sum() - (state.gestation > 0).sum()             # slots left for children
+        could = conceive
         conceive = conceive & (jnp.cumsum(conceive) <= free)
+        no_room = could & ~conceive           # the slot cap, not the world, stopped this child
         mated = jnp.any(pair, axis=1) | jnp.any(pair, axis=0)
         # An open offer lasts only while the agent stays with it: resting beside or touching the
         # other keeps it; doing anything else (moving away, striking, eating, sleeping...) withdraws
@@ -2357,7 +2630,7 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
                                              state.father_geno, geno)
         father_look = jnp.where(conceive[:, None], state.appearance[partner], state.father_look)
     else:
-        mated = conceive = birthing = jnp.zeros(n, bool)
+        mated = conceive = birthing = no_room = jnp.zeros(n, bool)
         courting = state.courting
         intimate = jnp.zeros((n, n))
         gestation, father, fetus_r = state.gestation, state.father, state.fetus_r
@@ -2377,12 +2650,20 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
          grass * cfg.desert_regrow], 0.0)
     plants, meat, cooked, wood, stones, honey, grubs = ground[:MIN0]
     minerals = jnp.moveaxis(ground[MIN0:], 0, -1)                               # (G, G, M)
+    if cfg.ecology:
+        loose = jnp.maximum(plants - flora.sum(-1), 0.0)                        # dropped or placed plant food
     # ---- fire: ignition (sparks, burning wood, lightning, spread), fuel, burning down
     dryness = jnp.array(cfg.fire_dryness)[weather]
     if cfg.dynamic_weather:
         dryness = dryness * jnp.where(raining | (snow > 0.2), 0.1, 1.0)   # wet ground barely burns
     coal_here = minerals @ (MIN_FUEL / _k(cfg))                                              # ticks of coal fuel lying here
-    fuel_here = plants * cfg.plant_fuel + wood * cfg.wood_fuel + coal_here
+    if cfg.ecology:                                   # what burns: the plants above ground (not roots) and loose food
+        Kc = eco.capacity(state.terrain, state.flora_patch, cfg)[..., :3].sum(-1)
+        above = jnp.where(Kc > 0, flora[..., :3].sum(-1) / jnp.maximum(Kc, 1e-9), 0.0)
+        plant_fuel_amount = cfg.plant_max * jnp.where(state.terrain == FOREST, 0.7, 0.4) * above + jnp.minimum(loose, cfg.plant_max)
+    else:
+        plant_fuel_amount = plants
+    fuel_here = plant_fuel_amount * cfg.plant_fuel + wood * cfg.wood_fuel + coal_here
     burning0 = (fire > 0).astype(jnp.float32)
     spark_grid = jnp.zeros((g, g)).at[tr, tc].max(spark.astype(jnp.float32))
     torch_grid = jnp.zeros((g, g)).at[lit_cell[:, 0], lit_cell[:, 1]].max(lit_drop.astype(jnp.float32))
@@ -2404,6 +2685,8 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     on = (fire > 0) | ignite
     fire = jnp.where(on, fire + fuel_here, fire)                 # burning cells consume their fuel
     plants = jnp.where(on, 0.0, plants)
+    if cfg.ecology:
+        loose = jnp.where(on, 0.0, loose)
     wood = jnp.where(on, 0.0, wood)
     kiln = jnp.where(on, state.kiln + coal_here, state.kiln)     # coal burns hot: smelting heat while it lasts
     minerals = jnp.where((on[..., None]) & (MIN_FUEL > 0), 0.0, minerals)
@@ -2445,9 +2728,16 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
             share = jnp.where(demand > 0, jnp.minimum(plants / jnp.maximum(demand, 1e-9), 1.0), 0.0)
             got = share[an.pos[:, 0], an.pos[:, 1]]
             return demand * share, got >= 0.5
+        if cfg.ecology:                                       # grazers eat greens (and what lies loose)
+            plants = loose + flora[..., eco.GREENS]
         eaten_s, fed_s = graze(small, cfg.graze_small)
         eaten_l, fed_l = graze(large, cfg.graze_large)
         plants = jnp.maximum(plants - eaten_s - eaten_l, 0.0)
+        if cfg.ecology:
+            ate = eaten_s + eaten_l
+            from_loose_g = jnp.minimum(ate, loose)
+            loose = loose - from_loose_g
+            flora = flora.at[..., eco.GREENS].set(jnp.maximum(flora[..., eco.GREENS] - (ate - from_loose_g), 0.0))
         hungry = predators.alive & (predators.rest <= 0)
         on_carcass = hungry & ~predators.below & (meat[predators.pos[:, 0], predators.pos[:, 1]] >= cfg.predator_scavenge)
         meat = meat.at[predators.pos[:, 0], predators.pos[:, 1]].add(jnp.where(on_carcass, -cfg.predator_scavenge, 0.0))
@@ -2455,7 +2745,15 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         predators = predators._replace(rest=jnp.where(on_carcass, SP["atk_rest"][predators.species].astype(jnp.int32),
                                                       predators.rest))
     # ---- regrowth and spoilage
-    plants = jnp.minimum(plants + base_rate * regrow * (fire <= 0), cfg.plant_max)
+    if cfg.ecology:
+        weather_mult = jnp.where(weather == DROUGHT, cfg.drought_regrow_mult, 1.0) \
+            * jnp.where(raining, cfg.rain_regrow_mult, 1.0) * (1.0 - snow)
+        flora = eco.grow(flora, state.terrain, state.flora_patch, season, weather_mult, fire > 0, cfg)
+        loose = loose * (1.0 - cfg.loose_food_spoil) ** (cfg.tick_minutes / 1440.0)
+        plants = loose + flora.sum(-1)
+    else:
+        flora = state.flora
+        plants = jnp.minimum(plants + base_rate * regrow * (fire <= 0), cfg.plant_max)
     wood = jnp.minimum(wood + jnp.where((state.terrain == FOREST) & (fire <= 0), cfg.wood_regrow, 0.0),
                        cfg.wood_max)
     meat = meat * (1 - cfg.meat_spoil_ground * (1.0 + cfg.fly_spoil_mult * flies))     # flies speed the rot
@@ -2516,7 +2814,34 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     map_sight = jnp.where(sleeping, 0, jnp.minimum(jnp.where(night, dark_radius(state, cfg), cfg.view_radius),
                                                    sight_radius(state, cfg)))
     deep_sleep = sleeping & (sleep_depth >= cfg.sleep_deep_ticks)              # sleep consolidates the day
-    mind_map = update_mind_map(state.mind_map, pos_after, alive & ~below_after, state.terrain, plants, map_sight, cfg,
+    # Camp fouling: waste builds where people are and fades with time, faster in rain
+    if cfg.fouling:
+        days = cfg.tick_minutes / 1440.0
+        fade = 0.5 ** (days / cfg.foul_half_life_days * jnp.where(raining, cfg.foul_rain_mult, 1.0))
+        if cfg.excretion:                             # waste where each relieved itself (not below ground)
+            left = jnp.where(below_after, 0.0, relieved * cfg.waste_per_urge)
+            here_now = jnp.zeros((g, g)).at[pos_after[:, 0], pos_after[:, 1]].add(left)
+            foul = state.foul * fade + here_now / eco.cell_km2(cfg)
+        else:                                         # people's refuse wherever they are
+            here_now = _occupancy(pos_after, alive & ~below_after, g).astype(jnp.float32)
+            foul = state.foul * fade + here_now * days / eco.cell_km2(cfg)
+    else:
+        foul = state.foul
+    forage_now = forage_grid(state._replace(plants=plants, flora=flora), cfg)
+    heard_map = state.mind_map
+    if cfg.language_mode == "grounded":
+        # what was said this tick is understood by those who heard it (as heard_messages: within
+        # view, on one's layer, the closest only when asleep); what is written, by those beside it
+        lp_s = layered_pos(state.pos, below0)
+        d_s = _cheb(lp_s[:, None, :], lp_s[None, :, :])
+        hear_r = jnp.where(state.asleep, 1, cfg.view_radius)
+        heard_now = spoke_now[None, :] & ~jnp.eye(n, dtype=bool) & (d_s <= hear_r[:, None]) & alive0[:, None]
+        ch, val, place = phrase_place(msg, state.pos, cfg)
+        heard_map = comprehend(heard_map, heard_now, ch, val, place, cfg)
+        can_read, at = mark_beside(state, cfg)
+        ch_r, val_r, place_r = phrase_place(state.marks[at[:, 0], at[:, 1]], at, cfg)
+        heard_map = comprehend(heard_map, jnp.eye(n, dtype=bool) & can_read[:, None], ch_r, val_r, place_r, cfg)
+    mind_map = update_mind_map(heard_map, pos_after, alive & ~below_after, state.terrain, forage_now, map_sight, cfg,
                                consolidate=deep_sleep)
 
     # ---------------------------------------------------------- novelty
@@ -2660,16 +2985,16 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     # ---------------------------------------------------------- outcomes
     any_kill = jnp.any(kills, axis=-1)
     # Waking: a sleeper is woken by being struck, attacked, burned or touched, or wakes rested
-    disturbed = struck_by_agent | attacked | burned | jnp.any(touches, axis=0) | fell
+    disturbed = struck_by_agent | attacked | burned | jnp.any(touches, axis=0) | fell | (soiled & ~no_control)
     asleep = alive & sleeping & ~disturbed & (sleepiness > 0.0)
     collapsed = asleep & (collapse | state.collapsed)
     sleep_depth = jnp.where(asleep, sleep_depth, 0)
 
     outcome = jnp.select(
-        [~alive0, sleeping, resting, is_move & move_fail, is_move, winner, gathering, eating, drinking,
+        [~alive0, sleeping, relieving, writing, resting, is_move & move_fail, is_move, winner, gathering, eating, drinking,
          any_kill, hit_agent, hit_pred | hit_large | hit_small, is_strike,
          releasing, is_touch, is_select, is_place, is_mate],
-        [OUT_NONE, OUT_SLEEP, OUT_REST, OUT_MOVE_FAILED, OUT_MOVE, OUT_GATHER, OUT_GATHER_LOST, OUT_EAT,
+        [OUT_NONE, OUT_SLEEP, OUT_RELIEVE, OUT_WRITE, OUT_REST, OUT_MOVE_FAILED, OUT_MOVE, OUT_GATHER, OUT_GATHER_LOST, OUT_EAT,
          OUT_DRINK, OUT_KILL, OUT_STRIKE_AGENT, OUT_STRIKE_ANIMAL, OUT_STRIKE_MISS,
          OUT_RELEASE, OUT_TOUCH, OUT_SELECT, OUT_PLACE, OUT_MATE], OUT_NONE)
 
@@ -2706,6 +3031,8 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         cave_floor=cave_floor,
         below=jnp.where(alive0, below_after, state.below),
         small=small, large=large, predators=predators,
+        flora=flora, flora_patch=state.flora_patch, foul=foul, urge=keep(urge, state.urge),
+        **_marks_with_surface(marks, mark_time, mark_kind, wood, stones, cfg),
     )
     if cfg.reproduction:
         next_state, born = _give_birth(next_state, birthing, jax.random.fold_in(keys[0], 78), cfg)
@@ -2730,7 +3057,7 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         company=alive0 & jnp.any((_cheb(lpa[:, None, :], lpa[None, :, :]) <= cfg.view_radius)
                                  & ~jnp.eye(n, dtype=bool) & alive0[None, :], axis=1),
         meat_eaten=(eaten > 0) & ((hand0 == RAW_MEAT) | (hand0 == COOKED_MEAT)),
-        large_prey_hit=hit_large, slept=sleeping & alive0, woken=sleeping & alive0 & disturbed,
+        large_prey_hit=hit_large, slept=asleep & alive0, woken=sleeping & alive0 & disturbed,
         fell_asleep=sleeping & alive0 & ~state.asleep,
         season=season, new_conditions=new_cond, made=made, kill_species=kill_sp, attacker_species=attacker_sp,
         gored=gored_dmg, gored_by=gored_by, stung=stung & alive0, venomed=venomed,
@@ -2738,7 +3065,8 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         small_preyed_by=small_preyed_by, large_preyed_by=large_preyed_by,
         small_species=state.small.species, large_species=state.large.species,
         small_pos=state.small.pos, large_pos=state.large.pos,
-        skill=jnp.where(alive0 & (chosen >= SEEK_WATER), chosen - SEEK_WATER + 1, 0).astype(jnp.int32), collapsed_now=collapse & ~state.asleep, mated=mated, conceived=conceive, gave_birth=birthing, born=born,
+        skill=jnp.where(alive0 & (chosen >= SEEK_WATER), chosen - SEEK_WATER + 1, 0).astype(jnp.int32), collapsed_now=collapse & ~state.asleep, mated=mated, conceived=conceive, no_room=no_room, gave_birth=birthing, born=born,
         nursed=nursing, genetic_reward=genetic, below=next_state.below, delved=delving, dark=dark_now > 0,
-        stress_from=stress_src, downed=downed_of(next_state, cfg))
+        stress_from=stress_src, downed=downed_of(next_state, cfg), relieved=relieving & alive0, soiled=soiled,
+        gathered_kind=took_kind if cfg.ecology else jnp.full(n, -1, jnp.int32))
     return next_state, reward, done, info

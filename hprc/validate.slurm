@@ -4,7 +4,7 @@
 # each trained, then lived for 10 years in a continuous world.
 #   sbatch --export=ALL,WORLDS=128 hprc/validate.slurm          # WORLDS from the benchmark
 #   sbatch --export=ALL,WORLDS=128,STEPS=2e8 hprc/validate.slurm  # a bigger budget
-# Then: python scripts/experiment.py report --root $SCRATCH/runs/exp_<code version>
+# Then: python scripts/experiment.py report --root $SCRATCH/runs/exp_<code version>_<preset>
 #SBATCH --job-name=lifesim-validate
 #SBATCH --array=0-3
 #SBATCH --time=24:00:00
@@ -22,6 +22,6 @@ cd "$SCRATCH/lifesim"
 export XLA_PYTHON_CLIENT_PREALLOCATE=false
 mkdir -p logs
 # One results folder per code version (experiment.py refuses to reuse runs made by other code)
-ROOT="$SCRATCH/runs/exp_$(python -c 'from lifesim.presets import code_version; print(code_version())')"
-python scripts/experiment.py validate --root "$ROOT" --worlds ${WORLDS:-64} \
+ROOT="$SCRATCH/runs/exp_$(python -c 'from lifesim.presets import code_version; print(code_version())')_${PRESET:-society}"
+python scripts/experiment.py validate --root "$ROOT" --preset ${PRESET:-society} --worlds ${WORLDS:-64} \
   --agent-steps ${STEPS:-1e8} --playback-every 4 --only $SLURM_ARRAY_TASK_ID

@@ -3,7 +3,7 @@
 # agents live and learn in a continuous world with one founder given an archetype's temperament.
 # Needs `validate` task 0 (caveman) finished and the persistence gate passed.
 #   sbatch hprc/placed.slurm            # fewer: WHICH=chief,warrior sbatch --array=0-35 hprc/placed.slurm
-# Then: python scripts/experiment.py report --root $SCRATCH/runs/exp_<code version>
+# Then: python scripts/experiment.py report --root $SCRATCH/runs/exp_<code version>_<preset>
 #SBATCH --job-name=lifesim-placed
 #SBATCH --array=0-35
 #SBATCH --time=08:00:00
@@ -21,6 +21,6 @@ cd "$SCRATCH/lifesim"
 export XLA_PYTHON_CLIENT_PREALLOCATE=false
 mkdir -p logs
 # One results folder per code version (experiment.py refuses to reuse runs made by other code)
-ROOT="$SCRATCH/runs/exp_$(python -c 'from lifesim.presets import code_version; print(code_version())')"
-python scripts/experiment.py placed --root "$ROOT" --playback-every 8 --which "${WHICH:-all}" \
+ROOT="$SCRATCH/runs/exp_$(python -c 'from lifesim.presets import code_version; print(code_version())')_${PRESET:-society}"
+python scripts/experiment.py placed --root "$ROOT" --preset ${PRESET:-society} --playback-every 8 --which "${WHICH:-all}" \
   --only $SLURM_ARRAY_TASK_ID

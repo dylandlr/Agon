@@ -234,6 +234,9 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
             if what.get("what") == "honey" and pv is not None and cfg is not None and bool(pv.hive[p_i[0], p_i[1]]):
                 calm = float(np.asarray(E.fire_heat(pv.fire, cfg))[p_i[0], p_i[1]]) > 0
                 what.update(from_hive=True, smoke=calm)
+            if hasattr(info, "gathered_kind") and int(np.asarray(info.gathered_kind)[i]) >= 0:
+                kk = int(np.asarray(info.gathered_kind)[i])
+                what["plant"] = ("greens", "fruit", "nuts", "roots", "dropped food")[kk]
             emit(i, "gather", amount=round(float(info.gathered[i]), 4), **tool(i), **what)
         elif code == E.OUT_STRIKE_AGENT:
             victims = np.flatnonzero(hits[i]).tolist()
@@ -431,6 +434,8 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
     if hasattr(info, "downed"):                             # fell and cannot stand; got back up
         now_down = np.asarray(info.downed)
         was_down = mem.get("downed", np.zeros_like(now_down))
+        if len(was_down) < len(now_down):                 # the world grew its slots (lifesim/grow.py)
+            was_down = np.concatenate([was_down, np.zeros(len(now_down) - len(was_down), bool)])
         for i in np.flatnonzero(now_down & ~was_down):
             emit(i, "downed", [(pid(last(i, "struck_by_agent", "predator_attack", "hurt_by_prey", "fall", "stung",
                                         within=max(2, int(round(2 * per))))), "the wound")])
@@ -438,6 +443,12 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
             if st is not None and bool(st.alive[i]):        # up again (not dead)
                 emit(i, "stood_up")
         mem["downed"] = now_down
+    if hasattr(info, "soiled"):                             # relieved itself, by choice or not
+        for i in np.flatnonzero(np.asarray(info.relieved) | np.asarray(info.soiled)):
+            r_, c_ = int(info.pos[i, 0]), int(info.pos[i, 1])
+            near_water = st is not None and bool(np.asarray(E.adjacent_to_water(st.terrain, np.array([[r_, c_]]), cfg))[0]) \
+                if cfg is not None else False
+            emit(i, "soiled" if bool(np.asarray(info.soiled)[i]) else "relieved", beside_water=near_water)
     for k in ("fires", "cooking"):                          # only recent ones can still be causes
         if len(mem.get(k, [])) > 200:
             mem[k] = mem[k][-200:]

@@ -2,6 +2,7 @@
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 from lifesim import env as E
 from lifesim.config import EnvConfig, with_reproduction
@@ -218,6 +219,29 @@ def test_a_fed_child_grows_lean_mass_and_a_starving_one_is_stunted():
     assert ratio[1] < 0.9                                # starving: stunted
 
 
+def test_a_stunted_child_catches_up_once_fed():
+    """Catch-up growth (EnvConfig.catch_up_years): a 6-year-old at 70% of its frame's weight, then
+    well fed, regains most of it within a couple of years; an adult past catch_up_until_years does not."""
+    import jax
+    import jax.numpy as jnp
+    from lifesim import env as E
+    from lifesim.config import EnvConfig, with_reproduction
+    cfg = with_reproduction(EnvConfig(grid_size=12, n_agents=2, climate_volatility=0.0, lightning_prob=0.0,
+                                      season_temp=(18.0,) * 4, day_temp_swing=0.0), n_founders=2)
+    s = E.reset(jax.random.PRNGKey(3), cfg)
+    ages = jnp.array([int(6 * cfg.ticks_per_bio_year), int(30 * cfg.ticks_per_bio_year)], jnp.int32)
+    s = s._replace(birth_age=ages, age=jnp.zeros(2, jnp.int32), conditions=jnp.zeros_like(s.conditions))
+    s = s._replace(weight=0.7 * E.body(s, cfg)["ideal_kg"])
+    step = jax.jit(lambda st: E.step(st, jnp.array([E.REST, E.REST]), cfg))
+    for _ in range(int(2 * cfg.ticks_per_bio_year)):
+        s = s._replace(satiety=jnp.full(2, 0.6), hydration=jnp.ones(2), energy=jnp.ones(2),
+                       health=jnp.ones(2), infection=jnp.zeros(2, jnp.int32))
+        s, *_ = step(s)
+    ratio = np.asarray(s.weight) / np.asarray(E.body(s, cfg)["ideal_kg"])
+    assert ratio[0] > 0.85                               # the child caught up past the fertility line
+    assert ratio[1] < 0.75                               # the adult did not (fat only above satiety 0.7)
+
+
 def _seq(cfg, s, plan):
     """Run a list of per-tick action lists; return the final state and each tick's info."""
     step = jax.jit(lambda st, a: E.step(fed(st), a, cfg))
@@ -252,6 +276,7 @@ def test_a_choice_to_mate_stays_open_for_a_few_ticks_and_is_seen():
 
 def test_a_sleeping_partner_is_not_courting():
     cfg, s = _world()
+    s = s._replace(sleepiness=s.sleepiness.at[0].set(0.5))         # tired enough to sleep (sleep is honest)
     _, infos = _seq(cfg, s, [[MATE, REST, REST, REST], [E.SLEEP, MATE, REST, REST]])
     assert not any(bool(i.mated.any()) for i in infos)
 
@@ -278,3 +303,70 @@ def test_real_time_makes_pregnancy_nine_months():
     assert cfg.max_age == 70 * 365 * 48
     compressed = with_reproduction(EnvConfig(grid_size=12, n_agents=4), n_founders=2)
     assert compressed.ticks_per_bio_year == 48
+
+
+def test_conception_per_act_follows_the_time_scale():
+    """A year of regular mating gives the same chance of a child at any compression."""
+    from lifesim.config import EnvConfig, with_reproduction, with_time_scale
+    for dpby in (1.0, 10.0, 365.0):
+        cfg = with_reproduction(with_time_scale(EnvConfig(), 365, dpby))
+        acts = dpby * cfg.mating_acts_per_day
+        assert 1 - (1 - cfg.conception_prob) ** acts == pytest.approx(cfg.conception_per_bio_year, abs=2e-3)
+    assert with_reproduction(EnvConfig(), conception_prob=0.3).conception_prob == 0.3
+
+
+def test_there_is_no_fixed_death_age():
+    """Senescence is a hazard rising with age (Gompertz), not a limit: deaths spread over decades,
+    peaking near max_bio_years, and a longer-lived gene shifts the whole curve."""
+    cfg = EnvConfig()
+    h = lambda y, m=1.0: float(E.senescence_hazard(jnp.float32(y), m, cfg))
+    assert h(20) < 0.002 and 0.005 < h(45) < 0.02 and h(70) == pytest.approx(cfg.senescence_rate, rel=1e-4)
+    assert h(90) < 1.0 and h(84, 1.2) == pytest.approx(h(70), rel=1e-4)
+    years = np.arange(15.0, 130.0, 1 / 52)                       # life table from age 15, weekly
+    surv = np.exp(-np.cumsum(np.asarray(E.senescence_hazard(jnp.asarray(years), 1.0, cfg))) / 52)
+    a = years[np.searchsorted(-surv, -np.random.default_rng(0).random(20000))]   # sampled ages at death
+    assert 60 < np.median(a) < 72 and np.percentile(a, 10) < 50 and np.percentile(a, 99) > 85
+
+
+def test_a_nursing_mother_does_not_conceive_until_her_child_is_weaned():
+    cfg, s = _world()
+    tpy = cfg.ticks_per_bio_year
+    with_child = lambda years: s._replace(alive=s.alive.at[2].set(True), existed=s.existed.at[2].set(True),
+                                          mother=s.mother.at[2].set(0), age=s.age.at[2].set(0),
+                                          birth_age=s.birth_age.at[2].set(int(years * tpy)))
+    both = [MATE, MATE, REST, REST]
+    _, infos = run(cfg, with_child(1.0), both, 1)
+    assert bool(infos[0][1].mated[0]) and not bool(infos[0][1].conceived[0])
+    _, infos = run(cfg, with_child(3.0), both, 1)                  # weaned: fertile again
+    assert bool(infos[0][1].conceived[0])
+
+
+def test_a_conception_the_slot_cap_stopped_is_counted():
+    cfg, s = _world(n=2, founders=2)
+    _, infos = run(cfg, s, [MATE, MATE], 1)
+    i = infos[0][1]
+    assert bool(i.mated[0]) and not bool(i.conceived.any()) and bool(i.no_room[0])
+
+
+def test_a_world_can_grow_its_slots_mid_run_and_children_fill_them():
+    """lifesim/grow.py: everyone keeps who they are, where they are, whom they know and are related
+    to; the new slots are unborn; the bigger world steps on, and a birth can land in a new slot."""
+    from lifesim import grow as G
+    cfg, s = _world(n=2, founders=2)
+    s, _ = run(cfg, s, [REST, REST], 3)
+    s = s._replace(drop_owner=s.drop_owner.at[0, 0].set(1 + 2 * 1))   # agent 1 dropped food below
+    big = G.bigger(cfg)
+    g = G.grow_state(s, cfg, big, jax.random.PRNGKey(9))
+    assert g.pos.shape == (4, 2) and g.memory.shape[:2] == (4, 4) and g.relatedness.shape == (4, 4)
+    np.testing.assert_array_equal(np.asarray(g.pos[:2]), np.asarray(s.pos))
+    np.testing.assert_array_equal(np.asarray(g.memory[:2, :2]), np.asarray(s.memory))
+    np.testing.assert_array_equal(np.asarray(g.terrain), np.asarray(s.terrain))
+    assert list(np.asarray(g.alive)) == [True, True, False, False] and not np.asarray(g.existed[2:]).any()
+    assert int(g.t) == int(s.t) and int(g.drop_owner[0, 0]) == 1 + 4 * 1
+    assert G.free_slots(s) == 0 and G.free_slots(g) == 2
+    _, infos = run(big, g, [MATE, MATE, REST, REST], 1)
+    i = infos[0][1]
+    assert bool(i.conceived[0]) and not bool(i.no_room.any())       # room now: the cap no longer stops her
+    params = {"w": jnp.arange(6.0).reshape(2, 3)}
+    p = G.pad_agents(params, 2, 4, fill="first")["w"]
+    assert p.shape == (4, 3) and float(p[3, 2]) == 2.0

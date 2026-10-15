@@ -96,6 +96,21 @@ def main():
     ap.add_argument("--clothing", action=argparse.BooleanOptionalAction, default=True,
                     help="with --world living: founders start with hides covering some of the body (different "
                          "for each), babies are born bare; it keeps heat in (EnvConfig.clothing)")
+    ap.add_argument("--ecology", action=argparse.BooleanOptionalAction, default=True,
+                    help="with --world living: greens, fruit, nuts and roots that grow, spread and run out, and "
+                         "gathering that takes time (EnvConfig.ecology)")
+    ap.add_argument("--fouling", action=argparse.BooleanOptionalAction, default=True,
+                    help="with --world living: waste builds where people stay; drinking beside it risks "
+                         "infection (EnvConfig.fouling)")
+    ap.add_argument("--excretion", action=argparse.BooleanOptionalAction, default=False,
+                    help="with --world living: an urge to relieve oneself, RELIEVE, soiling (EnvConfig.excretion). "
+                         "Off by default: an optional complexity. The network's shape is the same either way, so a "
+                         "run trained without it can be continued with it")
+    ap.add_argument("--language", choices=["emergent", "grounded"], default="emergent",
+                    help="emergent: symbols mean nothing given; grounded: a defined lexicon (env.LEXICON) whose "
+                         "phrases about water and food with a direction are understood by listeners")
+    ap.add_argument("--writing", action="store_true",
+                    help="WRITE scratches one's message into the ground, read by anyone beside it")
     ap.add_argument("--archetypes", default="",
                     help="temperament profiles for the first founders, e.g. tyrant:1,saint:1 (lifesim/archetypes.py)")
     ap.add_argument("--world-model", action=argparse.BooleanOptionalAction, default=False,
@@ -134,9 +149,12 @@ def main():
                         archetypes=archetypes.parse(args.archetypes))
     if args.world == "living":
         env_cfg = living_world(env_cfg, underground=args.underground, downed=args.downed, grazing=args.grazing,
-                               clothing=args.clothing)
+                               clothing=args.clothing, ecology=args.ecology, fouling=args.fouling,
+                               excretion=args.excretion)
     elif args.underground:
         raise SystemExit("--underground needs --world living (the cave mouths are a biome)")
+    import dataclasses as _dc
+    env_cfg = _dc.replace(env_cfg, language_mode=args.language, writing=args.writing)
     env_cfg = with_time_scale(env_cfg, args.days_per_year, args.days_per_bio_year)
     if args.reproduction:
         env_cfg = with_reproduction(env_cfg, n_founders=args.founders or None)
@@ -214,6 +232,7 @@ def main():
                 "deterred_per_1000": per_k(acc["deterred"]),
                 "in_company_share": round(float(acc["company"]) / alive, 3),
                 "births": int(acc["births"]), "conceptions": int(acc["conceptions"]),
+                "conceptions_blocked_by_slot_cap": int(acc.get("no_room", 0)),
                 "matings_per_1000": per_k(acc["matings"]),
                 "asleep_share_night": round(float(acc["asleep_night"]) / max(float(acc["alive_night"]), 1.0), 3),
                 "asleep_share_day": round(float(acc["asleep_day"]) / max(alive - float(acc["alive_night"]), 1.0), 3),

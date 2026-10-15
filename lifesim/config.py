@@ -98,9 +98,15 @@ class EnvConfig:
     max_age: int = 20000
     senescence_start: float = 0.6   # (unused since the body model; kept for old configs)
 
-    # Body. Biological age runs on its own clock: max_age ticks = max_bio_years,
+    # Body. Biological age runs on its own clock: max_age ticks = max_bio_years (a scale, not a
+    # limit: see senescence_rate),
     # so one biological year is ~286 ticks (~6 simulated days) by default.
-    max_bio_years: float = 70.0
+    max_bio_years: float = 70.0     # the most likely age of death from senescence (not a limit)
+    # Senescence: a Gompertz hazard b exp(b (age - max_bio_years)) a biological year. b 0.085 doubles
+    # the risk about every 8 years, the range fitted to hunter-gatherers (Gurven & Kaplan 2007, whose
+    # modal age of adult death is about 72). From senescence alone about 1 in 800 die a year at 20,
+    # 1 in 100 at 45, 1 in 12 at 70; about 84% of 15-year-olds reach 50, and half live past 66.
+    senescence_rate: float = 0.085
     # Days per biological year with reproduction (with_reproduction): 1 compresses a life into
     # about 70 days so generations fit in a run; 365 is real time (9-month pregnancies, adults at 15
     # calendar years). With days_per_year this sets the whole time scale (see with_time_scale).
@@ -114,7 +120,16 @@ class EnvConfig:
     n_founders: int = 0                # 0: every slot is a founder (no births possible)
     adult_years: float = 15.0          # fertile from this biological age
     menopause_years: float = 45.0
-    conception_prob: float = 0.15      # per mutual mating between fertile adults
+    conception_prob: float = 0.15      # per mutual mating between fertile adults (with_reproduction sets it from the two below)
+    # Fecundity under compressed biological time. A fertile couple mating regularly conceives within
+    # a biological year with probability conception_per_bio_year (about 0.2 per menstrual cycle gives
+    # ~0.9 a year; 0.8 allows for cycles missed). An act of mating in game time stands for
+    # 1 / (mating_acts_per_day x days_per_bio_year) of a biological year, so at 1 day per biological
+    # year one act carries most of a year's chance (0.8), and in real time (365 days per year) about
+    # 0.4% an act. Before this, 0.15 an act held at every compression: at 1 day per year a woman had
+    # one or two chances per "year", and trained bands bore too few children to outlive their founders.
+    conception_per_bio_year: float = 0.8
+    mating_acts_per_day: float = 1.0
     mate_window: int = 4               # ticks a choice to mate stays open for a partner (1: same tick only)
     min_condition: float = 0.85        # a woman thinner than this share of ideal weight does not conceive
     gestation_years: float = 0.75
@@ -124,12 +139,19 @@ class EnvConfig:
     mutation_rate: float = 0.01        # chance per trait per birth of a de novo mutation
     mutation_size: float = 2.5         # its size, in population standard deviations (up or down)
     nurse_years: float = 2.0           # mother nurses within 1 cell until this age
+    lactation_infertile_years: float = 2.0   # a mother cannot conceive while her child is younger (0: off)
     nurse_rate: float = 0.03           # food and water a nursing child can take per tick
     nurse_cost: float = 0.6            # share of what the child takes that the mother pays
     prime_until_years: float = 35.0
     base_height_cm: float = 165.0
     ideal_bmi: float = 22.0
     fat_gain_kg: float = 0.01        # per tick when well fed, up to 115% of ideal weight
+    # Catch-up growth: a child or youth below its frame's lean weight (stunted by hunger earlier)
+    # regrows toward it while fed, closing the gap with this time constant in biological years
+    # (catch-up growth after malnutrition is real, if often incomplete). Without it, a child hungry
+    # for a while stayed thin for life and the next generation could not conceive.
+    catch_up_years: float = 1.0
+    catch_up_until_years: float = 20.0
     fat_burn_kg: float = 0.08        # per tick when starving, down to 80% of ideal weight
     satiety_per_kg: float = 0.05     # burning 1 kg of reserves restores this much satiety
 
@@ -152,6 +174,51 @@ class EnvConfig:
     # colder than comfort (body temperature drifts toward the cold more slowly: x 1 + insulation x
     # coverage). It does not wear out and cannot yet be made, so children born in a run stay bare.
     clothing: bool = False
+    # Plant ecology (lifesim/ecology.py): greens, fruit, nuts and roots per cell, from biome densities
+    # per km^2 times the cell's area; logistic regrowth and seed spread, seasonal crops, gathering
+    # that takes time and pays less where food is thin. Off by default (the classic plants: one stock
+    # per cell regrowing at a fixed rate); on in the living world.
+    ecology: bool = False
+    kcal_per_day: float = 2400.0       # an active forager's daily need: what hunger takes in a day
+    loose_food_spoil: float = 0.05     # per day: plant food left lying on the ground
+    # Camp fouling: where people stay, waste builds up (person-days per km^2), and drinking near it
+    # risks infection: the infection chance per drink is water_infection x (1 + foul / foul_ref, at
+    # most foul_max_mult). It fades with time, faster in rain. (Why foragers move camp, besides food.)
+    fouling: bool = False
+    # Excretion (on in the living world): an urge builds as the body processes food and water (more
+    # when well watered, less asleep at night), relieved by RELIEVE wherever one stands, which leaves
+    # waste there (the fouling above, which then comes only from this). Past full, it happens anyway:
+    # soiling oneself is stressful and wakes a sleeper. Infants have no control. Choosing where to go
+    # (away from the water one drinks) is left to learning.
+    # Language (lifesim/env.py LEXICON): "emergent" (symbols mean nothing given) or "grounded" (a
+    # defined lexicon; phrases about water and food with a direction are understood by listeners and
+    # put into their remembered maps). writing: WRITE puts one's message on what is here, read by
+    # anyone beside it, if one holds the means (lifesim/env.py write_means): an edge (sharpness >=
+    # write_edge; on stone a point of hardness >= write_hard) or a pigment (ochre, coal), and a surface
+    # (wood lying here, which makes a sign, a loose stone, a rock face, a tree's bark; not bare
+    # ground). Cut in wood or bark it lasts mark_days, in stone mark_days_rock; drawn in pigment
+    # mark_days_paint (weather wears it off).
+    language_mode: str = "emergent"
+    writing: bool = False
+    heard_recency: float = 0.6         # how fresh a heard place is in one's map (seen is 1)
+    mark_days: float = 90.0
+    mark_days_rock: float = 365.0
+    mark_days_paint: float = 30.0
+    write_edge: float = 0.5            # flint 0.8, obsidian 1.0, quartz 0.6, copper 0.6; a plain stone 0.2 is not enough
+    write_hard: float = 0.7            # the point's hardness needed to cut stone (flint 1.0, obsidian 0.7, quartz 0.9)
+    sign_min: float = 0.5              # how much wood (or stone) lying here makes a surface to write on
+    excretion: bool = False
+    urge_rate: float = 0.06            # per tick at 30 minutes, x (0.5 + hydration): ~4-6 reliefs a day
+    urge_sleep_mult: float = 0.4       # made more slowly asleep (the body holds it at night)
+    relieve_min: float = 0.15          # nothing to go with less than this
+    urge_stress: float = 0.01          # stress per tick at full urge (from 0.7 up)
+    soil_stress: float = 0.08          # stress from soiling oneself (per time)
+    waste_per_urge: float = 0.3        # person-days of waste in a full urge
+    infant_continence_years: float = 2.5
+    foul_ref: float = 50.0             # person-days per km^2 that double the risk from water nearby
+    foul_max_mult: float = 20.0
+    foul_half_life_days: float = 20.0
+    foul_rain_mult: float = 3.0        # fades this much faster while it rains
     clothing_min: float = 0.1
     clothing_insulation: float = 0.8
     downed: bool = False
@@ -403,6 +470,11 @@ class EnvConfig:
     sleep_deep_ticks: int = 4          # ticks of unbroken sleep to reach deep sleep (2 h)
     sleep_day_efficiency: float = 0.7
     sleep_forced: float = 0.95
+    # Sleep is honest: one can only fall asleep with real sleep pressure (lower at night, when the
+    # body clock opens the gate). Lying down without it is rest, nothing more: no deep sleep, no sleep
+    # healing or calm. (Before this, choosing sleep at no sleepiness gave sleep's benefits for free.)
+    sleep_onset: float = 0.3           # sleepiness needed to fall asleep by day (~12 h awake)
+    sleep_onset_night: float = 0.1     # ... at night
     sleep_wake_block: float = 0.6
     sleep_energy: float = 0.01         # extra energy per tick of deep sleep, beyond resting
     sleep_stress_relief: float = 0.01  # stress removed per tick of deep sleep
@@ -498,8 +570,8 @@ class EnvConfig:
     # Nominal physical scale, derived from rules the world already has. One move per tick at a
     # walking pace of 4 km/h makes a cell 2 km across at 30-minute ticks (67 m at 1 minute); the altitude cooling (6 C over the
     # map's full relief) at the usual 6.5 C per km makes the relief about 900 m. Close-range rules
-    # (striking or huddling with someone in a neighbouring cell) do not fit a 2 km cell: the scale
-    # is nominal, for describing tiles, and no rule uses it.
+    # (striking or huddling with someone in a neighbouring cell) do not fit a 2 km cell. The plant
+    # ecology (ecology=True) and camp fouling use it: their amounts are per km^2 times a cell's area.
     walk_kmh: float = 4.0
     lapse_c_per_km: float = 6.5
 
@@ -529,11 +601,14 @@ class EnvConfig:
 
 def with_reproduction(cfg: "EnvConfig", n_founders: int | None = None, **kw) -> "EnvConfig":
     """A config for worlds with births: by default 1 day per biological year (adult about day 15,
-    lifespan about 70 days; days_per_bio_year changes it), founders filling half the slots unless
+    deaths from age most likely about day 70; days_per_bio_year changes it), founders filling half the slots unless
     n_founders is given."""
     import dataclasses
     founders = n_founders if n_founders is not None else max(2, cfg.n_agents // 2)
     dpby = kw.pop("days_per_bio_year", cfg.days_per_bio_year)
+    if "conception_prob" not in kw:            # per act, from the yearly chance and how much time an act stands for
+        acts = max(dpby * kw.get("mating_acts_per_day", cfg.mating_acts_per_day), 1.0)
+        kw["conception_prob"] = round(1.0 - (1.0 - kw.get("conception_per_bio_year", cfg.conception_per_bio_year)) ** (1.0 / acts), 4)
     return dataclasses.replace(cfg, reproduction=True, n_founders=founders, days_per_bio_year=dpby,
                                max_age=int(round(cfg.day_length * dpby * cfg.max_bio_years)), **kw)
 
@@ -565,7 +640,7 @@ _PER_TICK_AMOUNT = (       # added or lost per tick: x k
     "sleep_pressure", "sleep_recovery", "sleep_energy", "sleep_stress_relief", "sleep_debt_stress",
     "attach_warmth", "attach_company", "attach_coparent", "attach_nurse", "attach_shared_threat",
     "attach_absence", "attach_calm", "dark_stress", "guano_rate", "evaporation", "rain_use", "rain_drink",
-    "snow_rate", "snow_melt", "move_cost", "graze_small", "graze_large", "graze_starve", "predator_starve")
+    "snow_rate", "snow_melt", "move_cost", "graze_small", "graze_large", "graze_starve", "predator_starve", "urge_rate", "urge_stress")
 _PER_TICK_CHANCE = (       # a chance each tick: 1 - (1 - p) ** k
     "contact_infection", "mosquito_infection", "spread_prob", "lightning_prob", "predator_prey_kill_prob",
     "predator_large_kill_prob", "small_prey_respawn", "large_prey_respawn", "predator_respawn",
@@ -611,5 +686,6 @@ def living_world(cfg: "EnvConfig", **kw) -> "EnvConfig":
     """The 'living' world: biomes, dynamic weather and a 3-year climate cycle, with the downed (too
     hurt to stand) and grazing animals whose numbers follow their food."""
     import dataclasses
-    kw = {"downed": True, "grazing": True, "clothing": True, **kw}       # living things: the downed, and grazers that eat the land
+    # Excretion stays off unless asked for (an optional complexity: urge, relieving oneself, soiling).
+    kw = {"downed": True, "grazing": True, "clothing": True, "ecology": True, "fouling": True, "excretion": False, **kw}
     return dataclasses.replace(cfg, biomes=True, dynamic_weather=True, climate_cycle_years=3.0, **kw)

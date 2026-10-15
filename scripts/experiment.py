@@ -30,7 +30,7 @@ culture   Replicate worlds: the same map and founders (map seed 21), different h
 core      The proposal's core experiment: reward sharing alpha in {0, 0.5, 1} x food {1.0, 0.4}
           x seeds {0, 1, 2} = 18 runs of the same preset, each followed by a continuous world.
 gate      Did the validated caveman agents persist in their continuous world (births, and people
-          born there still alive after every founder would have died of age)? core, archetypes,
+          born there reaching fertile age)? core, archetypes,
           inheritance and stress refuse to start until it passes (--skip-gate to override), so
           hours are not spent on agents that cannot persist.
 report    Training results grouped by condition (scripts/compare_runs.py) and a table of how each
@@ -122,13 +122,13 @@ def run(cmd, log):
                 if "update" in r:
                     d = r["deaths"]
                     print(f"  steps {r['agent_steps']:>12,}  lifespan {r['mean_age_at_death']:>7}  "
-                          f"thirst {d.get('thirst', 0) / max(1, sum(d.values())):4.0%}  births {r.get('births')}  "
+                          f"thirst {d.get('thirst', 0) / max(1, sum(d.values())):4.0%}  births {r.get('births')} (cap stopped {r.get('conceptions_blocked_by_slot_cap', 0)})  "
                           f"asleep n/d {r.get('asleep_share_night')}/{r.get('asleep_share_day')}  "
                           f"learned {r.get('learned_share')}  {r.get('agent_sps', 0):,.0f}/s", flush=True)
                 elif "chunk" in r:
                     p = r["population"]
                     print(f"  chunk {r['chunk']:>3} {r['to']:>20}  alive {p['alive']:>2}  "
-                          f"births so far {r['births_so_far']}  generation {p['max_generation']}", flush=True)
+                          f"births so far {r['births_so_far']}  generation {p['max_generation']}  slots {r.get('slots')}", flush=True)
             elif line.strip() and not line.startswith(("backend=", "using checkpoint")):
                 print("  " + line.rstrip(), flush=True)
         return proc.wait()
@@ -156,7 +156,7 @@ def gate(root, adult_days=15.0, day_length=None):
     """(passed, lines): did the caveman agents' continuous world outlast its founders? Passed when
     someone born in the world reached fertile age (15 biological years, i.e. 15 days): the next
     generation could carry on. Births alone are not enough (infants die), nor is a long-lived world
-    of founders (they all die of age by day 52)."""
+    of founders (most die of age within a few dozen days of the start)."""
     cont = Path(root) / "validate" / "caveman" / "continuous"
     f = cont / "summary.json"
     if not f.exists() or not json.load(open(f)):
@@ -172,12 +172,16 @@ def gate(root, adult_days=15.0, day_length=None):
     day_length = day_length or day_length_of(cont)
     grown = [l for l in lives if l.get("born_t", 0) > 0 and l["ticks"] >= adult_days * day_length]
     ok = len(grown) > 0
+    capped = sum(c.get("reproduction", {}).get("blocked_by_slot_cap", 0) for c in S)
     lines = [f"caveman continuous world: {5 * len(S)} days, {matings} matings, {births} births, "
              f"{len(grown)} born there reached adulthood, alive at the end {last['population']['alive']}",
              "GATE PASSED: a generation born in the world grew up" if ok else
              "GATE FAILED: no one born in the trained agents' world grew up, so it cannot outlast its "
              "founders. Fix that before spending GPU hours on core, archetypes, inheritance or stress "
              "(--skip-gate runs them anyway)."]
+    if capped:
+        lines.append(f"  slot cap: {capped} conceptions found every slot taken, so the cap, not the world, "
+                     "limited births (a world grows when nearly full; this many arrived faster than it could)")
     return ok, lines
 
 
@@ -291,6 +295,41 @@ def world_row(label, S):
             + ", ".join(f"{k} {v}" for k, v in sorted(deaths.items(), key=lambda kv: -kv[1])))
 
 
+def society_section(root, runs):
+    """Society in each run's continuous world (scripts/society.py), the last full year: groups,
+    company sought beyond chance, bands, sharing, joint hunts, division of labour, punishment; the
+    full per-year results go to <root>/society.json."""
+    sys.path.insert(0, str(HERE))
+    import society
+    from society_data import World
+    rows, full = [], {}
+    for r in runs:
+        cont = r / "continuous"
+        if not (cont / "trace.npz").exists():
+            continue
+        try:
+            res = society.analyse(World(cont, need_trace=True), window_days=40.0, nulls=39)
+        except (SystemExit, Exception) as e:                     # one bad world must not stop the report
+            print(f"  society: {r.parent.name}/{r.name}: {e}")
+            continue
+        full[f"{r.parent.name}/{r.name}"] = res
+        w = next((x for x in reversed(res["windows"]) if x["bands"]), None)
+        if w is None:
+            continue
+        b, s, h, lab, pu = w["bands"], w["sharing"], w["hunting"], w["labour"], w["punishment"]
+        f = society._f
+        rows.append(f"{r.parent.name + '/' + r.name:<30}{w['from_day']:>6.0f}{f(b['typical_group_size']):>7}{f(b['alone']):>7}"
+                    f"{f(b.get('association_ratio')):>8} ({f(b.get('gregarious_p'), 3):>5}){len(b['bands']):>6}"
+                    f"{f(s.get('gifts_per_person_year')):>9}{f(s.get('reciprocity_r')):>7}{f(h.get('joint_share')):>7}"
+                    f"{f(lab.get('dol')):>7} ({f(lab.get('dol_p'), 3):>5}){f(pu.get('punishment_ratio')):>7} ({f(pu.get('p'), 3):>5})")
+    if rows:
+        print("\n=== society in the continuous worlds (last year; scripts/society.py for every year)")
+        print(f"{'run':<30}{'day':>6}{'group':>7}{'alone':>7}{'assoc x':>8} {'(p)':>7}{'bands':>6}{'gifts/py':>9}"
+              f"{'recip':>7}{'joint':>7}{'DOL':>7} {'(p)':>7}{'punish':>7} {'(p)':>7}")
+        print("\n".join(rows))
+        (Path(root) / "society.json").write_text(json.dumps(full, indent=1, default=str))
+
+
 def report(root):
     root = Path(root)
     runs = sorted(p.parent for p in root.glob("*/*/history.json"))
@@ -311,6 +350,7 @@ def report(root):
         f = r / "continuous" / "summary.json"
         if f.exists() and json.load(open(f)):
             print(world_row(r.parent.name + "/" + r.name, json.load(open(f))))
+    society_section(root, runs)
     st = sorted((root / "stress").glob("*/summary.json"))
     if st:
         print("\n=== stress: a 10-day shock from day 40 (control: the run's own unshocked world)")

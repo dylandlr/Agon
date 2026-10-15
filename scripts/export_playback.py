@@ -31,8 +31,67 @@ TEMPLATE = Path(__file__).with_name("playback_template.html")
 BODY_MODEL = Path(__file__).with_name("body_model.js")
 
 
+SLOW_FIELDS = ("plants", "flora", "clouds", "snow", "air_map", "bugs_map")
+
+
+def thin_fields(data) -> None:
+    """Per-cell fields (one character per cell) on every frame would make a RimWorld-sized map's page
+    hundreds of MB, so they are kept on every k-th frame only (at least every half hour of game time
+    on small maps; about one field-set per 4,096 cells' worth of frames on big ones). The player
+    carries each one forward to the frames between."""
+    frames, g = data.get("frames", []), int(data.get("grid", 32))
+    tick = float((data.get("consts") or {}).get("tick_minutes", 30.0))
+    k = max(1, round(30.0 / tick), -(-g * g // 4096))
+    data["field_every"] = k
+    for i, f in enumerate(frames):
+        if i % k:
+            for key in SLOW_FIELDS:
+                f.pop(key, None)
+    # Lists of cells that change little from tick to tick (wood lying, minerals, hives, mounds) are
+    # stored whole on those frames and as changes in between: "<key>~": [added or changed, removed]
+    ident = {"minerals": 3}
+    for key in DIFF_FIELDS:
+        prev = None
+        for i, f in enumerate(frames):
+            cur = f.get(key)
+            if cur is None:
+                continue
+            n = ident.get(key, 2)
+            if i % k == 0 or prev is None:
+                prev = {tuple(e[:n]): e for e in cur}
+                continue
+            now = {tuple(e[:n]): e for e in cur}
+            add = [e for kk, e in now.items() if prev.get(kk) != e]
+            gone = [list(kk) for kk in prev if kk not in now]
+            del f[key]
+            if add or gone:
+                f[key + "~"] = [add, gone]
+            prev = now
+    # what each agent remembers of the map: mostly unseen (0), so runs are written "d(count)"
+    for snap in data.get("knowledge") or []:
+        for field in ("rec", "plants"):
+            snap[field] = [rle(x) for x in snap[field]]
+    data["rle"] = True
+
+
+DIFF_FIELDS = ("wood", "minerals", "honey", "grubs", "marks")
+
+
+def rle(text: str) -> str:
+    """Runs of five or more of one digit as '<digit>(<count>)' (the player expands them)."""
+    out, i = [], 0
+    while i < len(text):
+        j = i
+        while j < len(text) and text[j] == text[i]:
+            j += 1
+        out.append(f"{text[i]}({j - i})" if j - i >= 5 else text[i] * (j - i))
+        i = j
+    return "".join(out)
+
+
 def page_html(data) -> str:
     """The playback page with its data and the body model inlined (one self-contained file)."""
+    thin_fields(data)
     return (TEMPLATE.read_text().replace("/*__BODY_MODEL__*/", BODY_MODEL.read_text())
             .replace("/*__PLAYBACK_DATA__*/null", json.dumps(data, separators=(",", ":"))))
 from lifesim import conditions as _cond  # noqa: E402
@@ -40,6 +99,7 @@ COND_NAMES = _cond.NAMES
 from lifesim import minerals as _min  # noqa: E402
 from lifesim import techtree as _tech  # noqa: E402
 from lifesim import fauna as _fa  # noqa: E402
+from lifesim import ecology as _eco  # noqa: E402
 from lifesim.policy import DECODE_NAMES  # noqa: E402
 
 # ---------------------------------------------------------------- the decision behind each action
@@ -67,11 +127,14 @@ def obs_groups(cfg):
     chan[E.CH_BODIES] = 6
     chan[E.CH_MINERALS:E.CH_MINERALS + E.N_MINERAL_CHANNELS] = 5                              # minerals (how they look)
     chan[E.CH_FAUNA:E.CH_FAUNA + E.N_FAUNA_CHANNELS] = 3                                       # animals' looks, bugs
+    chan[E.CH_FLORA:E.CH_FLORA + 4] = 1                                                       # plants by kind
+    chan[E.CH_FLORA + 4] = 0                                                                  # waste (the land)
+    chan[E.CH_FLORA + 5] = 11                                                                 # something written there
     groups = [np.tile(chan, v * v)]
     own = np.full(E.OWN_FEATURES, 8)                                                           # body, underground, conditions
-    own[[0, 1, 2, 19, 20]] = 7                                                                 # satiety, water, energy, sleepiness, asleep
+    own[[0, 1, 2, 19, 20, 22]] = 7                                                             # satiety, water, energy, sleepiness, asleep, urge
     groups += [own, np.full(2 * E.N_MAT + 1, 9), np.full(5 + E.N_WEATHER, 10),
-               np.full(E.HEARD_FEATURES, 11), np.full(E.map_features(cfg), 12)]
+               np.full(E.HEARD_FEATURES, 11), np.full(E.READ_FEATURES, 11), np.full(E.map_features(cfg), 12)]
     g = np.concatenate(groups)
     assert len(g) == E.obs_dim(cfg), (len(g), E.obs_dim(cfg))
     return g
@@ -144,8 +207,27 @@ def idea_record(ideas, i):
             "trust": round(float(d["trust"]), 4)}
 
 
-def mind_records(probs, value, why, reward, social, ideas=None):
-    """Per-agent JSON-ready summaries of one decision."""
+# What an agent's own choice produced: these events carry "p", the likelihood its policy gave the
+# action it took, so a deliberate act can be told from a rare slip (a sampled action the policy
+# itself rated unlikely; with ~78 actions and an entropy bonus, every allowed action keeps some).
+ACT_EVENTS = {"strike_agent", "strike_animal", "strike_miss", "kill", "touch", "release", "gather", "eat", "drink",
+              "ignite", "fed_fire", "relieved", "place", "write"}
+
+
+def stamp_choice(evs, chosen_p):
+    """Add the chosen action's likelihood to the events an agent's own act produced."""
+    if chosen_p is None:
+        return evs
+    cp = np.asarray(chosen_p)
+    for ev in evs:
+        k = ev.get("agent", -1)
+        if ev.get("type") in ACT_EVENTS and 0 <= k < len(cp):
+            ev["p"] = round(float(cp[k]), 4)
+    return evs
+
+
+def mind_records(probs, value, why, reward, social, ideas=None, acts=None):
+    """Per-agent JSON-ready summaries of one decision (p: the likelihood of the action taken)."""
     probs, value, why = np.asarray(probs), np.asarray(value), np.asarray(why)
     reward, social = np.asarray(reward), np.asarray(social)
     out = []
@@ -156,6 +238,8 @@ def mind_records(probs, value, why, reward, social, ideas=None):
                "value": round(float(value[i]), 3),
                "why": [[MIND_GROUPS[g], round(float(why[i, g]), 2)] for g in lean if why[i, g] > 0.02],
                "felt": round(float(reward[i]), 4), "felt_others": round(float(social[i]), 4)}
+        if acts is not None:
+            rec["p"] = round(float(probs[i, int(np.asarray(acts)[i])]), 4)
         if ideas is not None:
             idea = idea_record(ideas, i)
             if idea:
@@ -186,6 +270,9 @@ def world_static(state, cfg):
                        "comfort_temp": cfg.comfort_temp, "air_min": AIR_MIN, "view_radius": cfg.view_radius,
                        "tick_minutes": cfg.tick_minutes, "day_length": cfg.day_length, "stress_sources": list(E.STRESS_SOURCES),
                        "cell_km": cfg.cell_km, "relief_m": cfg.relief_m,
+                       "ecology": bool(cfg.ecology), "fouling": bool(cfg.fouling), "flora_kinds": list(_eco.KINDS),
+                       "plant_unit_kcal": round(_eco.unit_kcal(cfg)), "foul_ref": cfg.foul_ref,
+                       "language_mode": cfg.language_mode, "writing": bool(cfg.writing), "lexicon": list(E.LEXICON),
                        "max_bio_years": cfg.max_bio_years, "care_empathy": cfg.care_empathy,
                        "care_kin": cfg.care_kin, "care_reciprocity": cfg.care_reciprocity,
                        "care_revenge": cfg.care_revenge, "loneliness_stress": cfg.loneliness_stress,
@@ -277,7 +364,7 @@ def build_frame(t, prev, state, a, info, evs, env_cfg, n_agents, minds=None):
                 "scars": round(float(s.scars[i]), 2), "lasting_injury": round(float(s.lasting_injury[i]), 2),
                 "stress": round(float(s.stress[i]), 2), "clothing": round(float(s.clothing[i]), 2),
                 "sw": [int(round(1e4 * float(v))) for v in sf[i]] if sf[i].max() > 5e-5 else 0,
-                "asleep": bool(s.asleep[i]), "sleepiness": round(float(s.sleepiness[i]), 2),
+                "asleep": bool(s.asleep[i]), "sleepiness": round(float(s.sleepiness[i]), 2), "urge": round(float(s.urge[i]), 2),
                 "existed": bool(s.existed[i]), "sex": "female" if int(s.sex[i]) == E.FEMALE else "male",
                 "pregnant": bool(s.gestation[i] > 0), "courting": bool(s.courting[i] > 0), "mother": int(s.mother[i]),
                 "below": bool(s.below[i]), "dark": bool(np.asarray(info.dark)[i]),
@@ -316,7 +403,20 @@ def build_frame(t, prev, state, a, info, evs, env_cfg, n_agents, minds=None):
         # minerals lying on the ground: [row, column, mineral index, amount]
         "minerals": [[int(r), int(c), int(k), round(float(s.minerals[r, c, k]), 1)]
                      for r, c, k in zip(*np.nonzero(s.minerals > 0.05))],
-        "plants": "".join(str(min(3, int(round(float(v))))) for v in s.plants.reshape(-1)),
+        # inscriptions: [row, column, 4 symbols (env.LEXICON words in grounded mode), what it is on]
+        # (env.SURF_*: 1 wood, a sign; 2 a stone; 3 rock; 4 bark; + 8 when drawn in pigment)
+        **({"marks": [[int(r), int(c), *[int(v) for v in s.marks[r, c]], int(s.mark_kind[r, c])]
+                      for r, c in zip(*np.nonzero(np.asarray(s.marks).any(-1)))]}
+           if env_cfg.writing else {}),
+        "plants": "".join(str(min(3, int(round(float(v) * (3.0 / env_cfg.plant_max if env_cfg.ecology else 1.0)))))
+                          for v in np.asarray(E.forage_grid(s, env_cfg)).reshape(-1)),
+        # with ecology: each cell's four kinds (greens, fruit, nuts, roots), how well each would gather
+        # there, 0-9; and waste where people have stayed: [row, column, 1-9]
+        **({"flora": "".join(str(min(9, int(round(9 * float(q))))) for q in
+                             np.asarray(_eco.quality(s.flora, env_cfg)).reshape(-1))} if env_cfg.ecology else {}),
+        **({"foul": [[int(r), int(c), int(v)] for (r, c), v in
+                     np.ndenumerate(np.round(9 * (1 - np.exp(-np.asarray(s.foul) / env_cfg.foul_ref)))) if v >= 1]}
+           if env_cfg.fouling else {}),
         "events": [ev["id"] for ev in evs],
         "ties": ties,
         **weather_record(t, state, env_cfg),
@@ -365,7 +465,9 @@ def main():
     ap.add_argument("--tick-minutes", type=float, default=None,
                     help="game minutes per tick (default: the run's own, else 30; 1 = RimWorld-like)")
     ap.add_argument("--agents", type=int, default=6)
-    ap.add_argument("--grid", type=int, default=32)
+    ap.add_argument("--grid", type=int, default=None,
+                    help="map size (default 32; with --run, the run's own, or this to put trained agents on another "
+                         "map: their senses are local and the remembered map is pooled to a fixed size)")
     ap.add_argument("--hidden", type=int, default=128)
     ap.add_argument("--encoder", choices=["conv", "mlp"], default="mlp")
     ap.add_argument("--days", type=float, default=2.0)
@@ -373,6 +475,9 @@ def main():
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--out", type=str, default="runs/playback.html")
     ap.add_argument("--world", choices=["classic", "living"], default="classic", help="for --random and --decisions")
+    ap.add_argument("--language", choices=["emergent", "grounded"], default=None, help="for --random and --decisions")
+    ap.add_argument("--writing", action="store_true", help="for --random and --decisions")
+    ap.add_argument("--excretion", action="store_true", help="with --world living, for --random and --decisions")
     for knob, what in (("food", "plant abundance (scarcity)"), ("predators", "predator numbers (0 = harmless)"),
                        ("disease", "infection chances"), ("hazards", "extreme weather, lightning, falls")):
         ap.add_argument(f"--{knob}", type=float, default=None,
@@ -385,8 +490,10 @@ def main():
 
     if args.run and not args.random and not args.decisions and (Path(args.run) / "history.json").exists():
         hist = json.load(open(Path(args.run) / "history.json"))["args"]
-        args.agents, args.grid = hist["agents"], hist["grid"]
+        args.agents = hist["agents"]
+        args.grid = args.grid or hist["grid"]
         args.encoder = hist.get("encoder", args.encoder)
+    args.grid = args.grid or 32
     env_cfg = EnvConfig(grid_size=args.grid, n_agents=args.agents, skills=args.slate == "caveman")
     if args.run and not args.random and not args.decisions and (Path(args.run) / "history.json").exists():
         h = json.load(open(Path(args.run) / "history.json"))["args"]
@@ -397,12 +504,19 @@ def main():
         if h.get("world") == "living":
             env_cfg = living_world(env_cfg, underground=bool(h.get("underground", False)),
                                    downed=bool(h.get("downed", False)), grazing=bool(h.get("grazing", False)),
-                                   clothing=bool(h.get("clothing", False)))
+                                   clothing=bool(h.get("clothing", False)), ecology=bool(h.get("ecology", False)),
+                                   fouling=bool(h.get("fouling", False)),
+                               excretion=bool(h.get("excretion", True)))   # runs from before the flag had it on
+        import dataclasses as _dc
+        env_cfg = _dc.replace(env_cfg, language_mode=h.get("language", "emergent"), writing=bool(h.get("writing", False)))
         if h.get("reproduction"):
             env_cfg = with_reproduction(env_cfg, n_founders=h.get("founders") or None)
     elif args.world == "living":
         from lifesim.config import living_world
-        env_cfg = living_world(env_cfg, underground=args.underground)
+        env_cfg = living_world(env_cfg, underground=args.underground, excretion=args.excretion)
+    if args.language or args.writing:
+        import dataclasses as _dc
+        env_cfg = _dc.replace(env_cfg, language_mode=args.language or env_cfg.language_mode, writing=args.writing or env_cfg.writing)
     from lifesim.threats import with_threats
     run_knobs = {}
     if args.run and not args.random and not args.decisions and (Path(args.run) / "history.json").exists():
@@ -472,8 +586,10 @@ def main():
         if t < skip:
             continue
         evs = _stamp_events(extract_events(info, np.asarray(a), last_event, state, prev, env_cfg), env_cfg)
+        if policy is not None:
+            stamp_choice(evs, np.asarray(probs)[np.arange(args.agents), np.asarray(a)])
         events.extend(evs)
-        minds = None if policy is None else mind_records(probs, value, why, reward, info.moral_reward, ideas)
+        minds = None if policy is None else mind_records(probs, value, why, reward, info.moral_reward, ideas, a)
         frames.append(build_frame(t, prev, state, a, info, evs, env_cfg, args.agents, minds))
         if (t - skip) % 12 == 0:
             knowledge.append(knowledge_snapshot(t, state))

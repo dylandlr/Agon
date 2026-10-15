@@ -36,13 +36,14 @@ import jax.numpy as jnp
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from export_playback import (page_html, build_frame, knowledge_snapshot, load_population,  # noqa: E402
+from export_playback import (page_html, build_frame, knowledge_snapshot, load_population, stamp_choice,  # noqa: E402
                              make_thinker, mind_records, world_static)
 
 from lifesim import env as E  # noqa: E402
 from lifesim import archetypes  # noqa: E402
 from lifesim import conditions as C  # noqa: E402
 from lifesim import threats  # noqa: E402
+from lifesim import grow as G  # noqa: E402
 from lifesim import techtree  # noqa: E402
 from lifesim.threats import with_threats  # noqa: E402
 from lifesim.analysis import language_metrics  # noqa: E402
@@ -261,7 +262,7 @@ class Chunk:
             self.c[name] += int((sk == k).sum())
         for k in ("woken", "collapsed_now"):
             self.c[k] += int(np.asarray(getattr(info, k)).sum())
-        for k in ("mated", "conceived", "born", "nursed"):
+        for k in ("mated", "conceived", "no_room", "born", "nursed"):
             self.c[k] += int(np.asarray(getattr(info, k)).sum())
 
     def summary(self, state, start_alive):
@@ -290,6 +291,7 @@ class Chunk:
                         "meat_eaten": c["meat_eaten"]},
             "fire": {k: c[k] for k in ("near_fire", "fed_fire", "ate_cooked", "fires_made", "lightning_fires")},
             "reproduction": {"matings": c["mated"] // 2, "conceptions": c["conceived"], "births": c["born"],
+                             "blocked_by_slot_cap": c["no_room"],
                              "nursing_ticks": c["nursed"], "pregnant_now": int(((s.gestation > 0) & alive).sum()),
                              "children_alive": int(((s.mother >= 0) & alive).sum())},
             "sleep": {"asleep_share_night": round(c["asleep_night"] / max(c["alive_night"], 1), 2),
@@ -362,9 +364,13 @@ class Trace:
                                  -1))
 
     def save(self, path, args):
-        np.savez_compressed(path, pos=np.stack(self.pos), below=np.stack(self.below), alive=np.stack(self.alive),
-                            action=np.stack(self.action),
-                            msg=np.stack(self.msg), spoke=np.stack(self.spoke), ctx=np.stack(self.ctx),
+        def stack(xs):             # a world that grew has more slots later: earlier ticks padded (unborn, empty)
+            n = max(x.shape[0] for x in xs)
+            return np.stack([x if x.shape[0] == n else
+                             np.concatenate([x, np.zeros((n - x.shape[0],) + x.shape[1:], x.dtype)]) for x in xs])
+        np.savez_compressed(path, pos=stack(self.pos), below=stack(self.below), alive=stack(self.alive),
+                            action=stack(self.action),
+                            msg=stack(self.msg), spoke=stack(self.spoke), ctx=stack(self.ctx),
                             context_names=np.array(["predator", "large_prey", "fire"]),
                             map_seed=np.int64(-1 if args.map_seed is None else args.map_seed),
                             seed=np.int64(args.seed), view_radius=np.int64(self.cfg.view_radius),
@@ -450,6 +456,11 @@ def main():
     ap.add_argument("--imitation", type=float, default=None,
                     help="social learning weight while living (default: the run's; 0 = no learning by watching)")
     ap.add_argument("--no-trace", action="store_true", help="skip trace.npz (positions, actions, speech per tick)")
+    ap.add_argument("--no-grow", action="store_true",
+                    help="keep the run's slot count (default: when nearly full, the world doubles its slots, so "
+                         "no cap limits the population; each doubling recompiles the step)")
+    ap.add_argument("--grow-headroom", type=int, default=None,
+                    help="grow when fewer slots than this are free (default: an eighth of the slots, at least 2)")
     args = ap.parse_args()
     if args.inherit == "innate" and not args.learn:
         raise SystemExit("--inherit innate needs --learn: without learning, brains never change after birth")
@@ -464,7 +475,11 @@ def main():
     if hist.get("world") == "living":
         env_cfg = living_world(env_cfg, underground=bool(hist.get("underground", False)),
                                downed=bool(hist.get("downed", False)), grazing=bool(hist.get("grazing", False)),
-                               clothing=bool(hist.get("clothing", False)))
+                               clothing=bool(hist.get("clothing", False)), ecology=bool(hist.get("ecology", False)),
+                               fouling=bool(hist.get("fouling", False)),
+                               excretion=bool(hist.get("excretion", True)))   # runs from before the flag had it on
+        import dataclasses as _dc
+        env_cfg = _dc.replace(env_cfg, language_mode=hist.get("language", "emergent"), writing=bool(hist.get("writing", False)))
     if hist.get("reproduction"):
         env_cfg = with_reproduction(with_time_scale(env_cfg, hist.get("days_per_year", 40),
                                                     hist.get("days_per_bio_year", 1.0)),
@@ -513,8 +528,9 @@ def main():
             p, c, (o[None, None], reset[None, None], m[None, None])))(params, carry, obs, full)
         logits = logits[:, 0, 0]
         ka, km = jax.random.split(k)
-        return carry, jax.random.categorical(ka, logits[:, :A]), \
-            jax.random.categorical(km, logits[:, A:].reshape(-1, E.MSG_LEN, E.VOCAB))
+        a = jax.random.categorical(ka, logits[:, :A])
+        p = jnp.take_along_axis(jax.nn.softmax(logits[:, :A], -1), a[:, None], -1)[:, 0]   # how likely it rated its own choice
+        return carry, a, jax.random.categorical(km, logits[:, A:].reshape(-1, E.MSG_LEN, E.VOCAB)), p
 
     world_fns = {}
 
@@ -574,6 +590,34 @@ def main():
             learn_log[name] += float(v)
         return params, opt_state, key, memory
 
+    can_grow = bool(env_cfg.reproduction) and not args.no_grow
+    room = lambda: args.grow_headroom if args.grow_headroom is not None else G.headroom(n)
+
+    def grow_world():
+        """Double the slots: every structure sized by them is copied into one of the new size, and
+        the step is compiled again. The new slots are unborn until a child is born into one."""
+        nonlocal state, env_cfg, base_cfg, n, params, innate, opt_state, learner, memory, carry, buf_carry
+        nonlocal buf, reset_next, generation, step, observe, key
+        n_old, big = n, G.bigger(env_cfg)
+        key, kg = jax.random.split(key)
+        state = G.grow_state(state, env_cfg, big, kg)
+        params = G.pad_agents(params, n_old, big.n_agents, fill="first")
+        innate = G.pad_agents(innate, n_old, big.n_agents, fill="first")
+        carry, buf_carry = (G.pad_agents(c, n_old, big.n_agents) for c in (carry, buf_carry))
+        buf = [G.pad_agents(tr, n_old, big.n_agents) for tr in buf]       # new slots' steps: not valid
+        reset_next = np.concatenate([reset_next, np.ones(big.n_agents - n_old, bool)])
+        generation = np.concatenate([generation, np.full(big.n_agents - n_old, -1)])
+        if args.learn:
+            _, _, learner = make_train(big, lcfg)
+            opt_state = G.grow_like(opt_state, learner.opt_init(params), n_old, big.n_agents)
+            memory = G.grow_like(memory, learner.empty_memory(1, E.obs_dim(big)), n_old, big.n_agents)
+        base_cfg = G.bigger(base_cfg)
+        env_cfg, n = big, big.n_agents
+        world_fns.clear()
+        step, observe = fns_for(in_force)
+        print(f"the world grew from {n_old} to {n} slots at {E.clock(t, env_cfg)['stamp']} "
+              f"({int(np.asarray(state.alive).sum())} alive)", flush=True)
+
     pb_days = args.playback_days if args.playback_days is not None else (
         args.chunk_days if env_cfg.tick_minutes >= 30 else 1.0)
     pb_ticks = int(pb_days * env_cfg.day_length)
@@ -608,8 +652,9 @@ def main():
             rec_now = record and (t - t0) < pb_ticks
             if rec_now:
                 carry, a, msg, probs, value, why, ideas = think(params, carry, obs, mask, jnp.asarray(t == 0), k)
+                chosen_p = np.asarray(probs)[np.arange(n), np.asarray(a)]
             else:
-                carry, a, msg = policy(params, carry, obs, mask, jnp.asarray(t == 0), k)
+                carry, a, msg, chosen_p = policy(params, carry, obs, mask, jnp.asarray(t == 0), k)
             prev = state
             state, reward, _, info = step(state, a, msg)
             if args.learn:
@@ -658,8 +703,8 @@ def main():
                 lives.start(int(c), t, state, int(generation[c]), int(np.asarray(state.mother)[c]),
                             int(np.asarray(prev.father)[int(np.asarray(state.mother)[c])]))
             # every event, recorded chunk or not, goes to the run's causal log (events.jsonl.gz)
-            evs = _stamp_events(shock_events + extract_events(info, np.asarray(a), last_event, state, prev, env_cfg),
-                                env_cfg)
+            evs = stamp_choice(_stamp_events(shock_events + extract_events(info, np.asarray(a), last_event, state, prev, env_cfg),
+                                             env_cfg), chosen_p)
             for i in in_force:                          # hardships a shock makes likelier name it as a cause
                 sh = shocks[i]
                 for ev in evs:
@@ -672,10 +717,12 @@ def main():
             if rec_now:
                 events.extend(evs)
                 frames.append(build_frame(t, prev, state, a, info, evs, env_cfg, n,
-                                          mind_records(probs, value, why, reward, info.moral_reward, ideas)))
+                                          mind_records(probs, value, why, reward, info.moral_reward, ideas, a)))
                 if (t - t0) % max(1, env_cfg.day_length // 4) == 0:
                     knowledge.append(knowledge_snapshot(t, state))
             t += 1
+            if can_grow and G.free_slots(state) < room():
+                break                                   # end the chunk here; the world grows before the next
         idx = len(summaries)
         summ = {"chunk": idx, "from": E.clock(t0, env_cfg)["stamp"], "to": E.clock(t - 1, env_cfg)["stamp"],
                 **chunk.summary(state, start_alive)}
@@ -699,6 +746,7 @@ def main():
             (out_dir / f"chunk_{idx:03d}.html").write_text(
                 page_html(data))
         summ["births_so_far"] = len(births_log)
+        summ["slots"] = n
         if args.learn:
             u = max(learn_log["updates"], 1)
             summ["learning"] = {"updates": int(learn_log["updates"]), "inherit": args.inherit,
@@ -724,6 +772,8 @@ def main():
         if summ["alive_end"] == 0:
             print(f"everyone has died by {summ['to']}; stopping (no births)", flush=True)
             break
+        while can_grow and G.free_slots(state) < room():
+            grow_world()
     event_log.close()
     # the whole run as cause-and-effect stories (scripts/causal_story.py)
     from causal_story import load_events, tell
