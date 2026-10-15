@@ -186,7 +186,7 @@ def run(cfg, seed, days, knowledge="full", shocks=()):
     s = E.reset(jax.random.PRNGKey(seed), cfg)
     in_force = ()
     deaths, seasons, pop = collections.Counter(), collections.Counter(), []
-    births, peak, last_alive_day = 0, int(s.alive.sum()), 0
+    births, peak, last_alive_day, no_room = 0, int(s.alive.sum()), 0, 0
     born_here = np.zeros(cfg.n_agents, bool)          # slot's occupant was born in this world
     births_to_born_here = 0                           # children of mothers born here: a second generation
     for t in range(int(days * cfg.day_length)):
@@ -202,6 +202,7 @@ def run(cfg, seed, days, knowledge="full", shocks=()):
             seasons[E.SEASON_NAMES[int(E.season_of(jnp.int32(t), cfg))]] += 1
         gave = np.asarray(info.gave_birth)
         births += int(gave.sum())
+        no_room += int(np.asarray(info.no_room).sum())
         births_to_born_here += int((gave & born_here).sum())
         born_here |= np.asarray(info.born)
         alive = int(np.asarray(s.alive).sum())
@@ -215,7 +216,7 @@ def run(cfg, seed, days, knowledge="full", shocks=()):
     return {"seed": seed, "days_lasted": last_alive_day if pop and pop[-1] == 0 else len(pop),
             "extinct": int(np.asarray(s.alive).sum()) == 0, "alive_end": int(np.asarray(s.alive).sum()),
             "peak": peak, "births": births, "births_to_mothers_born_here": births_to_born_here,
-            "deaths": dict(deaths), "deaths_by_season": dict(seasons),
+            "conceptions_blocked_by_slot_cap": no_room, "deaths": dict(deaths), "deaths_by_season": dict(seasons),
             "population_by_day": pop}
 
 

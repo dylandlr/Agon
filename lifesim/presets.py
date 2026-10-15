@@ -19,7 +19,10 @@ PRESETS = {
     # is 64 km across): 30x less compute per game day than "society", so a 1e8-step budget lives ~50
     # game years per world instead of ~2, enough for many generations. Coarser in time (a tick is half
     # an hour of doing one thing), and each cell's plants are those of a 4 km^2 patch.
-    "society30": dict(agents=16, founders=8, reproduction=True, reward_mode="survival",
+    # 32 slots, not 16: with 16 a scripted band filled every slot and the cap, not the world, stopped
+    # its children (only deaths of age; one of three seeds aged out by day 87); with 32 the world's
+    # thirst, hunger and disease set the numbers (10 to 32) and 3 of 3 seeds lived 320 days.
+    "society30": dict(agents=32, founders=8, reproduction=True, reward_mode="survival",
                       grid=32, steps=128, encoder="conv", slate="caveman", world="living", world_model=True,
                       episode_years=10, tick_minutes=30.0),
     # A band large enough for culture to accumulate: 64 slots (24 founders) on a 300 x 300 world

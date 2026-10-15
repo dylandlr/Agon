@@ -17,4 +17,4 @@ cd "$SCRATCH/lifesim"
 export XLA_PYTHON_CLIENT_PREALLOCATE=false
 mkdir -p logs
 nvidia-smi
-python scripts/benchmark.py --preset ${PRESET:-society} --worlds 32 64 128 256 --target-agent-steps 1e8
+python scripts/benchmark.py --preset ${PRESET:-society} --worlds 4 8 16 32 64 128 256 --target-agent-steps 1e8

@@ -54,7 +54,7 @@ def test_a_feud_and_a_death_are_linked_by_their_mechanics():
     story = " ".join(lines)
     assert "#0 struck #1 -> (#0's blow)" in story and "(striking back at #0)" in story
     assert story.rstrip().endswith("#0 died of violence")
-    assert any("violence: 1 (1 began with: a blow)" in x for x in summary)
+    assert any("violence: 1 (1 began with: an act of aggression)" in x for x in summary)
 
 
 def test_illness_is_traced_to_the_sick_neighbour_and_orphans_to_their_mother():

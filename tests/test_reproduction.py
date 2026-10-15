@@ -313,3 +313,36 @@ def test_conception_per_act_follows_the_time_scale():
         acts = dpby * cfg.mating_acts_per_day
         assert 1 - (1 - cfg.conception_prob) ** acts == pytest.approx(cfg.conception_per_bio_year, abs=2e-3)
     assert with_reproduction(EnvConfig(), conception_prob=0.3).conception_prob == 0.3
+
+
+def test_there_is_no_fixed_death_age():
+    """Senescence is a hazard rising with age (Gompertz), not a limit: deaths spread over decades,
+    peaking near max_bio_years, and a longer-lived gene shifts the whole curve."""
+    cfg = EnvConfig()
+    h = lambda y, m=1.0: float(E.senescence_hazard(jnp.float32(y), m, cfg))
+    assert h(20) < 0.002 and 0.005 < h(45) < 0.02 and h(70) == pytest.approx(cfg.senescence_rate, rel=1e-4)
+    assert h(90) < 1.0 and h(84, 1.2) == pytest.approx(h(70), rel=1e-4)
+    years = np.arange(15.0, 130.0, 1 / 52)                       # life table from age 15, weekly
+    surv = np.exp(-np.cumsum(np.asarray(E.senescence_hazard(jnp.asarray(years), 1.0, cfg))) / 52)
+    a = years[np.searchsorted(-surv, -np.random.default_rng(0).random(20000))]   # sampled ages at death
+    assert 60 < np.median(a) < 72 and np.percentile(a, 10) < 50 and np.percentile(a, 99) > 85
+
+
+def test_a_nursing_mother_does_not_conceive_until_her_child_is_weaned():
+    cfg, s = _world()
+    tpy = cfg.ticks_per_bio_year
+    with_child = lambda years: s._replace(alive=s.alive.at[2].set(True), existed=s.existed.at[2].set(True),
+                                          mother=s.mother.at[2].set(0), age=s.age.at[2].set(0),
+                                          birth_age=s.birth_age.at[2].set(int(years * tpy)))
+    both = [MATE, MATE, REST, REST]
+    _, infos = run(cfg, with_child(1.0), both, 1)
+    assert bool(infos[0][1].mated[0]) and not bool(infos[0][1].conceived[0])
+    _, infos = run(cfg, with_child(3.0), both, 1)                  # weaned: fertile again
+    assert bool(infos[0][1].conceived[0])
+
+
+def test_a_conception_the_slot_cap_stopped_is_counted():
+    cfg, s = _world(n=2, founders=2)
+    _, infos = run(cfg, s, [MATE, MATE], 1)
+    i = infos[0][1]
+    assert bool(i.mated[0]) and not bool(i.conceived.any()) and bool(i.no_room[0])

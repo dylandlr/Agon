@@ -189,7 +189,7 @@ they are the same either way; only the seasons stretch. With a real year:
   away. With discount 0.997 the effective horizon is ~330 ticks (7 days), so
   winter is invisible to the returns; even 0.9999 struggles at that range.
 - Each training run sees 9 times fewer winters for the same compute.
-- Lifespans (max_age 20,000 ticks, about 417 days) would cover barely one
+- Lifespans (deaths from age most likely about 20,000 ticks, about 417 days) would cover barely one
   year, not a lifetime of seasons.
 A real year is the right test once multi-horizon value heads, culture or
 evolution can carry seasonal knowledge; it is a stretch condition, not the
@@ -1468,7 +1468,8 @@ Sleep is built in, as in people; how agents handle it is up to them.
 
 Off by default; `--reproduction` (with `--agents` as slots and `--founders`
 alive at the start) or `config.with_reproduction()` turns it on, at 1 day per
-biological year (adult about day 15, lifespan about 70 days).
+biological year (adult about day 15; deaths from age most likely around day 70, see
+*Senescence*).
 
 **Time scale.** `--days-per-year` (calendar: seasons, climate) and `--days-per-bio-year`
 (age: growth, fertility, pregnancy, lifespan) set it; `config.with_time_scale()`. The default
@@ -1499,6 +1500,28 @@ adulthood with it.
   A100 caveman world had 1 birth before its founders died of age. With the scripted band at
   society30 the change took 160-day persistence (run locally) from 1 of 3 seeds to 3 of 3. `conception_prob`
   set explicitly still wins.
+- **Nursing suppresses ovulation** (lactational amenorrhea): a woman with a living child younger
+  than `lactation_infertile_years` (2) cannot conceive; if the child dies, she can. With pregnancy
+  (0.75 years) and the wait to conceive (about 0.6 years at 0.8 a year) births come about 3.4
+  biological years apart, as among foragers (3-4). Without it, at 0.8 a year, scripted bands on
+  society30 bred to any slot count tried (64 included) and lived on thirst and disease deaths.
+  When a dead mother's slot takes a newborn, her surviving children are orphaned
+  (`mother` -1) rather than taking the newborn for their mother.
+- **Senescence: no fixed death age.** Dying of age is a Gompertz hazard, b·exp(b·(x − M)) a
+  biological year, with M = `max_bio_years` (70) the most likely age of death and b =
+  `senescence_rate` (0.085, the risk doubling about every 8 years: the range fitted to
+  hunter-gatherers by Gurven & Kaplan 2007, modal adult death about 72). x is age measured against
+  one's own lifespan (the inherited `lifespan` gene, "long-lived" 1.2x). From age alone about 1 in
+  800 die a year at 20, 1 in 100 at 45, 1 in 12 at 70; 84% of 15-year-olds reach 50, half pass 66,
+  1% pass 88. It is drawn once per biological day. Before, everyone died on the tick their gene
+  allowed (70 x gene, spread 10%), so a cohort born together died together, which with the slot
+  cap below made bands age out in waves. Hunger, cold, disease, predators and childbirth stay their
+  own causes, modelled as they happen.
+- **Slot cap.** Arrays have a fixed size in JAX, so a world has `n_agents` slots and a child needs
+  a free one. A conception the cap stopped is counted (`no_room` in the step info,
+  `conceptions_blocked_by_slot_cap` in training logs, `blocked_by_slot_cap` in continuous worlds,
+  `conceptions_blocked_by_slot_cap` in viability runs). If it is above zero, the cap, not food,
+  water or disease, is limiting the population: raise `--agents`.
 - **Pregnancy** lasts 0.75 biological years (36 ticks); she needs 30% more
   food and water. Childbirth kills the mother 1% of the time (2% if weak).
 - **Birth:** the child appears at the mother's cell in a free slot (never used

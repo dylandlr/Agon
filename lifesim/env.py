@@ -341,6 +341,7 @@ class StepInfo(NamedTuple):
     large_pos: jnp.ndarray             # (n_large, 2)
     collapsed_now: jnp.ndarray         # (N,) bool: fell asleep from exhaustion this tick
     conceived: jnp.ndarray             # (N,) bool: became pregnant
+    no_room: jnp.ndarray               # (N,) bool: would have conceived, but every slot was taken
     gave_birth: jnp.ndarray            # (N,) bool: mother whose child was born this tick
     born: jnp.ndarray                  # (N,) bool: slot that received a newborn this tick
     nursed: jnp.ndarray                # (N,) bool: child nursed by its mother this tick
@@ -1859,7 +1860,9 @@ def _give_birth(ns: State, birthing, key, cfg: EnvConfig):
             mind_map=put(s.mind_map, jnp.zeros(s.mind_map.shape[1:])),
             sleepiness=put(s.sleepiness, 0.0), asleep=put(s.asleep, False), sleep_depth=put(s.sleep_depth, 0),
             collapsed=put(s.collapsed, False),
-            gestation=put(s.gestation, 0), courting=put(s.courting, 0), father=put(s.father, -1), mother=put(s.mother, i),
+            gestation=put(s.gestation, 0), courting=put(s.courting, 0), father=put(s.father, -1),
+            # children of the slot's last occupant are orphans now: they must not take the newborn for their mother
+            mother=put(jnp.where(do & (s.mother == c), -1, s.mother), i),
             relatedness=relatedness, fetus_r=fetus_r,
             memory=clear(s.memory), habituation=clear(s.habituation), attachment=clear(s.attachment),
             conditions=put(s.conditions, draw_inborn(jax.random.fold_in(k_geno, 17), 1, s.conditions[i][None],
@@ -1873,6 +1876,15 @@ def _give_birth(ns: State, birthing, key, cfg: EnvConfig):
     ns, born, _ = jax.lax.fori_loop(0, n, one, (ns, born, key))
     return ns, born
 
+
+
+def senescence_hazard(years, lifespan_mult, cfg):
+    """Deaths from senescence per biological year at this age: Gompertz, b exp(b (x - M)), with x
+    the age measured against one's own lifespan (gene and conditions) and M = max_bio_years the most
+    likely age of death. Never a fixed limit: anyone may die at any age, ever more likely with age."""
+    b = cfg.senescence_rate
+    x = years / lifespan_mult
+    return b * jnp.exp(jnp.minimum(b * (x - cfg.max_bio_years), 20.0))
 
 def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarray | None = None):
     """Resolve one tick for all agents simultaneously.
@@ -2539,7 +2551,18 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
 
     # ---------------------------------------------------------- aging and death
     age = state.age + alive0.astype(jnp.int32)
-    old = (age + state.birth_age) >= (cfg.max_age * geno.lifespan * fx.get("lifespan", 1.0)).astype(jnp.int32)
+    # No fixed death age: senescence is a Gompertz hazard, h(x) = b exp(b (x - M)) per biological
+    # year, whose most likely age of death M is max_bio_years scaled by the lifespan gene and
+    # conditions. Other deaths (hunger, cold, disease, predators...) are modelled as they happen,
+    # so this is only the intrinsic part. It is drawn once per biological day (each agent on its own
+    # phase) rather than every tick, so the chance stays above float32's resolution at fine ticks.
+    tpy_ = cfg.ticks_per_bio_year
+    every = max(1, int(round(tpy_ / 365.0)))
+    total_age = age + state.birth_age
+    hazard = senescence_hazard(total_age / tpy_, geno.lifespan * fx.get("lifespan", 1.0), cfg)
+    p_old = 1.0 - jnp.exp(-hazard * every / tpy_)
+    old = alive0 & (total_age % every == 0) \
+        & (jax.random.uniform(jax.random.fold_in(keys[0], 91), (n,)) < p_old)
     dead_now = alive0 & ((health <= 0.0) | old)
     alive = alive0 & ~dead_now
     cause = jnp.where(old, CAUSE_AGE, 1 + jnp.argmax(components, axis=-1))
@@ -2561,7 +2584,12 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         both = (mating[:, None] & willing[None, :]) | (willing[:, None] & mating[None, :])
         pair = both & adj & female[:, None] & ~female[None, :] \
             & adult[:, None] & adult[None, :]                           # [woman, man], both chose it
-        fertile_f = female & alive & adult & (years < cfg.menopause_years) & (state.gestation == 0) \
+        # Lactational amenorrhea: a mother with a living child young enough to nurse does not ovulate
+        # (it returns if the child dies). With gestation and the wait to conceive this spaces births
+        # about 3.4 biological years apart, as among foragers (3-4).
+        infant = alive0 & (state.mother >= 0) & (years < cfg.lactation_infertile_years)
+        has_infant = jnp.zeros(n, bool).at[jnp.clip(state.mother, 0)].max(infant)
+        fertile_f = female & alive & adult & (years < cfg.menopause_years) & (state.gestation == 0) & ~has_infant \
             & (weight >= cfg.min_condition * bod["ideal_kg"]) & ~sick & (state.stress < cfg.stress_heal_block) \
             & (fx.get("fertile", 1.0) > 0)
         fertile_m = ~female & alive & adult & ~sick & (fx.get("fertile", 1.0) > 0)
@@ -2570,7 +2598,9 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         conceive = jnp.any(pair, axis=1) & fertile_f & fertile_m[partner] \
             & (jax.random.uniform(k_c, (n,)) < cfg.conception_prob)
         free = (~alive).sum() - (state.gestation > 0).sum()             # slots left for children
+        could = conceive
         conceive = conceive & (jnp.cumsum(conceive) <= free)
+        no_room = could & ~conceive           # the slot cap, not the world, stopped this child
         mated = jnp.any(pair, axis=1) | jnp.any(pair, axis=0)
         # An open offer lasts only while the agent stays with it: resting beside or touching the
         # other keeps it; doing anything else (moving away, striking, eating, sleeping...) withdraws
@@ -2600,7 +2630,7 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
                                              state.father_geno, geno)
         father_look = jnp.where(conceive[:, None], state.appearance[partner], state.father_look)
     else:
-        mated = conceive = birthing = jnp.zeros(n, bool)
+        mated = conceive = birthing = no_room = jnp.zeros(n, bool)
         courting = state.courting
         intimate = jnp.zeros((n, n))
         gestation, father, fetus_r = state.gestation, state.father, state.fetus_r
@@ -3035,7 +3065,7 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         small_preyed_by=small_preyed_by, large_preyed_by=large_preyed_by,
         small_species=state.small.species, large_species=state.large.species,
         small_pos=state.small.pos, large_pos=state.large.pos,
-        skill=jnp.where(alive0 & (chosen >= SEEK_WATER), chosen - SEEK_WATER + 1, 0).astype(jnp.int32), collapsed_now=collapse & ~state.asleep, mated=mated, conceived=conceive, gave_birth=birthing, born=born,
+        skill=jnp.where(alive0 & (chosen >= SEEK_WATER), chosen - SEEK_WATER + 1, 0).astype(jnp.int32), collapsed_now=collapse & ~state.asleep, mated=mated, conceived=conceive, no_room=no_room, gave_birth=birthing, born=born,
         nursed=nursing, genetic_reward=genetic, below=next_state.below, delved=delving, dark=dark_now > 0,
         stress_from=stress_src, downed=downed_of(next_state, cfg), relieved=relieving & alive0, soiled=soiled,
         gathered_kind=took_kind if cfg.ecology else jnp.full(n, -1, jnp.int32))

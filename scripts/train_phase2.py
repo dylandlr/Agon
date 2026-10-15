@@ -232,6 +232,7 @@ def main():
                 "deterred_per_1000": per_k(acc["deterred"]),
                 "in_company_share": round(float(acc["company"]) / alive, 3),
                 "births": int(acc["births"]), "conceptions": int(acc["conceptions"]),
+                "conceptions_blocked_by_slot_cap": int(acc.get("no_room", 0)),
                 "matings_per_1000": per_k(acc["matings"]),
                 "asleep_share_night": round(float(acc["asleep_night"]) / max(float(acc["alive_night"]), 1.0), 3),
                 "asleep_share_day": round(float(acc["asleep_day"]) / max(alive - float(acc["alive_night"]), 1.0), 3),

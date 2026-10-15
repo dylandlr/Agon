@@ -261,7 +261,7 @@ class Chunk:
             self.c[name] += int((sk == k).sum())
         for k in ("woken", "collapsed_now"):
             self.c[k] += int(np.asarray(getattr(info, k)).sum())
-        for k in ("mated", "conceived", "born", "nursed"):
+        for k in ("mated", "conceived", "no_room", "born", "nursed"):
             self.c[k] += int(np.asarray(getattr(info, k)).sum())
 
     def summary(self, state, start_alive):
@@ -290,6 +290,7 @@ class Chunk:
                         "meat_eaten": c["meat_eaten"]},
             "fire": {k: c[k] for k in ("near_fire", "fed_fire", "ate_cooked", "fires_made", "lightning_fires")},
             "reproduction": {"matings": c["mated"] // 2, "conceptions": c["conceived"], "births": c["born"],
+                             "blocked_by_slot_cap": c["no_room"],
                              "nursing_ticks": c["nursed"], "pregnant_now": int(((s.gestation > 0) & alive).sum()),
                              "children_alive": int(((s.mother >= 0) & alive).sum())},
             "sleep": {"asleep_share_night": round(c["asleep_night"] / max(c["alive_night"], 1), 2),

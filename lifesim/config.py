@@ -98,9 +98,15 @@ class EnvConfig:
     max_age: int = 20000
     senescence_start: float = 0.6   # (unused since the body model; kept for old configs)
 
-    # Body. Biological age runs on its own clock: max_age ticks = max_bio_years,
+    # Body. Biological age runs on its own clock: max_age ticks = max_bio_years (a scale, not a
+    # limit: see senescence_rate),
     # so one biological year is ~286 ticks (~6 simulated days) by default.
-    max_bio_years: float = 70.0
+    max_bio_years: float = 70.0     # the most likely age of death from senescence (not a limit)
+    # Senescence: a Gompertz hazard b exp(b (age - max_bio_years)) a biological year. b 0.085 doubles
+    # the risk about every 8 years, the range fitted to hunter-gatherers (Gurven & Kaplan 2007, whose
+    # modal age of adult death is about 72). From senescence alone about 1 in 800 die a year at 20,
+    # 1 in 100 at 45, 1 in 12 at 70; about 84% of 15-year-olds reach 50, and half live past 66.
+    senescence_rate: float = 0.085
     # Days per biological year with reproduction (with_reproduction): 1 compresses a life into
     # about 70 days so generations fit in a run; 365 is real time (9-month pregnancies, adults at 15
     # calendar years). With days_per_year this sets the whole time scale (see with_time_scale).
@@ -133,6 +139,7 @@ class EnvConfig:
     mutation_rate: float = 0.01        # chance per trait per birth of a de novo mutation
     mutation_size: float = 2.5         # its size, in population standard deviations (up or down)
     nurse_years: float = 2.0           # mother nurses within 1 cell until this age
+    lactation_infertile_years: float = 2.0   # a mother cannot conceive while her child is younger (0: off)
     nurse_rate: float = 0.03           # food and water a nursing child can take per tick
     nurse_cost: float = 0.6            # share of what the child takes that the mother pays
     prime_until_years: float = 35.0
@@ -594,7 +601,7 @@ class EnvConfig:
 
 def with_reproduction(cfg: "EnvConfig", n_founders: int | None = None, **kw) -> "EnvConfig":
     """A config for worlds with births: by default 1 day per biological year (adult about day 15,
-    lifespan about 70 days; days_per_bio_year changes it), founders filling half the slots unless
+    deaths from age most likely about day 70; days_per_bio_year changes it), founders filling half the slots unless
     n_founders is given."""
     import dataclasses
     founders = n_founders if n_founders is not None else max(2, cfg.n_agents // 2)
