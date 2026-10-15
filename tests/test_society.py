@@ -164,8 +164,8 @@ def test_report_runs_end_to_end(tmp_path):
     assert any("Society" in line for line in S.render(r))
 
 
-def test_punishment_test_is_calibrated_on_random_blows(tmp_path):
-    """Blows at random: the test should cry punishment about 5% of the time, and the ratio sit near 1."""
+def test_punishment_test_is_calibrated_on_random_aggression(tmp_path):
+    """Aggression at random: the test should cry punishment about 5% of the time, and the ratio sit near 1."""
     ps, ratios = [], []
     for seed in range(20):
         rng = np.random.default_rng(seed)

@@ -415,9 +415,9 @@ agent's dispositions:
   fortunes it could not influence. Impressions are also where hearsay and
   noticing others' moods can later plug in.
 
-**Scars and lasting injuries.** Wounds (blows, predator attacks, burns, falls;
+**Scars and lasting injuries.** Wounds (strikes, predator attacks, burns, falls;
 a fall on rock costs 0.05 health and adds 0.1 injury) leave scars, 0.5 per unit
-of health lost (about 0.07 per bare-handed blow), that
+of health lost (about 0.07 per bare-handed strike), that
 never fade and do no harm but are visible to others. Injury above 0.5 leaves a
 lasting part (half the excess, at most 0.35): injury heals down to that floor,
 so weaker strikes and costlier, riskier movement stay for life, but a lasting
@@ -541,8 +541,8 @@ desert), are finite, and are picked up, carried, held, dropped, placed and struc
 
 | Property | What it does, through existing mechanics |
 |---|---|
-| hardness | a blow with it in hand lands harder; hard on hard can spark |
-| sharpness (flint, obsidian, metals) | blows land harder still; gathering meat or wood with an edge in hand takes up to 2x |
+| hardness | a strike with it in hand lands harder; hard on hard can spark |
+| sharpness (flint, obsidian, metals) | strikes land harder still; gathering meat or wood with an edge in hand takes up to 2x |
 | spark (pyrite, iron) | struck against something hard (flint), sparks are ~5x as likely: the classic fire kit |
 | fuel (coal) | burns 4x as long as wood and leaves the fire coal-hot |
 | heat | clay in any fire becomes fired clay; ores in a coal-hot fire become copper, tin, iron (slower); copper and tin heated together become bronze |
@@ -568,7 +568,7 @@ of its kind, all through mechanics rather than scripts:
 
 | Group | Species and what they do |
 |---|---|
-| small prey | rabbit (flees fast); fowl (runs two cells, half of blows miss); fish (in water, struck from the bank; most blows miss without a point); tortoise (slow, shelled) |
+| small prey | rabbit (flees fast); fowl (runs two cells, half of strikes miss); fish (in water, struck from the bank; most strikes miss without a point); tortoise (slow, shelled) |
 | large prey | deer (bounds two cells, loose herds); aurochs (herds; struck, may trample); boar (struck, often gores); horse (herds, runs two cells, wary); mammoth (huge, herds, tramples; feeds a band for days) |
 | predators | wolf (night hunter in packs: each extra wolf beside the prey cancels one defender); big cat (ambush: notices late, strikes hard, not deterred); bear (attacks only when struck or startled close by, mauls back, hibernates in winter); snake (barely moves, venomous bite); crocodile (lies in water and takes whoever stands at the edge) |
 
@@ -607,7 +607,7 @@ termites with a stick, firing clay, a coal fire, smelting, bronze, metal tools),
 physical prerequisites (no smelting without a coal-hot fire). It is a measuring lens: agents are
 never shown it, and nothing in the world gates on it. A block is discovered the first time anyone
 does it, established once several individuals or days do it, lost if it then goes unused for 40
-days. The recorder logs what was in hand for blows, gathering, fire feeding and ignition, so tool
+days. The recorder logs what was in hand for strikes, gathering, fire feeding and ignition, so tool
 use is observable.
 
 `scripts/tech_tree.py RUN` prints the tree (first by whom and when, spread, status) and relates
@@ -748,9 +748,9 @@ lists the sounds and words said on it and within earshot (each symbol drawn as t
 ## Cause and effect
 
 Every event the recorder logs carries its causes (`parents`, with a plain-words `because`),
-taken from the simulation's mechanics rather than guessed from timing: a blow causes the
-victim's wound; striking back links to the blow being answered (within 2 days); a death links
-to what its cause names (the last blow for violence, the infection for disease, the slide into
+taken from the simulation's mechanics rather than guessed from timing: an act of aggression causes the
+victim's wound; striking back links to the aggression being answered (within 2 days); a death links
+to what its cause names (the last act of aggression for violence, the infection for disease, the slide into
 thirst or hunger for those, a mother's death for an orphan whose hunger began after it); an
 infection to the sick neighbour, the water or the raw meat it came from; taking food to whoever
 left it; a birth to the pregnancy and the mating; lameness to the wound that never healed,
@@ -767,11 +767,11 @@ one cause had several effects:
     python scripts/causal_story.py runs/exp/validate/caveman --agent 5 --from-day 40 --to-day 80
 
     Story 8: Y1 Spring D2 08:00 to Y1 Spring D5 05:00; 8 events; #3, #6
-    Y1 Spring D2 08:00 #6 struck #3 -> (#6's blow) 08:00 #3 was struck by #6 -> ...
+    Y1 Spring D2 08:00 #6 struck #3 -> (#6's act of aggression) 08:00 #3 was struck by #6 -> ...
       ↳ after Y1 Spring D2 08:00 #3 was struck by #6: -> (striking back at #6) Y1 Spring D4 07:30 #3 struck #6 -> ...
 
 It ends with every death traced back to its first recorded cause. Routine stories (a single
-blow and nothing after, thirst then a drink) are left out unless `--all`. A reused slot's later
+act of aggression and nothing after, thirst then a drink) are left out unless `--all`. A reused slot's later
 lives are written #5.2, #5.3. The playback inspector's event lists show each event's causes too.
 
 ## World model and ideas
@@ -833,7 +833,7 @@ At that rate a whole training run may contain no such agent; raise the rate to s
 
 **Social web (playback):** the "Social web" toggle draws the relationships agents already have,
 read from their own memories and true kinship (it changes nothing in the world): gold dashed for
-kin, green for bonds (touch, food left near each other), red for blows, with groups, average
+kin, green for bonds (touch, food left near each other), red for contact aggression, with groups, average
 steps between group members, the most connected agent and who strikes most without being struck.
 
 ## Archetypes and emergent roles
@@ -880,7 +880,7 @@ temperament, and where each injected archetype actually landed. The experiment r
 as of the tick being viewed: who it is (sex, age, generation, mother, archetype, what it is doing
 and saying), its body (health, size, strength, needs, sleepiness, temperature, injury, lasting
 injury, scars, sickness, stress, pregnancy, what it holds and carries), every inborn trait with
-its range, its relationships right now (kin, bonds, blows each way) and its history in this
+its range, its relationships right now (kin, bonds, aggression each way) and its history in this
 recording. A character viewer switches between **Anatomy** (a figure coloured by condition;
 hover or tap a part, brain, eyes, mouth, immune system, heart and lungs, stomach, womb, arms,
 legs or skin, to see what the body tracks there) and **Loadout** (what it looks like, what is in
@@ -899,7 +899,7 @@ felt (the reward, and the part felt for others). "Now" shows the decision in mot
 shows earlier ones. There is no inner monologue: these are the real quantities behind each choice.
 
 **Social web cards:** hovering a line shows what lies between the two agents: what kind of tie it
-is (kin, bonded, rivals, one-sided blows), kinship, bond, blows each way, distance, both
+is (kin, bonded, rivals, one-sided aggression), kinship, bond, aggression each way, distance, both
 temperaments and anything notable (fighting despite close kinship, a strongly vengeful striker).
 The inspector heading is the agent's number until the agents themselves give it a name; mother,
 children and relationships link to those agents' own records.
@@ -926,27 +926,37 @@ Agents are never told about rank or custom; these analyses read them from what h
 continuous world writes `trace.npz` (per tick: positions, alive, actions, speech, and whether a
 predator, large prey or fire was in view of each speaker) beside `lives.json` and the events.
 
-**Choices and slips.** Each act an agent makes is recorded with "p": how likely its own policy
-rated that act when it was sampled. This applies to blows, touches, food left, gathering, eating,
-drinking, fire, placing and writing, in playbacks and in a continuous world's events. Policies
-sample from ~78 actions and are trained with an entropy bonus, so every allowed act keeps a little
-probability, and over thousands of decisions rare acts happen without intent.
-- Checked on the trained grounded-language agents: none of the 31 blows in 4 recordings was among
-  the striker's top three choices at the time, and the 2 blows in a fresh recording were rated
-  2.4% and 0.3% likely.
-- Blows rated under 5% count as slips. `hierarchy.py` and `society.py` leave them out and report
-  how many they dropped.
-- The inspector marks a slip as one, and shows each moment's likelihood in a relationship's list
-  of moments.
+**Terms.** These follow the ethogram vocabulary of field primatology and behavioural ecology.
+- *Contact aggression*: one person strikes another and the strike lands (event `strike_agent`). The
+  one who strikes is the *actor* or *aggressor*; the one struck is the *recipient*.
+- *Third-party aggression*: aggression by someone outside the original pair.
+- *Exploratory act*: an act the actor's own policy rated under 5% likely. It was sampled, not
+  chosen.
+
+**Choices and exploratory acts.** Each act an agent makes is recorded with "p": how likely its own
+policy rated that act when it was sampled.
+- Recorded acts: contact aggression, touches, food left, gathering, eating, drinking, fire,
+  placing and writing, in playbacks and in a continuous world's events.
+- Why rare acts happen without intent: policies sample from ~78 actions and are trained with an
+  entropy bonus, so every allowed act keeps a little probability. Over thousands of decisions, rare
+  acts come up.
+- Checked on the trained grounded-language agents:
+  - none of the 31 strikes chosen in 4 recordings was among the actor's top three choices at the
+    time;
+  - the 2 acts of contact aggression in a fresh recording were rated 2.4% and 0.3% likely.
+- `hierarchy.py` and `society.py` leave exploratory aggression out, and report how many acts they
+  dropped.
+- The inspector marks an exploratory act as one, and gives each moment's likelihood in a
+  relationship's list of moments.
 
 **Hierarchy** (`scripts/hierarchy.py <world>`):
-- *Dominance* comes from decided encounters: blows struck, and supplants (one moves next to
-  another, who moves away at once while the first stays).
+- *Dominance* comes from decided encounters: contact aggression, and supplants (one moves next
+  to another, who moves away at once while the first stays).
 - *Per 40-day window:*
   - normalised David's scores (de Vries et al. 2006);
   - steepness;
   - Landau's linearity h', corrected for unknown and tied relations, with a randomisation p (de Vries 1995);
-  - despotism: the share of blows struck by the top individual.
+  - despotism: the share of acts of aggression by the top individual.
 - *Across windows:* rank stability.
 - *Rank against outcomes:* eating, matings, children, food taken from others' leavings, and
   lifespan, by Spearman correlation with a permutation p.
@@ -988,7 +998,7 @@ course over the generations reads as one table. Each measure has a null model:
   - Home range: the cells holding 95% of a person's time.
   - Camps: how often people sleep where they slept before (fidelity), and beside someone
     (co-sleeping).
-  - Between bands: blows per 100 hours together, between bands against within.
+  - Between bands: acts of aggression per 100 hours together, between bands against within.
 - *Sharing.*
   - Food left and taken by another, per person-year.
   - The share that goes to kin (pedigree r ≥ 0.25), against the kin share of the giver's company.
@@ -1007,16 +1017,16 @@ course over the generations reads as one table. Each measure has a null model:
 
 `tests/test_society.py` checks each measure on synthetic worlds:
 - It finds planted structure: two bands with camps, specialists, sex roles, reciprocal kin gifts,
-  answered blows and joint hunts.
+  answered aggression and joint hunts.
 - It finds none in worlds without it.
-- The punishment test raises a false alarm about 5% of the time on random blows.
+- The punishment test raises a false alarm about 5% of the time on random aggression.
 - Caveat: the association p-value is approximate. When people drift with no home range, it runs
   about twice too liberal (measured on synthetic loners). Use replicate worlds for firm
   conclusions.
 
 In the player, the **Society** tab shows, descriptively, for the recording:
 - the groups at this moment;
-- the day's group size, time alone, gifts, joint kills, and blows and blows answered;
+- the day's group size, time alone, gifts, joint kills, and aggression and aggression answered;
 - a small chart of each over the days;
 - who keeps company with whom.
 
@@ -1027,7 +1037,7 @@ In the player, the **Society** tab shows, descriptively, for the recording:
 Not a reward for love: the felt form of a survival fact. Agent i's attachment to j (0 to 1)
 grows with evidence that j keeps i alive: food j left that i took when hungry, warmth huddled beside j when
 cold, a predator attack held off with j beside, calm time together in view, intimacy, a living
-child they share, and milk (an infant toward its mother). It falls by 30% with each blow from j
+child they share, and milk (an infant toward its mother). It falls by 30% with each act of aggression from j
 and fades by half over 20 days apart. It acts only through survival:
 
 - j's visible condition counts in i's reward (care weight + attachment), through the same
@@ -1058,7 +1068,7 @@ a physical quantity the world already has; none prescribes behaviour.
 | inborn | keen eyes 3%, poor eyesight 5%, robust 4%, frail 4%, iron stomach 3%, long-lived 2%, slow clotting 1%, cold-hardy 4%, infertile 2% | at birth; a child of a parent who has one gets it with its inherit chance (40-50%; infertile 0%), else the base chance |
 | age | stiff joints (past 45, 3%/yr), failing sight (past 50, 4%/yr) | a chance each tick, scaled to the yearly rate |
 | event | lame, chronic cough (10%), haunted (30%), hardened (20%) | lasting injury above 15%; surviving an illness; health falling through 15%; 48+ ticks of critical need survived |
-| use | enduring, heavy-handed | 1,500 moves walked; 200 blows struck |
+| use | enduring, heavy-handed | 1,500 moves walked; 200 strikes struck |
 
 Chronic cough and haunted can fade (2% and 1% a day). Rarity labels: common 10%+, uncommon 4%+,
 rare 1.5%+, very rare below. Agents observe their own conditions. The playback lists them in the
@@ -1237,7 +1247,7 @@ world, the exporter, viability and the benchmark; 30 is the calibration).
   (hunger, thirst, healing, sleep pressure, regrowth, spoilage, stress, rewards...) scale with the
   tick, chances per tick become 1 - (1 - p)^k, per-tick decays become d^k, and durations counted in
   ticks (illness, torches, fuel, memory and attachment half-lives, weather spells, episodes, lifespans)
-  stretch. Per **act** nothing changes: a blow, a bite, a drink, a step, a mating is the same act, so a
+  stretch. Per **act** nothing changes: a strike, a bite, a drink, a step, a mating is the same act, so a
   finer tick means more and shorter acts, as in a colony sim. Hard-coded rates in `env.py` go through
   `_k(cfg)`; the recorder's causal windows and every analysis read the world's own day length.
 - **Space** follows from one step per tick at walking pace: a cell is 67 m at 1-minute ticks, so a
@@ -1259,15 +1269,15 @@ world, the exporter, viability and the benchmark; 30 is the calibration).
 - **Speeds.** With short ticks the speeds are RimWorld's: 1x = 1.44 game minutes a second (a day in
   16 min 40 s), 3x, 6x and 15x (keys 1-4, or the buttons on the map). With 30-minute ticks they are
   1, 3, 6 and 15 ticks a second (RimWorld's rate would be one decision every 21 s).
-- **Animation.** People glide from cell to cell over each tick and bob as they step; a blow lunges
+- **Animation.** People glide from cell to cell over each tick and bob as they step; a strike lunges
   toward its target and a touch leans; the struck flash red; floating notes rise over people as things
   happen (+food, +water, gift, hit!, bitten!, ♥, born, †, ▼, ▲...); night falls and lifts over an
   hour with a warm tint at dusk and dawn, fires and torches lighting pools; names under people; corner
   brackets on the one selected.
 - **UI.** A portrait bar above the map (health and calm bars, pulsing red when someone is in danger;
-  click to inspect); letters down the map's side for what matters (deaths, births, attacks, blows,
+  click to inspect); letters down the map's side for what matters (deaths, births, attacks, aggression,
   conception, gifts, fire, going underground; click to jump there); a clock and speed controls on the
-  map. **Slow on danger** drops to 1x at a death, a predator attack, a blow or a birth.
+  map. **Slow on danger** drops to 1x at a death, a predator attack, an act of aggression or a birth.
 - **Pixel look**, studied from Mudborne: 16-pixel tiles drawn at exactly twice their size (the map
   is 32 px a cell in both looks); everything - people, animals, trees, rocks, the edges of patches and
   banks - outlined in one ink so it reads at a glance (a lifted slate teal `#203036`, as Mudborne's, never
@@ -1312,7 +1322,7 @@ world, the exporter, viability and the benchmark; 30 is the calibration).
   inspector lists **what stresses it** over the last game hour by source (hurt, danger, unmet needs,
   loneliness, missing someone, sleep debt, darkness: `StepInfo.stress_from`, exported per agent as
   `sw`), and names ties under **Relationships** (mother, child, mate when they conceived together in
-  the recording, close kin, kin, friend for attachment of 0.3 or more without blows, rival for blows
+  the recording, close kin, kin, friend for attachment of 0.3 or more without aggression, rival for aggression
   without attachment). The downed lie with blood beside them and a red cross above; "is down" is a
   letter.
   **People are drawn from one body model** (`scripts/body_model.js`, inlined into the page): the map

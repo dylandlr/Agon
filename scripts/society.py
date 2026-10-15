@@ -32,7 +32,7 @@ Places:
 - Camps: where people slept (the SLEEP action). Fidelity is the share of nights slept within one
   cell of a place the same person slept before in the window; co-sleeping is the share of nights
   slept within one cell of someone else.
-- Between bands: the share of meetings (people of different bands together) that came to blows,
+- Between bands: the share of meetings (people of different bands together) with contact aggression,
   against the same share within bands.
 Sharing (took_food: someone takes food another left):
 - Rate per person-year; the share given to kin (pedigree relatedness r >= 0.25) against the kin
@@ -46,11 +46,11 @@ leaving food for others. DOL = I(individual; task) / H(task), from 0 (everyone d
 to 1 (each does one task only), against the null of each person doing as many acts drawn from the
 population's mix (which corrects small-sample bias). By sex: the female share of each task over the
 female share of person-time, with a permutation p on sex labels.
-Punishment (Fehr and Gaechter 2002, in the field Boehm 1999): after someone strikes another, is
-the striker struck by a third party within a day more often than if the times they were struck
-were shifted at random (each person's own record moved round in time, keeping its rate and
-clustering)? Also the share of those third parties who are kin of the victim. Blows the striker's
-own policy rated under 5% likely are left out as slips (where the events record it).
+Punishment (Fehr and Gaechter 2002, in the field Boehm 1999): after an act of contact aggression,
+is the aggressor the target of third-party aggression within a day more often than if the times
+they received aggression were shifted at random (each person's own record moved round in time, keeping its rate and
+clustering)? Also the share of those third parties who are kin of the victim. Acts of aggression
+the actor's own policy rated under 5% likely are left out as exploratory (where events record it).
 Inequality: Gini of eating rate and of children among adults who lived at least a year.
 The trajectory gives the main numbers per window, with the generations alive, so a society's
 course over the generations reads in one table.
@@ -299,7 +299,7 @@ def places(world: World, lo, hi, band_of, radius=1):
                 fid.append(any(max(abs(cell[0] - a), abs(cell[1] - b)) <= 1 for a, b in seen[l]))
             seen[l].append(cell)
             cosleep.append(any(max(abs(cell[0] - c2[0]), abs(cell[1] - c2[1])) <= 1 for l2, c2 in here.items() if l2 != l))
-    # meetings between bands, and blows in them
+    # meetings between bands, and contact aggression in them
     blows = defaultdict(int)
     for e in world.events:
         if e.get("type") == "strike_agent" and lo <= e["t"] < hi and deliberate(e):
@@ -329,8 +329,8 @@ def places(world: World, lo, hi, band_of, radius=1):
             "sleep_site_fidelity": round(float(np.mean(fid)), 3) if fid else None,
             "co_sleeping": round(float(np.mean(cosleep)), 3) if cosleep else None,
             "between_band_meeting_hours": inter, "within_band_hours": intra,
-            "blows_per_100_hours_between_bands": round(100 * bx / inter, 2) if inter else None,
-            "blows_per_100_hours_within_bands": round(100 * bi / intra, 2) if intra else None}
+            "aggression_per_100_hours_between_bands": round(100 * bx / inter, 2) if inter else None,
+            "aggression_per_100_hours_within_bands": round(100 * bi / intra, 2) if intra else None}
 
 
 def sharing(world: World, lo, hi, r_of, assoc=None, perms=999, seed=0):
@@ -480,7 +480,7 @@ def punishment(world: World, lo, hi, r_of, perms=999, seed=0):
                 if a and b and a["id"] != b["id"]:
                     blows.append((e["t"], a["id"], b["id"]))
     if len(blows) < 5:
-        return {"blows": len(blows)}
+        return {"aggression": len(blows)}
     by_victim = defaultdict(list)                          # life -> [(t, striker)]
     for t, a, b in blows:
         by_victim[b].append((t, a))
@@ -492,7 +492,7 @@ def punishment(world: World, lo, hi, r_of, perms=999, seed=0):
     p_obs = float(np.mean([len(x) > 0 for x in after]))
     # null: each person's record of being struck is shifted round in time (circularly within the
     # window) by a random amount, keeping how often and how clustered it is, and breaking only its
-    # timing relative to their own blows; p is the share of shifts doing as well as what happened
+    # timing relative to their own aggression; p is the share of shifts doing as well as what happened
     rng = np.random.default_rng(seed)
     span = max(1, hi - lo)
     null = []
@@ -503,7 +503,7 @@ def punishment(world: World, lo, hi, r_of, perms=999, seed=0):
     base = float(np.mean(null))
     p = (1 + sum(x >= p_obs - 1e-12 for x in null)) / (1 + perms)
     kin_share = [np.mean([r_of(s, b) >= 0.25 for s in x]) for x, (t, a, b) in zip(after, blows) if x]
-    return {"blows": len(blows), "struck_by_third_party_within_a_day": round(p_obs, 3), "baseline": round(base, 3),
+    return {"aggression": len(blows), "third_party_aggression_within_a_day": round(p_obs, 3), "baseline": round(base, 3),
             "punishment_ratio": round(p_obs / base, 2) if base > 0 else None, "p": round(p, 4),
             "punishers_kin_of_victim": round(float(np.mean(kin_share)), 3) if kin_share else None}
 
@@ -593,8 +593,8 @@ def render(r):
         out.append(f"Last window: {b['individuals']} people, association {b['mean_association']} against {b['null_association']} "
                    f"by chance (p {b['gregarious_p']}); bands of {', '.join(str(len(x)) for x in b['bands']) or 'none'}; "
                    f"companions change {b['companion_changes_per_day']} times a day; home range {p.get('home_range_cells_median')} cells; "
-                   f"sleep-site fidelity {p.get('sleep_site_fidelity')}, co-sleeping {p.get('co_sleeping')}; blows per 100 hours together "
-                   f"within bands {p.get('blows_per_100_hours_within_bands')}, between {p.get('blows_per_100_hours_between_bands')}.")
+                   f"sleep-site fidelity {p.get('sleep_site_fidelity')}, co-sleeping {p.get('co_sleeping')}; acts of aggression per 100 hours together "
+                   f"within bands {p.get('aggression_per_100_hours_within_bands')}, between {p.get('aggression_per_100_hours_between_bands')}.")
         lab = last["labour"]
         if lab.get("by_sex"):
             out.append("By sex (female share of the task minus her share of the people): "

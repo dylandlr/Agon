@@ -2475,7 +2475,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     ctx.restore();
     const s = socialSummary(f);
     const sizes = s.groups.map((g) => g.length).sort((x, y) => y - x);
-    $("webnote").textContent = `Social web: pink = attachment (each keeps the other alive: their survival is felt as one's own), gold dashed = kin, green = bond (touch, food left near each other), red = blows. Hover a line for details. `
+    $("webnote").textContent = `Social web: pink = attachment (each keeps the other alive: their survival is felt as one's own), gold dashed = kin, green = bond (touch, food left near each other), red = contact aggression. Hover a line for details. `
       + `${s.groups.length} group${s.groups.length === 1 ? "" : "s"} (sizes ${sizes.join(", ") || "-"})`
       + (s.separation !== null ? `, average ${s.separation.toFixed(1)} steps between members` : "")
       + (s.hub >= 0 ? `; most connected: ${label(s.hub, f.t)}` : "")
@@ -3038,7 +3038,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   };
   // why it happened, from the recorder's cause links (scripts/causal_story.py tells whole stories)
   const because = (e) => (e.because || []).filter(Boolean).length
-    ? ` <span class="fine">because: ${esc(e.because.filter(Boolean).join("; "))}</span>` : "";
+    ? ` <span class="fine">because: ${esc(e.because.filter(Boolean).join("; ").replace(/(#\d+)'s blow/g, "$1's act of aggression"))}</span>` : "";
 
   // ---------- inspector: everything recorded about one agent, as of the tick being viewed
   const TRAIT_RANGE = { patience: [0.95, 0.999], critical_period: [2000, 20000], selflessness: [0, 2] };
@@ -3622,7 +3622,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     if (a.alive && a.existed !== false) h += `<div class="now">${linkify(narrateAgent(a, pa, k, f), f.t)}</div>`;
     if (m && a.alive) {
       const top = m.top.slice(0, 4), chosenIn = top.some(([n]) => n === a.action);
-      if (m.p !== undefined && m.p < 0.05) h += `<div class="speech" style="border-left:3px solid var(--health)"><b>A slip.</b> Its own policy rated this action ${chosenShare(m, a.action)} likely: it was sampled, not chosen. Rare acts like this (a stray blow among them) come from sampling every allowed action a little, not from intent.</div>`;
+      if (m.p !== undefined && m.p < 0.05) h += `<div class="speech" style="border-left:3px solid var(--health)"><b>An exploratory act.</b> Its own policy rated this action ${chosenShare(m, a.action)} likely: it was sampled, not chosen. Rare acts like this (stray aggression among them) come from the policy keeping every allowed action slightly possible, not from intent.</div>`;
       h += `<div><p class="lbl">Weighed (the policy's own odds)${m.value !== undefined ? `; expects its future to go ${m.value.toFixed(2)}` : ""}</p><div class="opts">`
         + top.concat(chosenIn ? [] : [[a.action, m.p !== undefined ? m.p : null]]).map(([n, p2]) => `<span class="${n === a.action ? "chosen" : ""}">${esc(ACT(n))}${n === a.action ? " (chosen)" : ""}</span>`
           + `<span class="bar2 ${n === a.action ? "chosen" : ""}"><i style="width:${p2 === null ? 0 : Math.round(p2 * 100)}%;${n === a.action ? "background:var(--accent)" : ""}"></i></span><span class="v">${p2 === null ? "&lt;" + Math.round(top[top.length - 1][1] * 100) : Math.round(p2 * 100)}%</span>`).join("")
@@ -3650,8 +3650,8 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     return h + "</div>";
   }
   // ---------- relationships: one card per person this one has a tie with, strongest first: what the
-  // tie is (the labels), its measures as bars (bond, attachment each way, kinship), the blows each
-  // way as remembered, and a drop-down of every moment between the two in this recording (blows,
+  // tie is (the labels), its measures as bars (bond, attachment each way, kinship), the aggression each
+  // way as remembered, and a drop-down of every moment between the two in this recording (aggression,
   // touches, food left and taken, mating), each linked to that moment and to both records
   const FRAME_OF_T = new Map(F.map((fr, j) => [fr.t, j]));
   const OPEN_REL = new Set();                     // which drop-downs are open, kept across re-renders
@@ -3680,7 +3680,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     const bar = (label, v, max, col, title) => `<span class="rm" title="${esc(title)}"><span>${label}</span><span class="track"><i style="width:${Math.round(100 * Math.min(1, v / max))}%;background:${col}"></i></span><span class="v">${v.toFixed(2)}</span></span>`;
     const verb = (e, o) => {
       const me = e.agent === k, who = me ? "" : `${mention(o)} `;
-      const slip = e.p !== undefined && e.p < 0.05 ? ` (a slip: chosen with ${Math.round(e.p * 1000) / 10}% likelihood)` : e.p !== undefined ? ` (chosen with ${Math.round(e.p * 100)}% likelihood)` : "";
+      const slip = e.p !== undefined && e.p < 0.05 ? ` (exploratory: its policy rated it ${Math.round(e.p * 1000) / 10}% likely)` : e.p !== undefined ? ` (chosen with ${Math.round(e.p * 100)}% likelihood)` : "";
       switch (e.type) {
         case "strike_agent": return (me ? `struck ${mention(o)}` : `${who}struck them`) + (e.tool ? ` with ${e.tool.replace(/_/g, " ")}` : "") + slip;
         case "touch": return (me ? `touched ${mention(o)}` : `${who}touched them`) + slip;
@@ -3695,7 +3695,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     ties.forEach((r) => {
       const ms = momentsBetween(k, r.o, i);
       const n = (type, from) => ms.filter((e) => e.type === type && (from === undefined || (from ? e.agent === k : e.agent === r.o))).length;
-      const counts = [[n("strike_agent", true), "blow given", "blows given"], [n("strike_agent", false), "blow taken", "blows taken"],
+      const counts = [[n("strike_agent", true), "act of aggression given", "acts of aggression given"], [n("strike_agent", false), "act of aggression received", "acts of aggression received"],
         [n("touch"), "touch", "touches"], [n("took_food") + n("release"), "food shared", "food shared"],
         [n("conceived"), "child conceived", "children conceived"]].filter(([c]) => c > 0).map(([c, one, many]) => `${c} ${c === 1 ? one : many}`);
       h += `<div class="rel"><div class="rel-head">${agentLink(r.o, f.t)}${f.agents[r.o] && !f.agents[r.o].alive ? " <span class='fine'>(died)</span>" : ""}`
@@ -3705,7 +3705,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
         + bar("Attached to them", r.mine, 1, "var(--stress)", "Attachment: how far this one feels the other's survival as its own (0 to 1)")
         + bar("Attached back", r.theirs, 1, "var(--sleep)", "The other's attachment to this one (0 to 1)")
         + (r.kin >= 0.05 ? bar("Kinship", r.kin, 0.5, "var(--energy)", "Relatedness r: 0.5 parent, child or full sibling; 0.25 half sibling or grandparent") : "")
-        + (r.gave > 0.05 || r.took > 0.05 ? bar("Blows", r.gave + r.took, 2, "var(--health)", `Remembered blows: struck them ${r.gave.toFixed(2)}, struck by them ${r.took.toFixed(2)} (fading with time)`) : "")
+        + (r.gave > 0.05 || r.took > 0.05 ? bar("Aggression", r.gave + r.took, 2, "var(--health)", `Contact aggression remembered: given ${r.gave.toFixed(2)}, received ${r.took.toFixed(2)} (fading with time)`) : "")
         + `</div>`
         + (ms.length ? `<details class="moments" data-rel="${k}-${r.o}"${OPEN_REL.has(`${k}-${r.o}`) ? " open" : ""}><summary>${ms.length} moment${ms.length === 1 ? "" : "s"} together${counts.length ? `: ${counts.join(", ")}` : ""}</summary><ol>`
             + ms.slice(0, 60).map((e) => `<li class="${kindOf(e)}"><a href="#" data-goto="${FRAME_OF_T.has(e.t) ? FRAME_OF_T.get(e.t) : ""}" title="Go to this moment">${esc(e.time || F[FRAME_OF_T.get(e.t) || 0].time)}</a> ${linkify(verb(e, r.o), f.t)}</li>`).join("")
@@ -3713,7 +3713,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
           : `<p class="fine" style="margin:4px 0 0">Nothing between them recorded in this recording: the tie comes from before it, or from time spent near each other.</p>`)
         + `</div>`;
     });
-    return h + `</div><p class="fine">Bond and blows are remembered and fade with time apart; the moments are what this recording saw. Click a time to go there, a name to open that person's record.</p>`;
+    return h + `</div><p class="fine">Bond and aggression are remembered and fade with time apart; the moments are what this recording saw. Click a time to go there, a name to open that person's record.</p>`;
   }
   function updateInspector(i) {
     if (selectedTile !== null) return tileView(i);
@@ -3872,7 +3872,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       .forEach((e) => add(describe(e) + (e.pos ? ` at ${placeTok(e.pos[0], e.pos[1])}` : ""), "ev " + (/^(death|predator_attack|struck_by_agent|downed|fall|infected|starving|parched|burned|soiled)$/.test(e.type) ? "danger" : ""), (e.time || "").slice(-5), because(e)));
     const note = $("events-note");
     if (mode === "notable") {
-      note.textContent = "Deaths, blows, births, illness, fires and other turning points over the last 12 hours, newest first, with their causes.";
+      note.textContent = "Deaths, aggression, births, illness, fires and other turning points over the last 12 hours, newest first, with their causes.";
       const recent = [];
       for (let j = i; j >= Math.max(0, i - 24) && recent.length < 60; j--) F[j].events.forEach((id) => { const e = evById.get(id); if (e && !/^(gather|eat|drink|release|move_failed|fell_asleep|touch|relieved)$/.test(e.type)) recent.push(e); });
       if (!recent.length) { list.innerHTML = '<li class="empty">Nothing notable in the last 12 hours.</li>'; return; }
@@ -4524,7 +4524,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   mini.addEventListener("click", (ev) => ev.stopPropagation());
 
   // ---------- society in this recording: who is with whom (groups: people within one cell of each
-  // other, chained), how that ran day by day, gifts, joint hunts, blows and blows answered by a third
+  // other, chained), how that ran day by day, gifts, joint hunts, aggression and aggression answered by a third
   // party. Descriptive: scripts/society.py tests the same things against null models on whole
   // continuous worlds.
   const GROUPS = new Map();
@@ -4617,12 +4617,12 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       + `<span>Groups of two or more</span><span>${(d.groups || 0).toFixed(1)}</span>`
       + `<span>Food left by one and taken by another</span><span>${d.gifts || 0}</span>`
       + `<span>Large prey killed (with another hunter close)</span><span>${d.kills || 0} (${d.joint || 0})</span>`
-      + `<span>Blows (answered by a third party within a day)</span><span>${d.blows || 0} (${d.answered || 0})</span></div>`;
+      + `<span>Acts of aggression (answered by third-party aggression within a day)</span><span>${d.blows || 0} (${d.answered || 0})</span></div>`;
     h += `<h2>Over the recording</h2>`
       + smallChart("Group size the average person is in", S2.days.map((x) => (x.n ? x.tgs : null)), cur, (v) => v.toFixed(1), "", null)
       + smallChart("Share of the time alone", S2.days.map((x) => (x.n ? x.alone : null)), cur, (v) => `${Math.round(v * 100)}%`, "", 1)
       + smallChart("Food left and taken by another", S2.days.map((x) => x.gifts), cur, (v) => v.toFixed(0), "", Math.max(2, ...S2.days.map((x) => x.gifts)))
-      + smallChart("Blows struck", S2.days.map((x) => x.blows), cur, (v) => v.toFixed(0), "", Math.max(2, ...S2.days.map((x) => x.blows)));
+      + smallChart("Acts of contact aggression", S2.days.map((x) => x.blows), cur, (v) => v.toFixed(0), "", Math.max(2, ...S2.days.map((x) => x.blows)));
     const top = S2.pairs.slice(0, 10);
     h += `<h2>Who keeps company with whom</h2><p class="lbl">Share of the hours both were alive that they were together, whole recording</p>`
       + (top.length ? `<div class="pairs">${top.map(([p, q, v]) => `<span>${agentLink(p, f.t)} and ${agentLink(q, f.t)}</span><span class="bar2"><i style="width:${Math.round(v * 100)}%"></i></span><span>${Math.round(v * 100)}%</span>`).join("")}</div>` : `<p class="empty">Too little time together to say.</p>`);
@@ -4700,7 +4700,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     return best;
   }
   // a RimWorld-style name for a tie, from k's side: mother, child, mate (they conceived together in this
-  // recording), close kin, kin, friend (attached, no blows), rival (blows, no attachment)
+  // recording), close kin, kin, friend (attached, no aggression), rival (aggression, no attachment)
   function tieLabels(k, tie, t) {
     const [x, y, kin, , xy, yx, axy = 0, ayx = 0] = tie, other = x === k ? y : x;
     const mine = x === k ? axy : ayx, gave = x === k ? xy : yx, took = x === k ? yx : xy;
@@ -4719,7 +4719,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     const ti = DATA.agents[i].traits || {}, tj = DATA.agents[j].traits || {};
     const kinds = [];
     if (kinWord(kin)) kinds.push(kinWord(kin));
-    if (ij > 0.15 && ji > 0.15) kinds.push("rivals: blows both ways");
+    if (ij > 0.15 && ji > 0.15) kinds.push("rivals: aggression both ways");
     else if (ij > 0.15) kinds.push(`${A} strikes ${B}, not the reverse`);
     else if (ji > 0.15) kinds.push(`${B} strikes ${A}, not the reverse`);
     if (bond > 0.3) kinds.push(ij + ji > 0.15 ? "close, but they also fight" : "bonded: touch and food left near each other");
@@ -4736,10 +4736,10 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     if (bond > 0.3 && Math.min(ti.empathy || 0, tj.empathy || 0) > 0.7) notes.push("both are highly empathetic");
     return `<b>${esc(A)} and ${esc(B)}</b>${esc(kinds.join("; ") || "acquaintances")}`
       + `<div><span class="k">Attachment</span> ${A} to ${B} ${aij.toFixed(2)}, ${B} to ${A} ${aji.toFixed(2)}</div>`
-      + `<div><span class="k">Kinship</span> ${kin.toFixed(2)} · <span class="k">bond</span> ${bond.toFixed(2)} · <span class="k">blows</span> ${A} to ${B} ${ij.toFixed(2)}, ${B} to ${A} ${ji.toFixed(2)} · <span class="k">apart</span> ${d} cells</div>`
+      + `<div><span class="k">Kinship</span> ${kin.toFixed(2)} · <span class="k">bond</span> ${bond.toFixed(2)} · <span class="k">aggression</span> ${A} to ${B} ${ij.toFixed(2)}, ${B} to ${A} ${ji.toFixed(2)} · <span class="k">apart</span> ${d} cells</div>`
       + `<div><span class="k">${esc(A)}:</span> ${tr(ti)}</div><div><span class="k">${esc(B)}:</span> ${tr(tj)}</div>`
       + (notes.length ? `<div><span class="k">Notable:</span> ${esc(notes.join("; "))}.</div>` : "")
-      + `<div class="k">Attachment: how far each feels the other's survival as its own, grown from being kept alive by them; blows cut it, time apart fades it.</div>`;
+      + `<div class="k">Attachment: how far each feels the other's survival as its own, grown from being kept alive by them; aggression cuts it, time apart fades it.</div>`;
   }
   map.addEventListener("mousemove", (ev) => {
     const tip = $("tip");
@@ -4836,7 +4836,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   // Pacing after RimWorld: speeds 1x / 3x / 6x / 15x (keys 1-4), pawns gliding between cells, and
   // a drop to 1x when danger comes (as its forced slowdown for raids) so nothing is missed.
   const DANGER = /^(death|predator_attack|struck_by_agent|born)$/;
-  const DANGER_WORDS = { death: "a death", predator_attack: "a predator attack", struck_by_agent: "a blow struck", born: "a birth" };
+  const DANGER_WORDS = { death: "a death", predator_attack: "a predator attack", struck_by_agent: "an act of aggression", born: "a birth" };
   let lastDraw = 0, slowTimer = null;
   function slowedFor(j, e) {
     $("speed").selectedIndex = 0; acc = 0;

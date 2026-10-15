@@ -7,7 +7,8 @@ lasts and pays, and who leads.
 Nothing here feeds back into the world; agents are never told about rank.
 
 Dominance, from two kinds of decided encounters (the standard ones in primatology):
-- blows: i strikes j (events.jsonl.gz, strike_agent).
+- contact aggression: i strikes j and the act lands (events.jsonl.gz, strike_agent). Exploratory
+  acts (the striker's own policy rated the act under 5% likely) are left out and counted apart.
 - supplants (needs trace.npz): i moves next to j, and on the next tick j moves away while i stays
   (approach-retreat).
 Per window (default one 40-day year) among individuals with at least one encounter:
@@ -16,7 +17,7 @@ Per window (default one 40-day year) among individuals with at least one encount
 - Steepness: the slope of normalised David's scores against rank (0 = all equal, 1 = steepest).
 - Linearity: Landau's h' corrected for unknown and tied relationships (de Vries 1995), with a
   p-value from 10,000 randomised dominance relations (h' expected about 3/(N+1) by chance).
-- Despotism: the share of all blows struck by the top-ranked individual.
+- Despotism: the share of all acts of aggression by the top-ranked individual.
 Across windows: stability, Spearman's rho of the scores of individuals present in consecutive
 windows. Over the whole run: rank against eating, matings, children, food taken from others' leavings
 and lifespan (Spearman, permutation p).
@@ -115,7 +116,7 @@ def encounters(world: World, supplants=True):
             for v in e.get("victims", []):
                 b = world.life_at(v, e["t"])
                 if a is not None and b is not None and a["id"] != b["id"]:
-                    out.append((e["t"], a["id"], b["id"], "blow"))
+                    out.append((e["t"], a["id"], b["id"], "aggression"))
     if supplants and world.trace is not None:
         pos = layered(world.trace)
         ids = world.life_ids_grid()
@@ -193,10 +194,10 @@ def analyse(world: World, window_days=40.0, day_length=None, min_encounters=1, s
         W = win_matrix(e, members)
         nds = david_scores(W)
         h, p = landau_h(W, rng)
-        blows = [x for x in e if x[3] == "blow"]
+        blows = [x for x in e if x[3] == "aggression"]
         top = members[int(np.argmax(nds))]
         windows.append({"window": k, "from_day": lo / day_length, "individuals": len(members),
-                        "encounters": len(e), "blows": len(blows), "supplants": len(e) - len(blows),
+                        "encounters": len(e), "aggression": len(blows), "supplants": len(e) - len(blows),
                         "steepness": round(steepness(nds), 3), "linearity_h": round(h, 3), "linearity_p": round(p, 4),
                         "despotism": round(sum(1 for x in blows if x[1] == top) / len(blows), 3) if blows else None,
                         "scores": {int(m): round(float(s), 3) for m, s in zip(members, nds)}})
@@ -246,8 +247,9 @@ def analyse(world: World, window_days=40.0, day_length=None, min_encounters=1, s
         ages = np.array([lives[m]["ticks"] for m in lead_rows], float)
         rho, p = perm_p(ages, np.array(list(lead_rows.values())), spearman, 999, seed)
         lead_vs["time lived"] = {"rho": round(rho, 3), "p": round(p, 4), "n": len(lead_rows)}
-    slips = sum(1 for e in world.events if e.get("type") == "strike_agent" and not deliberate(e))
-    return {"world": world.name, "encounters": len(enc), "blows": sum(1 for x in enc if x[3] == "blow"), "slips": slips,
+    exploratory = sum(1 for e in world.events if e.get("type") == "strike_agent" and not deliberate(e))
+    return {"world": world.name, "encounters": len(enc), "aggression": sum(1 for x in enc if x[3] == "aggression"),
+            "exploratory_aggression": exploratory,
             "supplants": sum(1 for x in enc if x[3] == "supplant"), "windows": windows,
             "stability": [round(s, 3) for s in stab], "rank_outcomes": outcomes,
             "leadership": {"net_by_life": {int(k): v for k, v in lead_rows.items()}, "against": lead_vs},
@@ -256,16 +258,17 @@ def analyse(world: World, window_days=40.0, day_length=None, min_encounters=1, s
 
 def render(r):
     out = [f"Hierarchy: {r['world']}",
-           f"{r['encounters']} decided encounters: {r['blows']} blows, {r['supplants']} supplants"
-           + (f" ({r.get('slips')} more blows left out as slips: their striker's own policy gave them under 5%)" if r.get("slips") else "")
-           + ("" if r["has_trace"] else " (no trace.npz: blows only, no leadership)")]
+           f"{r['encounters']} decided encounters: {r['aggression']} acts of contact aggression, {r['supplants']} supplants"
+           + (f" ({r.get('exploratory_aggression')} more acts of aggression left out as exploratory: the actor's own policy "
+              "rated them under 5% likely)" if r.get("exploratory_aggression") else "")
+           + ("" if r["has_trace"] else " (no trace.npz: aggression only, no supplants or leadership)")]
     for w in r["windows"]:
         head = f"  day {w['from_day']:.0f}+: {w['individuals']} individuals, {w['encounters']} encounters"
         if "steepness" not in w:
             out.append(head + " (too few to rank)")
             continue
         out.append(head + f"; steepness {w['steepness']}, linearity h' {w['linearity_h']} (p {w['linearity_p']}), "
-                   f"top individual struck {w['despotism'] if w['despotism'] is not None else 'n/a'} of blows")
+                   f"top individual did {w['despotism'] if w['despotism'] is not None else 'n/a'} of the aggression")
     if r["stability"]:
         out.append(f"Rank stability between consecutive windows (Spearman): {', '.join(map(str, r['stability']))}")
     if r["rank_outcomes"]:

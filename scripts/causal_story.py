@@ -46,7 +46,7 @@ PHRASE = {
     "overheating": "began overheating", "took_food": "took food", "touch": "touched",
     "held_off_predator": "held off a predator with others beside it", "carried_salt_with_meat": "carried salt with its meat",
     "mutation": "a mutation",
-    "strike_agent": "a blow", "struck_by_agent": "being struck", "condition": "a lasting condition",
+    "strike_agent": "an act of aggression", "struck_by_agent": "being struck", "condition": "a lasting condition",
     "death": "a death", "weather": "the weather", "lightning_fire": "lightning"
 }
 def load_events(src: Path) -> list:
