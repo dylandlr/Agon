@@ -1,4 +1,5 @@
-"""Check that the playback page's script parses (node --check on the inline <script>)."""
+"""Check that the playback page's script parses (node --check on the inline <script>), that the body
+model it inlines parses, and that the body model's own tests pass."""
 import re
 import subprocess
 import sys
@@ -15,3 +16,10 @@ r = subprocess.run(["node", "--check", f.name], capture_output=True, text=True)
 if r.returncode:
     sys.exit(r.stderr)
 print(f"{page.name}: script parses ({len(scripts[-1]) // 1024} KB)")
+
+body = page.with_name("body_model.js")
+for cmd in (["node", "--check", str(body)], ["node", str(page.parent.parent / "tools" / "test_body_model.js")]):
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    if r.returncode:
+        sys.exit(r.stdout + r.stderr)
+    print(r.stdout.strip() or f"{body.name}: parses")

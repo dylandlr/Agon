@@ -124,9 +124,11 @@ svg.glyph { vertical-align: -2px; margin-right: 1px; } svg.glyph rect { fill: #1
 .inspector p.fine { font-size: 12px; color: var(--muted, #6b6b5f); margin: 6px 0 0; }
 .agent { cursor: pointer; }
 .viewer { display: grid; grid-template-columns: 132px 1fr; gap: 12px; align-items: start; margin-top: 4px; }
+.meas { border-collapse: collapse; margin: 4px 0; } .meas td { padding: 1px 6px 1px 0; } .meas td + td { text-align: right; font-variant-numeric: tabular-nums; }
 .viewer svg { width: 132px; height: 230px; background: color-mix(in srgb, var(--line, #c9c6b5) 25%, transparent); }
 .viewer [data-region] { cursor: help; }
 .viewer [data-region].on { stroke: #ffe066; stroke-width: 1.2; }
+.viewer svg.bm [data-region].on { stroke: none; filter: brightness(1.25) drop-shadow(0 0 0.6px #ffe066); }
 .modes { display: flex; gap: 6px; margin: 6px 0 2px; }
 .modes button { padding: 4px 10px; font-size: 12px; }
 .modes button[aria-pressed="true"] { background: var(--accent, #9a6a1c); color: #fff; }
@@ -292,6 +294,7 @@ canvas.map { border-radius: 3px; outline: 1px solid rgba(0, 0, 0, 0.35); }
     </aside>
   </div>
 </div>
+<script>/*__BODY_MODEL__*/</script>
 <script>
 const DATA = /*__PLAYBACK_DATA__*/null;
 (function () {
@@ -303,7 +306,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     bear: "#4d3628", snake: "#557d3c", crocodile: "#4a6142" };
   const INK = "rgba(20, 17, 14, 0.92)", LW = 0.055;
   const TAU = Math.PI * 2;
-  let ART = (() => { try { return localStorage.getItem("agon-art") === "pixel" ? "pixel" : "painted"; } catch (e) { return "painted"; } })();
+  let ART = (() => { try { return localStorage.getItem("agon-art") === "painted" ? "painted" : "pixel"; } catch (e) { return "pixel"; } })();
   function cellDraw(g, r, c, fn) { g.save(); g.translate(c * T, r * T); g.scale(T, T); fn(g); g.restore(); }
   function ell(g, x, y, rx, ry, fill, ink = INK, lw = LW, rot = 0) {
     g.beginPath(); g.ellipse(x, y, rx, ry, rot, 0, TAU);
@@ -1242,11 +1245,44 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       for (let y = 0; y < Hc; y++) for (let x = 0; x < Wc; x++) { const ch = buf[y][x]; if (C[ch]) px(q, x, y, C[ch]); }
     }, o.sel, 2);
   }
+  // ---------- the body model (scripts/body_model.js, inlined as AgonBody): every person on the map, lying
+  // down, in the colonist bar and in the inspector is drawn from one measured rig (segment lengths from
+  // shares of stature, breadths from frame, BMI and sex) in a pose (joint angles), so all of them agree
+  // and any action is a pose. The character creator (scripts/character_creator.html) uses the same file.
+  const BM = window.AgonBody || null;
+  function bodyMeasures(a, info, L) {                // the sim's numbers for this person, quantised so sprites cache
+    const q = (v, st) => Math.round(v / st) * st, tr = info.traits || {};
+    const held = a.hand && a.carrying && (a.carrying[a.hand] || 0) > 0.05 ? a.hand : "";
+    return BM.fromAgent({ ...a, height: q(a.height || 170, 2), weight: q(a.weight || 60, 1), strength: q(tr.strength || 1, 0.1),
+      injury: q(Math.min(1, a.injury || 0), 0.25), scars: q(Math.min(1, a.scars || 0), 0.25), clothing: q(a.clothing || 0, 0.05),
+      ideal_kg: a.ideal_kg ? q(a.ideal_kg, 1) : undefined, temp: a.temp, alive: a.alive !== false },
+      { years: L.years < 18 ? Math.floor(L.years) : Math.floor(L.years / 5) * 5, frame: Math.round(L.frame * 20) / 20, skin: L.skin, hair: L.hair,
+        tex: L.tex, hairLen: L.hairLen, beard: L.beard, colour: hexOf(agentColour(info)), held }, info.id);
+  }
+  function modelPixels(m, o, q, dx = 0, dy = 0, rot = null) {   // draw a render into a canvas, optionally turned
+    const r = BM.render(m, o), pal = BM.palette(m, INKP);
+    for (let y = 0; y < r.height; y++) for (let x = 0; x < r.width; x++) { const v = r.slot[y * r.width + x]; if (!v) continue;
+      const [X, Y] = rot ? rot(x, y) : [x, y]; px(q, X + dx, Y + dy, pal[BM.SLOTS[v]] || "#ff00ff"); }
+    return r;
+  }
+  function modelSprite(m, o, sel) {
+    const sc = o.scale || 1, key = ["BM", JSON.stringify(m), o.view, o.action || "rest", o.phase || 0, o.seed || 0, sc, o.eyesClosed ? 1 : 0].join("|");
+    return fineSprite(key, Math.round(40 * sc), Math.round(50 * sc), (q) => modelPixels(m, o, q), sel, 2);
+  }
+  function modelLying(m, k, dead, sel) {             // the same body on its side, head to the right, eyes shut
+    const key = ["BMlie", JSON.stringify(m), dead ? 1 : 0].join("|");
+    const o = { view: "e", action: "rest", seed: k, eyesClosed: !dead, dead };
+    const r = BM.render(m, o);
+    let x0 = r.width, x1 = -1, y0 = r.height, y1 = -1;
+    for (let y = 0; y < r.height; y++) for (let x = 0; x < r.width; x++) if (r.slot[y * r.width + x]) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+    // turned a quarter: the standing figure's top becomes the right, its front the bottom
+    return fineSprite(key, y1 - y0 + 1, x1 - x0 + 1, (q) => modelPixels(m, o, q, 0, 0, (x, y) => [y1 - y, x1 - x]), sel, 2);
+  }
   // ---------- seen through what hides them (RuneScape's character silhouettes, Hades, Diablo III): where a
   // tree or a big animal stands in front of someone, the hidden part of them shows as a faint fill with
   // a light outline in their own colour, and only there; what can be seen is drawn as it is.
   let XRAY = false, GRAB = null, FACE_OVERRIDE = null;
-  let BODY_STYLE = "pawn";                            // pawn (pawnSprite) | measured | colony (bodySprite)
+  let BODY_STYLE = window.AgonBody ? "model" : "pawn";                         // model (body_model.js) | pawn (pawnSprite) | measured | colony (bodySprite)
   const BOX = new WeakMap();
   function opaqueBox(s) {                              // the bounding box of a sprite's drawn pixels
     let b = BOX.get(s); if (b) return b;
@@ -1278,7 +1314,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     const blit = (s, ax, ay) => g.drawImage(s, ax, ay, s.width / 2, s.height / 2);   // sprite pixels at half an art pixel
     if (!a.alive || a.asleep || a.downed) {          // lying down: asleep, down, or dead (grey, eyes closed as crosses)
       const dead = !a.alive;
-      const s = fineSprite(`lieB|${k}|${dead}|${sk}|${hr}|${col}|${L.tex}|${(a.clothing || 0) >= 0.35}`, 30, 14, (q) => {
+      const s = BODY_STYLE === "model" ? modelLying(bodyMeasures(a, info, L), k, dead, sel) : fineSprite(`lieB|${k}|${dead}|${sk}|${hr}|${col}|${L.tex}|${(a.clothing || 0) >= 0.35}`, 30, 14, (q) => {
         // lying on its side, in the standing figure's style: the rounded body, the round head, eyes shut
         const grey = (c) => (dead ? mixHex(c, "#9a9a9a", 0.75) : c);
         const SK = fleshRamp(grey(sk)), HR = hairRamp(grey(hr)),
@@ -1309,12 +1345,12 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       return;
     }
     const big = L.frame * (1 + 0.3 * L.fat) > 1.1, thin = L.frame < 0.92, child = L.sy < 0.85;
-    let face = FACE_OVERRIDE ?? 0, step = 0, strike = false;
+    let face = FACE_OVERRIDE ?? 0, step = 0, strike = false, moving = false;
     if (POSE.live && F[POSE.i] && F[POSE.i].agents[k] === a) {
       face = faceOf(POSE.i, k);
       const p = POSE.i > 0 ? F[POSE.i - 1].agents[k] : null;
       if (POSE.frac < 1 && !reduced) {
-        if (p && (p.r !== a.r || p.c !== a.c)) step = Math.floor(POSE.frac * 4) % 4;   // contact, stride, pass, stride
+        if (p && (p.r !== a.r || p.c !== a.c)) { step = Math.floor(POSE.frac * 4) % 4; moving = true; }   // contact, stride, pass, stride
         strike = /^strike_/.test(a.action || "") && POSE.frac > 0.15 && POSE.frac < 0.75;
       }
     }
@@ -1333,8 +1369,16 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       held: a.hand && a.carrying && (a.carrying[a.hand] || 0) > 0.05 ? a.hand : "",
       cl: Math.round((a.clothing || 0) * 20) / 20, col,
       face: face === 3 ? 2 : face, step: act ? 0 : step, strike, sel, act, ph };
-    let s = BODY_STYLE === "pawn" ? pawnSprite(body) : bodySprite(body);
-    if (face === 3) { const mk = "M|" + s.width + "|" + Object.values(body).join("|");
+    let s, skey;
+    if (BODY_STYLE === "model") {                    // the body model in a pose: walking is the gait cycle by the tick's progress
+      const view = face === 1 ? "n" : face === 0 ? "s" : "e";
+      const action = strike ? "strike" : act || (moving ? "walk" : "rest");
+      const phase = strike ? (POSE.frac < 0.4 ? 0.2 : 0.6) : act ? (ph ? 0.25 : 0) : moving ? Math.floor(POSE.frac * 8) / 8 : 0;
+      const m = bodyMeasures(a, info, L);
+      s = modelSprite(m, { view, action, phase, seed: k }, sel);
+      skey = [JSON.stringify(m), view, action, phase, sel].join("|");
+    } else { s = BODY_STYLE === "pawn" ? pawnSprite(body) : bodySprite(body); skey = Object.values(body).join("|"); }
+    if (face === 3) { const mk = "M|" + s.width + "|" + skey;
       let m = SPR.get(mk); if (!m) { m = mirror(s); SPR.set(mk, m); } s = m; }
     if (GRAB) { GRAB.s = s; return; }                // a portrait asked for this sprite
     const bob = !reduced && !step && (k + Math.floor(flick / 3)) % 2 ? 0.5 : 0;      // breathing, ~0.7 Hz
@@ -1344,7 +1388,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     const under = groundUnder(x, y);
     if (step === 1 || step === 3) footFx(g, under, x + (step === 1 ? 5 : 10), y + 14, POSE.frac);
     if (hovered === k && sel === null) {             // hovered: a one-pixel white outline round the figure
-      const wk = "W|" + (face === 3 ? "m|" : "") + Object.values(body).join("|");
+      const wk = "W|" + (face === 3 ? "m|" : "") + skey;
       let wsil = SPR.get(wk);
       if (!wsil) { wsil = document.createElement("canvas"); wsil.width = s.width; wsil.height = s.height; const wg = wsil.getContext("2d");
         wg.drawImage(s, 0, 0); wg.globalCompositeOperation = "source-in"; wg.fillStyle = "#ffffff"; wg.fillRect(0, 0, s.width, s.height); SPR.set(wk, wsil); }
@@ -2696,24 +2740,72 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     return s;
   }
 
+  // the inspector's figure: the same body model as the map, rendered at three times the map's resolution
+  // (not scaled up), front view, each pixel belonging to a named part; parts are the clickable regions
+  function modelFigure(a, meta, f, mode) {
+    const L = bodyLook(a, meta), m = bodyMeasures(a, meta, L), R = regions(a, meta, f), sc = 3;
+    const r = BM.render(m, { view: "s", action: "rest", seed: meta.id, scale: sc, eyesClosed: !!a.asleep }), pal = BM.palette(m, INKP);
+    const lay = r.layout, oy = r.height, W = r.width;
+    const chestTo = lay.shY + (lay.hipY - lay.shY) * 0.45 + oy, wombFrom = lay.shY + (lay.hipY - lay.shY) * 0.68 + oy;
+    const regionOf = (id, x, y) => (id === "head" ? "brain" : id === "eyes" || id === "mouth" || id === "neck" ? id
+      : id === "arms" || id === "hands" ? "arms" : id === "legs" || id === "feet" ? "legs"
+      : id === "torso" ? (y < chestTo ? "chest" : R.womb && y >= wombFrom && Math.abs(x + 0.5 - W / 2) < W * 0.05 ? "womb" : "belly") : "skin");
+    const colourOf = (ch, reg) => {
+      if (mode !== "anatomy") return pal[ch];
+      const c = cond(clamp01((R[reg] || R.skin)[1]));
+      return "slh".includes(ch) ? mixHex(c, "#ffffff", 0.2) : ch === "K" ? mixHex(c, "#000000", 0.45) : "dmkGFR".includes(ch) ? mixHex(c, "#000000", 0.22) : c;
+    };
+    let x0 = W, x1 = -1, y0 = r.height, y1 = -1;
+    const runs = {};
+    for (let y = 0; y < r.height; y++) {
+      let run = null;
+      const flush = () => { if (run) (runs[run.reg] = runs[run.reg] || []).push(`<rect x="${run.x}" y="${y}" width="${run.w}" height="1" fill="${run.c}"/>`); run = null; };
+      for (let x = 0; x < W; x++) {
+        const v = r.slot[y * W + x];
+        if (!v) { flush(); continue; }
+        x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+        const ch = BM.SLOTS[v], reg = regionOf(r.part[y * W + x], x, y), c = colourOf(ch, reg);
+        if (run && run.reg === reg && run.c === c && run.x + run.w === x) run.w++; else { flush(); run = { x, w: 1, reg, c }; }
+      }
+      flush();
+    }
+    const pad = 2;
+    let svg = `<svg class="bm" viewBox="${x0 - pad} ${y0 - pad} ${x1 - x0 + 1 + 2 * pad} ${y1 - y0 + 1 + 2 * pad}" role="img" shape-rendering="crispEdges"
+      aria-label="${mode === "anatomy" ? "Body, coloured by condition" : "How it looks and what it holds"} (the map's body model at three times the resolution)">`;
+    for (const [reg, rects] of Object.entries(runs))
+      svg += `<g data-region="${reg}" tabindex="-1" class="${inspRegion === reg && mode === "anatomy" ? "on" : ""}">${rects.join("")}</g>`;
+    return svg + "</svg>";
+  }
+  function measurementsTable(a, meta) {              // the rig the figure is drawn from, in centimetres
+    const m = bodyMeasures(a, meta, bodyLook(a, meta)), g = BM.build(m), cm = (v) => `${Math.round(v)} cm`;
+    const rows = [["Stature", cm(g.H)], ["Head (vertex to chin)", cm(g.head)], ["Neck", cm(g.neck)], ["Trunk (shoulder to hip joint)", cm(g.trunk)],
+      ["Upper arm / forearm / hand", `${Math.round(g.upperArm)} / ${Math.round(g.foreArm)} / ${Math.round(g.hand / 0.55)} cm`],
+      ["Thigh / shank", `${Math.round(g.thigh)} / ${Math.round(g.shank)} cm`], ["Foot length", cm(g.footL)],
+      ["Shoulder / hip breadth", `${Math.round(g.shoulderW)} / ${Math.round(g.hipW)} cm`], ["Body mass index", m.bmi.toFixed(1)]];
+    return `<details class="fine"><summary>Measurements</summary><table class="meas">${rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("")}</table>
+      Segment shares of stature after Drillis &amp; Contini (Winter's tables), the head and legs following growth by age. On the map and here the head is drawn ${BM.DISPLAY.headScale}× its measured size so faces read; everything else is to scale.</details>`;
+  }
+
   function characterViewer(a, meta, f) {
     const R = regions(a, meta, f);
     if (!R[inspRegion]) inspRegion = "chest";
     let html = `<h3>Character</h3><div class="modes" role="group" aria-label="View">
       <button data-mode="anatomy" aria-pressed="${inspMode === "anatomy"}">Anatomy</button>
       <button data-mode="loadout" aria-pressed="${inspMode === "loadout"}">Loadout</button></div>`;
-    html += `<div class="viewer">${figure(a, meta, f, inspMode)}<div class="detail">`;
+    html += `<div class="viewer">${BODY_STYLE === "model" && ART === "pixel" ? modelFigure(a, meta, f, inspMode) : figure(a, meta, f, inspMode)}<div class="detail">`;
     if (inspMode === "anatomy") {
       const [name, v, text] = R[inspRegion];
       html += `<b>${esc(name)} <span style="color:${cond(clamp01(v))}">&#9632;</span></b>${esc(text)}`;
       html += `<div class="regions">${Object.entries(R).map(([k, [n]]) => `<button data-region="${k}" class="${k === inspRegion ? "on" : ""}">${esc(n)}</button>`).join("")}</div>`;
       html += "<p class='fine'>Hover or tap a part. Colour: green fine, amber strained, red in trouble.</p>";
+      if (BODY_STYLE === "model" && ART === "pixel") html += measurementsTable(a, meta);
     } else {
       const held = a.carrying && a.carrying[a.hand] ? `${mat(a.hand)} (${a.carrying[a.hand]})` : `${mat(a.hand)} selected, none held`;
       const slot = (k, v, empty) => `<div class="slot${empty ? " empty" : ""}"><span>${k}</span><span>${esc(v)}</span></div>`;
       html += slot("Hand", held, !(a.carrying && a.carrying[a.hand]));
       html += slot("Torch", a.torch ? "a burning branch" : "none", !a.torch);
-      html += slot("Worn", "nothing: no clothing or ornaments exist in this world yet", true);
+      const cl = a.clothing || 0;
+      html += slot("Worn", cl >= 0.7 ? "a hide robe with sleeves, and foot wraps" : cl >= 0.35 ? "a hide tunic over one shoulder, tied with a cord" : cl > 0.05 ? "a hide loin wrap" : "nothing", cl <= 0.05);
       html += slot("Look", `${a.sex}, ${a.height} cm, ${a.weight} kg${a.pregnant ? ", visibly pregnant" : ""}${a.scars > 0.05 ? ", scarred" : ""}`, false);
       html += `<div class="slot"><span>Colour</span><span><span style="display:inline-block;width:10px;height:10px;background:${agentColour(meta)};vertical-align:middle"></span> inherited; kin look alike</span></div>`;
     }
@@ -3053,7 +3145,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       ["Doing", a.alive ? `${a.action.replace(/_/g, " ")} (${actionPhrase(a)})` : null],
       ["Said", a.said || null],
     ]);
-    if (a.alive) html += `<div class="model-strip" aria-label="How this person is drawn on the map: front, side, back"><canvas id="insp-model" width="216" height="104"></canvas></div>`;
+    if (a.alive && ART === "pixel") html += `<div class="model-strip" aria-label="How this person is drawn on the map: front, side, back"><canvas id="insp-model" width="216" height="104"></canvas></div>`;
     html += characterViewer(a, meta, f);
     html += inventoryView(a);
     html += "<h3>Body in numbers</h3>" + row([

@@ -28,6 +28,13 @@ from lifesim.policy import make_network
 from lifesim.recorder import _stamp_events, extract_events
 
 TEMPLATE = Path(__file__).with_name("playback_template.html")
+BODY_MODEL = Path(__file__).with_name("body_model.js")
+
+
+def page_html(data) -> str:
+    """The playback page with its data and the body model inlined (one self-contained file)."""
+    return (TEMPLATE.read_text().replace("/*__BODY_MODEL__*/", BODY_MODEL.read_text())
+            .replace("/*__PLAYBACK_DATA__*/null", json.dumps(data, separators=(",", ":"))))
 from lifesim import conditions as _cond  # noqa: E402
 COND_NAMES = _cond.NAMES
 from lifesim import minerals as _min  # noqa: E402
@@ -493,7 +500,7 @@ def main():
         "frames": frames, "events": events, "knowledge": knowledge, **world_static(state, env_cfg),
     }
     data["language"] = language_metrics(data)
-    html = TEMPLATE.read_text().replace("/*__PLAYBACK_DATA__*/null", json.dumps(data, separators=(",", ":")))
+    html = page_html(data)
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(html)
