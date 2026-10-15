@@ -2,6 +2,7 @@
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 from lifesim import env as E
 from lifesim.config import EnvConfig, with_reproduction
@@ -302,3 +303,13 @@ def test_real_time_makes_pregnancy_nine_months():
     assert cfg.max_age == 70 * 365 * 48
     compressed = with_reproduction(EnvConfig(grid_size=12, n_agents=4), n_founders=2)
     assert compressed.ticks_per_bio_year == 48
+
+
+def test_conception_per_act_follows_the_time_scale():
+    """A year of regular mating gives the same chance of a child at any compression."""
+    from lifesim.config import EnvConfig, with_reproduction, with_time_scale
+    for dpby in (1.0, 10.0, 365.0):
+        cfg = with_reproduction(with_time_scale(EnvConfig(), 365, dpby))
+        acts = dpby * cfg.mating_acts_per_day
+        assert 1 - (1 - cfg.conception_prob) ** acts == pytest.approx(cfg.conception_per_bio_year, abs=2e-3)
+    assert with_reproduction(EnvConfig(), conception_prob=0.3).conception_prob == 0.3

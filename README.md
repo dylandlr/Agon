@@ -1487,9 +1487,18 @@ adulthood with it.
   An open offer is visible to others as *courting*, and lasts only while its maker stays
   with it (resting beside or touching the other): any other act withdraws it at once, so no
   one is ever mated without having chosen it themselves within the window. Coercion is not
-  modelled, on purpose. Then a 15% chance if she
+  modelled, on purpose. Then a chance per act set by the time scale (below) if she
   is 15-45, not pregnant, at least 85% of ideal weight, not sick and stress
   below 0.7, and he is not sick, and a slot is free.
+- **Fecundity follows the time scale.** A fertile couple mating regularly conceives within a
+  biological year with probability `conception_per_bio_year` (0.8: about 0.2 per cycle, with
+  missed cycles). One act stands for 1 / (`mating_acts_per_day` x days per biological year) of a
+  year, so the chance per act is 1 - 0.2^(that fraction): 80% at the default 1 day per year,
+  0.44% at real time. It was a flat 15% per act before, which at 1 day per year gave a woman one
+  or two chances a "year": trained bands bore about 2.8 children per world-year, and the first
+  A100 caveman world had 1 birth before its founders died of age. With the scripted band at
+  society30 the change took 160-day persistence (run locally) from 1 of 3 seeds to 3 of 3. `conception_prob`
+  set explicitly still wins.
 - **Pregnancy** lasts 0.75 biological years (36 ticks); she needs 30% more
   food and water. Childbirth kills the mother 1% of the time (2% if weak).
 - **Birth:** the child appears at the mother's cell in a free slot (never used

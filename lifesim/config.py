@@ -114,7 +114,16 @@ class EnvConfig:
     n_founders: int = 0                # 0: every slot is a founder (no births possible)
     adult_years: float = 15.0          # fertile from this biological age
     menopause_years: float = 45.0
-    conception_prob: float = 0.15      # per mutual mating between fertile adults
+    conception_prob: float = 0.15      # per mutual mating between fertile adults (with_reproduction sets it from the two below)
+    # Fecundity under compressed biological time. A fertile couple mating regularly conceives within
+    # a biological year with probability conception_per_bio_year (about 0.2 per menstrual cycle gives
+    # ~0.9 a year; 0.8 allows for cycles missed). An act of mating in game time stands for
+    # 1 / (mating_acts_per_day x days_per_bio_year) of a biological year, so at 1 day per biological
+    # year one act carries most of a year's chance (0.8), and in real time (365 days per year) about
+    # 0.4% an act. Before this, 0.15 an act held at every compression: at 1 day per year a woman had
+    # one or two chances per "year", and trained bands bore too few children to outlive their founders.
+    conception_per_bio_year: float = 0.8
+    mating_acts_per_day: float = 1.0
     mate_window: int = 4               # ticks a choice to mate stays open for a partner (1: same tick only)
     min_condition: float = 0.85        # a woman thinner than this share of ideal weight does not conceive
     gestation_years: float = 0.75
@@ -590,6 +599,9 @@ def with_reproduction(cfg: "EnvConfig", n_founders: int | None = None, **kw) -> 
     import dataclasses
     founders = n_founders if n_founders is not None else max(2, cfg.n_agents // 2)
     dpby = kw.pop("days_per_bio_year", cfg.days_per_bio_year)
+    if "conception_prob" not in kw:            # per act, from the yearly chance and how much time an act stands for
+        acts = max(dpby * kw.get("mating_acts_per_day", cfg.mating_acts_per_day), 1.0)
+        kw["conception_prob"] = round(1.0 - (1.0 - kw.get("conception_per_bio_year", cfg.conception_per_bio_year)) ** (1.0 / acts), 4)
     return dataclasses.replace(cfg, reproduction=True, n_founders=founders, days_per_bio_year=dpby,
                                max_age=int(round(cfg.day_length * dpby * cfg.max_bio_years)), **kw)
 
