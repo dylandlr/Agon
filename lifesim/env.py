@@ -82,6 +82,13 @@ SPARK = jnp.array(_BASE0 + mn.SPARK)                                       # thr
 MIN_FUEL = jnp.array(mn.FUEL)                                    # (M,) ticks of burning per unit (coal)
 MIN_COLOR = jnp.array(mn.COLOR)                                  # (M, 3) how each looks
 MIN_LUSTER = jnp.array(mn.LUSTER)
+# Organic byproducts (lifesim/minerals.py ORGANIC), materials like any other
+LEAVES, FIBER, FEATHER, HIDE, BONE, SPEAR = (MIN0 + mn.IDX[k] for k in ("leaves", "fiber", "feather", "hide", "bone", "spear"))
+INSULATION = jnp.array(_BASE0 + mn.INSULATION)                   # (N_MAT,) warmth of one carried unit
+MIN_BEDDING = jnp.array(mn.BEDDING)                              # (M,) of one unit lying where one sleeps
+MIN_TINDER = jnp.array(mn.TINDER)                                # (M,) how readily a spark catches on it
+MIN_ROT = jnp.array(mn.ROT)                                      # (M,) share lost per 30-minute tick, lying out
+MIN_SHARP = jnp.array(mn.SHARPNESS)
 N_MINERAL_CHANNELS = 5            # per cell: minerals present, and their colour (r, g, b) and lustre
 N_FAUNA_CHANNELS = 7              # per cell: animals' size, fangs, colour; mosquitoes, flies, hive, mound
 N_FLORA_CHANNELS = 6              # per cell: how well greens, fruit, nuts, roots would gather here; waste; an inscription
@@ -253,6 +260,7 @@ class State(NamedTuple):
     father_geno: gt.Genotype    # (N,) father's genotype for each pregnancy
     father_look: jnp.ndarray    # (N, N_APPEARANCE) father's appearance for each pregnancy
     lasting_injury: jnp.ndarray # (N,) floor that injury can no longer heal below
+    pain: jnp.ndarray           # (N,) fresh pain from recent wounds, fading (pain_of adds the ache of injury)
     birth_age: jnp.ndarray      # (N,) int32 biological age in ticks when the run began
     genotype: gt.Genotype
     appearance: jnp.ndarray     # (N, 3) heritable look; lets kin resemble each other
@@ -326,6 +334,8 @@ class StepInfo(NamedTuple):
     season: jnp.ndarray                # () int: season this tick (0 spring .. 3 winter)
     new_conditions: jnp.ndarray        # (N, K) bool: conditions gained this tick
     made: jnp.ndarray                  # (G, G, M) minerals that heat made this tick (fired clay, metals)
+    bound: jnp.ndarray                 # (N,) bool: bound a point to a stick with fiber (a spear) this tick
+    bedded: jnp.ndarray                # (N,) bool: asleep on leaves or a hide (a bed)
     kill_species: jnp.ndarray          # (N, 3) species of the small prey, large prey, predator it killed (-1 none)
     attacker_species: jnp.ndarray      # (N,) species of the predator that attacked it (-1 none)
     gored: jnp.ndarray                 # (N,) damage from an animal it struck that fought back
@@ -748,7 +758,7 @@ def species_params(cfg: EnvConfig) -> dict:
          "atk_p": col("attack", 0), "atk_dmg": col("attack", 1), "atk_inj": col("attack", 2),
          "atk_rest": col("attack", 3), "pack": col("pack"), "ambush": col("ambush"), "provoked": col("provoked"),
          "hibernates": col("hibernates"), "venom": col("venom"), "takes_large": col("takes_large"),
-         "den": col("den"),
+         "den": col("den"), "hide": col("hide"), "bone": col("bone"), "feather": col("feather"),
          "size": col("look", 0), "fangs": col("look", 1), "colour": col("look", 2),
          "habitat": jnp.array(fa.HABITAT, bool),
          "grazer": jnp.array([s["name"] in GRAZERS for s in fa.SPECIES])}
@@ -1022,7 +1032,7 @@ def reset(key: jax.Array, cfg: EnvConfig, genotype: gt.Genotype | None = None,
         conditions=draw_inborn(jax.random.fold_in(ks[4], 17), n, None, None).astype(jnp.float32), father_cond=jnp.zeros((n, cond.K)),
         life_moves=jnp.zeros(n, jnp.int32), life_strikes=jnp.zeros(n, jnp.int32), hardship=jnp.zeros(n, jnp.int32),
         impression=jnp.full((n, n), 2.5 * cfg.wellbeing_scale),   # founders know each other, all looking well
-        scars=jnp.zeros(n), lasting_injury=jnp.zeros(n),
+        scars=jnp.zeros(n), lasting_injury=jnp.zeros(n), pain=jnp.zeros(n),
         sex=sex, existed=founders, gestation=jnp.zeros(n, jnp.int32), courting=jnp.zeros(n, jnp.int32),
         father=jnp.full(n, -1, jnp.int32), mother=jnp.full(n, -1, jnp.int32),
         relatedness=jnp.eye(n), fetus_r=jnp.zeros((n, n)), father_geno=geno, father_look=appearance,
@@ -1201,13 +1211,26 @@ def action_mask(state: State, cfg: EnvConfig) -> jnp.ndarray:
     return jnp.where(state.alive[:, None], mask, dead)
 
 
+def pain_of(state: State, cfg: EnvConfig) -> jnp.ndarray:
+    """(N,) how much it hurts: the ache of standing injury plus the fresh pain of recent wounds."""
+    return cfg.pain_per_injury * state.injury + state.pain
+
+
+def shock_threshold(state: State, cfg: EnvConfig) -> jnp.ndarray:
+    """(N,) pain at which one goes into shock and drops: cfg.pain_shock, lower for those who feel
+    pain more (the heritable pain_aversion trait: a wimp drops sooner, the stoic later)."""
+    return jnp.clip(cfg.pain_shock / jnp.sqrt(state.pain_aversion), 0.2, 0.99)
+
+
 def downed_of(state: State, cfg: EnvConfig) -> jnp.ndarray:
-    """(N,) bool: down (EnvConfig.downed): too hurt to stand, from wounds (injury) or failing health.
+    """(N,) bool: down (EnvConfig.downed): too hurt to stand, from wounds (injury), failing health,
+    or pain shock (RimWorld's: pain past one's threshold, until it fades).
     The downed lie where they are and cannot walk, strike, touch, place or mate; they can still pick
     up and eat what is on their own cell, drink if water is beside them, sleep, and call out."""
     if not cfg.downed:
         return jnp.zeros_like(state.alive)
-    return state.alive & ((state.health < cfg.downed_health) | (state.injury >= cfg.downed_injury))
+    shock = (pain_of(state, cfg) >= shock_threshold(state, cfg)) if cfg.pain_shock > 0 else jnp.zeros_like(state.alive)
+    return state.alive & ((state.health < cfg.downed_health) | (state.injury >= cfg.downed_injury) | shock)
 
 
 # ---------------------------------------------------------------- given skills
@@ -1853,7 +1876,7 @@ def _give_birth(ns: State, birthing, key, cfg: EnvConfig):
             body_temp=put(s.body_temp, 0.0), injury=put(s.injury, 0.0), infection=put(s.infection, 0),
             immunity=put(s.immunity, 0.0), stress=put(s.stress, 0.0), clothing=put(s.clothing, 0.0),   # born bare
             pain_aversion=put(s.pain_aversion, child_geno.pain_aversion[0]), genotype=geno,
-            weight=put(s.weight, ideal), scars=put(s.scars, 0.0), lasting_injury=put(s.lasting_injury, 0.0),
+            weight=put(s.weight, ideal), scars=put(s.scars, 0.0), lasting_injury=put(s.lasting_injury, 0.0), pain=put(s.pain, 0.0),
             appearance=put(s.appearance, look), last_msg=put(s.last_msg, jnp.zeros(MSG_LEN, jnp.int32)),
             mutations=put(s.mutations, jumps[0]),
             visited=put(s.visited, jnp.zeros(s.visited.shape[1:], bool).at[s.pos[i, 0], s.pos[i, 1]].set(True)),
@@ -2084,6 +2107,22 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     meat, cave_floor = carcass(meat, cave_floor, large, jnp.where(killed_large, SP["meat"][large.species], 0.0))
     meat, cave_floor = carcass(meat, cave_floor, small, jnp.where(killed_small, SP["meat"][small.species], 0.0))
     meat, cave_floor = carcass(meat, cave_floor, predators, jnp.where(killed_pred, SP["meat"][predators.species], 0.0))
+    mins = state.minerals
+
+    def leftovers(mins, floor, an, killed, kinds=("hide", "bone", "feather")):
+        """What a carcass leaves besides meat: hide, bone, feathers by species (cfg.byproducts)."""
+        if not cfg.byproducts:
+            return mins, floor
+        for kind, mat in (("hide", HIDE), ("bone", BONE), ("feather", FEATHER)):
+            if kind not in kinds:
+                continue
+            amt = jnp.where(killed, SP[kind][an.species], 0.0)
+            mins = mins.at[an.pos[:, 0], an.pos[:, 1], mat - MIN0].add(jnp.where(~an.below, amt, 0.0))
+            floor = floor.at[an.pos[:, 0], an.pos[:, 1], mat].add(jnp.where(an.below, amt, 0.0))
+        return mins, floor
+    mins, cave_floor = leftovers(mins, cave_floor, large, killed_large)
+    mins, cave_floor = leftovers(mins, cave_floor, small, killed_small)
+    mins, cave_floor = leftovers(mins, cave_floor, predators, killed_pred)
     # Struck, some fight back: aurochs and mammoths trample, boars gore, bears maul (the striker)
     def counter(an, hit, kk):
         rows = lrow(an.pos, an.below)
@@ -2091,7 +2130,8 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         hurt = jnp.zeros((2 * g, g)).at[rows, an.pos[:, 1]].max(jnp.where(an.alive, SP["counter_dmg"][an.species], 0.0))
         who = jnp.zeros((2 * g, g), jnp.int32).at[rows, an.pos[:, 1]].max(
             jnp.where(an.alive & (SP["counter_p"][an.species] > 0), an.species, -1))
-        back = hit & (jax.random.uniform(kk, (n,)) < on[trl, tc])
+        keep_off = 1.0 - cfg.spear_reach * ((hand0 == SPEAR) & holding)          # a spear's length keeps it off
+        back = hit & (jax.random.uniform(kk, (n,)) < on[trl, tc] * keep_off)
         return jnp.where(back, hurt[trl, tc], 0.0), jnp.where(back, who[trl, tc], -1)
     k_ctr = jax.random.split(jax.random.fold_in(k_fire[5], 3), 2)
     gore_l, gore_l_sp = counter(large, hit_large, k_ctr[0])
@@ -2118,6 +2158,12 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     agent_dmg_grid = dmg_grid(hit_agent) * cfg.agent_strike_scale            # a blow lands on one's own layer
     violence = jnp.where(alive0, agent_dmg_grid[lrow(state.pos, below0), state.pos[:, 1]], 0.0)
     struck_by_agent = violence > 0
+    # The downed cannot ward off, turn or roll away: every blow lands square (cfg.downed_hit_mult),
+    # and one may land on something vital (the throat, the skull) and end it (cfg.coup_prob)
+    down0 = downed_of(state, cfg)
+    violence = violence * jnp.where(down0, cfg.downed_hit_mult, 1.0)
+    coup = down0 & struck_by_agent & (jax.random.uniform(jax.random.fold_in(k_fire[5], 7), (n,)) < cfg.coup_prob)
+    violence = violence + jnp.where(coup, state.health, 0.0)
     injury = injury + 0.5 * violence
 
     # ---------------------------------------------------------- animals act
@@ -2155,7 +2201,8 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     deterred = can_attack & (defenders >= 2) & (SP["ambush"][psp] == 0)
     keen = SP["atk_p"][psp] * jnp.where(night | predators.below, 1.0, 1.0 - 0.5 * SP["nocturnal"][psp])   # caves are night
     attack = can_attack & ~deterred & (jax.random.uniform(keys[9], target.shape) < keen)
-    bite = jnp.where(attack, SP["atk_dmg"][psp] + SP["venom"][psp], 0.0)
+    bite = jnp.where(attack, SP["atk_dmg"][psp] + SP["venom"][psp], 0.0) \
+        * jnp.where(down0[target], cfg.downed_hit_mult, 1.0)                    # a downed one is easy meat
     n_attacks = jnp.zeros(n).at[target].add(attack.astype(jnp.float32))
     predation = jnp.zeros(n).at[target].add(bite) + gored_dmg              # bitten, mauled, gored, trampled
     attacked = n_attacks > 0
@@ -2181,6 +2228,8 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
                                            < cfg.predator_large_kill_prob * big_grid[lrow_, large.pos[:, 1]])
     large_preyed_by = jnp.where(large_taken, pred_sp_grid[lrow_, large.pos[:, 1]], -1)
     meat, cave_floor = carcass(meat, cave_floor, large, jnp.where(large_taken, 0.5 * SP["meat"][large.species], 0.0))
+    mins, cave_floor = leftovers(mins, cave_floor, large, large_taken, ("hide", "bone"))
+    mins, cave_floor = leftovers(mins, cave_floor, small, eaten_by_pred, ("feather",))
     large = large._replace(alive=large.alive & ~large_taken)
     if cfg.grazing:                                      # a kill sates the hunter on that cell for a while
         kill_grid = jnp.zeros((2 * g, g)).at[srow, small.pos[:, 1]].add(eaten_by_pred.astype(jnp.float32)) \
@@ -2206,8 +2255,9 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     # Ground layers as one stack, so every material follows the same rules
     ground = jnp.concatenate([jnp.stack([state.plants, meat, state.cooked, state.wood, state.stones,
                                          state.honey, state.grubs]),
-                              jnp.moveaxis(state.minerals, -1, 0)])
-    avail_here = available_here(state._replace(meat=meat, cave_floor=cave_floor), r0, c0, below0 if cfg.underground else None)   # (N_MAT, N)
+                              jnp.moveaxis(mins, -1, 0)])
+    avail_here = available_here(state._replace(meat=meat, cave_floor=cave_floor, minerals=mins), r0, c0,
+                                below0 if cfg.underground else None)   # (N_MAT, N)
     # Grasp takes the selected material if present, otherwise whatever is most
     # plentiful here (no preference is built in); the hand then holds what was taken.
     empty_hand = held0 <= 0.05
@@ -2249,6 +2299,14 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         winner = winner | (foraging & (take > 0))                         # (for the record: gathered, not lost)
         took_kind = jnp.where(foraging & (take > 0), kind, jnp.where((grab == PLANT) & from_loose & (take > 0), 4, -1))
     take = jnp.where(pull_branch, jnp.minimum(1.0, room), take)
+    # Stripping greens from grass and sedge leaves stems: fiber comes with them
+    grassy = (state.terrain[r0, c0] == GRASS) | (state.terrain[r0, c0] == MARSH)
+    if cfg.ecology:
+        stripped = foraging & (kind == 0) & (take > 0)
+    else:
+        stripped = winner & (grab == PLANT) & (take > 0)
+    fiber_got = jnp.where(stripped & grassy & ~below0 & cfg.byproducts,
+                          jnp.minimum(cfg.fiber_per_greens * take, jnp.maximum(room - take, 0.0)), 0.0)
     # Robbing a hive: the bees sting, unless smoke (a fire's heat here) has calmed them
     stung = (take > 0) & (grab == HONEY) & state.hive[r0, c0] & (heat0[r0, c0] <= 0)
     from_ground = jnp.where(pull_branch | ((grab == STONE) & (state.terrain[r0, c0] == ROCK)) | below0, 0.0, take)
@@ -2257,7 +2315,7 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         flora = jnp.maximum(flora.at[r0, c0, kind].add(-jnp.where((grab == PLANT) & ~from_loose, from_ground, 0.0)), 0.0)
     mined = jnp.where(below0 & (grab != STONE), take, 0.0)               # ore out of the wall, or what lay here
     cave_floor = jnp.maximum(cave_floor.at[r0, c0, grab].add(-mined), 0.0)
-    inv = state.inv.at[idx, grab].add(take)
+    inv = state.inv.at[idx, grab].add(take).at[idx, FIBER].add(fiber_got)
     hand = jnp.where(take > 0, grab, hand).astype(jnp.int32)       # what you pick up is in your hand
     # A gift is food that someone else dropped here recently and this agent takes.
     # Dropping alone, taking back one's own drop, or dropping non-food is not giving.
@@ -2312,6 +2370,18 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     inv = inv.at[idx, hand0].add(-placed)
     ground = ground.at[hand0, ptgt[:, 0], ptgt[:, 1]].add(jnp.where(below0, 0.0, placed))
     cave_floor = cave_floor.at[ptgt[:, 0], ptgt[:, 1], hand0].add(jnp.where(below0, placed, 0.0))
+    # Binding: fiber placed where a stick and a point (anything that takes an edge) lie together ties
+    # them into a spear. Nothing names it: it is what placing those three in one spot does.
+    there = ground[:, ptgt[:, 0], ptgt[:, 1]]                                   # (N_MAT, N)
+    point_ok = (there[MIN0:] >= 1.0) & (MIN_SHARP[:, None] >= cfg.haft_edge) \
+        & (jnp.arange(mn.M)[:, None] != SPEAR - MIN0)                           # (M, N)
+    point = jnp.argmax(jnp.where(point_ok, MIN_SHARP[:, None], -1.0), axis=0)   # the sharpest there
+    bound = is_place & (placed > 0) & (hand0 == FIBER) & ~below0 & (there[WOOD] >= 1.0) \
+        & (there[FIBER] >= 1.0) & jnp.any(point_ok, axis=0) & cfg.byproducts
+    b1 = bound.astype(jnp.float32)
+    ground = ground.at[WOOD, ptgt[:, 0], ptgt[:, 1]].add(-b1).at[FIBER, ptgt[:, 0], ptgt[:, 1]].add(-b1) \
+        .at[MIN0 + point, ptgt[:, 0], ptgt[:, 1]].add(-b1).at[SPEAR, ptgt[:, 0], ptgt[:, 1]].add(b1)
+    ground = jnp.maximum(ground, 0.0)
     # Burning wood leaves the hand with the unit it is attached to (below it goes out: no fire there)
     lit_drop = (torch > 0) & (hand0 == WOOD) & ((placed > 0) | (dropped > 0))
     snuffed = lit_drop & below0
@@ -2407,7 +2477,15 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     huddle = jnp.minimum(jnp.sum(near & alive0[None, :], axis=1), 3)
     load = load + cfg.huddle_warmth * huddle                   # body heat of neighbors
     # clothing keeps heat in when it is colder than comfort (and does little against heat)
-    wrap = 1.0 + cfg.clothing_insulation * state.clothing * (load < 0)
+    if cfg.byproducts:          # hides and feathers carried keep warm; leaves or a hide under a sleeper is a bed
+        cover = jnp.clip(state.clothing + inv @ INSULATION, 0.0, 1.0)
+        bed_mins = ground[MIN0:, pos_after[:, 0], pos_after[:, 1]]                 # (M, N)
+        bed = jnp.minimum(MIN_BEDDING @ bed_mins, cfg.bedding_max)
+        bedded = sleeping & alive0 & ~below_after & (bed >= 0.1)
+        bed = jnp.where(bedded, bed, 0.0)
+    else:
+        cover, bed, bedded = state.clothing, jnp.zeros(n), jnp.zeros(n, bool)
+    wrap = 1.0 + (cfg.clothing_insulation * cover + bed) * (load < 0)
     body_temp = state.body_temp + cfg.thermal_rate / (geno.insulation * fx.get("insulation", 1.0) * wrap) * (load - state.body_temp)
     body_temp = jnp.clip(body_temp, -1.5, 1.5)
 
@@ -2493,6 +2571,8 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     # Every wound scars by the health it takes: blows, predator attacks, burns and falls
     wound = predation + violence + jnp.where(burned, cfg.burn_damage, 0.0) + fall_damage
     scars = jnp.where(alive0, jnp.clip(state.scars + cfg.scar_per_wound * wound, 0.0, 1.0), state.scars)
+    # Fresh pain: each wound hurts by the health it takes, and the hurt fades over a few hours
+    pain = jnp.clip(state.pain * (1.0 - cfg.pain_fade) ** _k(cfg) + cfg.pain_per_wound * wound, 0.0, 2.0)
 
     # ---------------------------------------------------------- psychology
     # Below without light where one stands (no burning branch near): fear of the dark
@@ -2678,7 +2758,8 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     bolt_grid = jnp.zeros((g, g)).at[strike_cell[0], strike_cell[1]].set(bolt.astype(jnp.float32))
     p_spread = 1 - (1 - cfg.spread_prob * dryness) ** _neighbor_count(burning0)
     spread = jax.random.uniform(k_fire[3], (g, g)) < p_spread
-    p_catch = jnp.minimum(cfg.ignite_prob * dryness, 1.0)
+    tinder = jnp.clip(minerals @ MIN_TINDER, 0.0, 1.0) * cfg.byproducts           # dry leaves, fiber
+    p_catch = jnp.minimum(cfg.ignite_prob * dryness * (1.0 + cfg.tinder_mult * tinder), 1.0)
     catch = jax.random.uniform(k_fire[4], (g, g)) < p_catch
     ignite = (fire <= 0) & (fuel_here > 0) & (
         ((spark_grid > 0) & catch) | (torch_grid > 0) | (bolt_grid > 0) | spread)
@@ -2756,6 +2837,15 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         plants = jnp.minimum(plants + base_rate * regrow * (fire <= 0), cfg.plant_max)
     wood = jnp.minimum(wood + jnp.where((state.terrain == FOREST) & (fire <= 0), cfg.wood_regrow, 0.0),
                        cfg.wood_max)
+    if cfg.byproducts:          # leaves fall under trees (most in autumn) and rot; fowl moult feathers
+        fall = cfg.leaf_fall * _k(cfg) * jnp.where(season == 2, cfg.autumn_leaf_mult, 1.0)
+        minerals = minerals * (1.0 - MIN_ROT * _k(cfg))
+        lv = LEAVES - MIN0
+        minerals = minerals.at[..., lv].set(jnp.where((state.terrain == FOREST) & (fire <= 0),
+                                                      jnp.minimum(minerals[..., lv] + fall, cfg.leaf_max), minerals[..., lv]))
+        fowl = small.alive & ~small.below & (small.species == fa.IDX["fowl"]) \
+            & (jax.random.uniform(jax.random.fold_in(keys[12], 41), small.alive.shape) < cfg.molt_prob * _k(cfg))
+        minerals = minerals.at[small.pos[:, 0], small.pos[:, 1], FEATHER - MIN0].add(fowl.astype(jnp.float32))
     meat = meat * (1 - cfg.meat_spoil_ground * (1.0 + cfg.fly_spoil_mult * flies))     # flies speed the rot
     cooked = cooked * (1 - cfg.cooked_spoil_ground)
     if cfg.underground:                                   # the cave floor: cool, no flies
@@ -3023,7 +3113,7 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         attachment=attachment, conditions=conditions, father_cond=father_cond,
         life_moves=keep(life_moves, state.life_moves), life_strikes=keep(life_strikes, state.life_strikes),
         hardship=keep(hardship, state.hardship),
-        scars=scars, lasting_injury=lasting_injury,
+        scars=scars, lasting_injury=lasting_injury, pain=keep(pain, state.pain),
         sex=state.sex, existed=state.existed, gestation=gestation, courting=courting, father=father, mother=state.mother,
         relatedness=state.relatedness, fetus_r=fetus_r, father_geno=father_geno, father_look=father_look,
         appearance=state.appearance, memory=memory, last_msg=msg,
@@ -3059,7 +3149,7 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         meat_eaten=(eaten > 0) & ((hand0 == RAW_MEAT) | (hand0 == COOKED_MEAT)),
         large_prey_hit=hit_large, slept=asleep & alive0, woken=sleeping & alive0 & disturbed,
         fell_asleep=sleeping & alive0 & ~state.asleep,
-        season=season, new_conditions=new_cond, made=made, kill_species=kill_sp, attacker_species=attacker_sp,
+        season=season, new_conditions=new_cond, made=made, bound=bound, bedded=bedded, kill_species=kill_sp, attacker_species=attacker_sp,
         gored=gored_dmg, gored_by=gored_by, stung=stung & alive0, venomed=venomed,
         mosquitoes=mosq[pos_after[:, 0], pos_after[:, 1]] * ~below_after,
         small_preyed_by=small_preyed_by, large_preyed_by=large_preyed_by,

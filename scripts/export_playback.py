@@ -368,7 +368,7 @@ def build_frame(t, prev, state, a, info, evs, env_cfg, n_agents, minds=None):
                 "existed": bool(s.existed[i]), "sex": "female" if int(s.sex[i]) == E.FEMALE else "male",
                 "pregnant": bool(s.gestation[i] > 0), "courting": bool(s.courting[i] > 0), "mother": int(s.mother[i]),
                 "below": bool(s.below[i]), "dark": bool(np.asarray(info.dark)[i]),
-                "downed": bool(np.asarray(info.downed)[i]),
+                "downed": bool(np.asarray(info.downed)[i]), "pain": round(float(E.pain_of(s, env_cfg)[i]), 2),
                 "carrying": {E.MAT_NAMES[m]: round(float(s.inv[i, m]), 1) for m in range(E.N_MAT) if s.inv[i, m] > 0.05}}
     nz = lambda grid, thr=0.3: [[int(r), int(c)] for r, c in np.argwhere(grid > thr)]
     # The social web, read from the agents' own memories (nothing here feeds back into the world):

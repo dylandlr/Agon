@@ -404,7 +404,10 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
             ps = [(pid(last(i, *kinds)), cause)] if kinds else []
             if not kinds or not ps[0][0]:
                 ps = [(mem.get(i), "the last thing that happened to it")]
-            ev = emit(i, "death", ps, cause=cause)
+            prev_down = mem.get("downed")
+            finished = prev_down is not None and i < len(prev_down) and bool(prev_down[i]) \
+                and cause in ("violence", "predation")              # killed where it lay (RimWorld: finished off)
+            ev = emit(i, "death", ps, cause=cause, **({"finished_off": True} if finished else {}))
             mem[("death_of_life", i)] = (ev["id"], t)
     # predators taking animals (the food chain beyond the agents)
     if hasattr(info, "small_preyed_by"):
@@ -431,14 +434,27 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
             down = bool(np.asarray(info.below)[i])
             emit(i, "went_underground" if down else "came_up",
                  **({"torch": bool(st.torch[i] > 0)} if st is not None else {}))
+    if hasattr(info, "bound"):                              # a point bound to a stick with fiber: a spear
+        for i in np.flatnonzero(np.asarray(info.bound)):
+            emit(i, "made", [(pid(last(i, "gather")), "what it had gathered")], product="spear", by_hand=True)
+    if hasattr(info, "bedded"):                             # lay down to sleep on leaves or a hide
+        now_bed = np.asarray(info.bedded)
+        was_bed = mem.get("bedded", np.zeros_like(now_bed))
+        if len(was_bed) < len(now_bed):
+            was_bed = np.concatenate([was_bed, np.zeros(len(now_bed) - len(was_bed), bool)])
+        for i in np.flatnonzero(now_bed & ~was_bed):
+            emit(i, "bedded")
+        mem["bedded"] = now_bed
     if hasattr(info, "downed"):                             # fell and cannot stand; got back up
         now_down = np.asarray(info.downed)
         was_down = mem.get("downed", np.zeros_like(now_down))
         if len(was_down) < len(now_down):                 # the world grew its slots (lifesim/grow.py)
             was_down = np.concatenate([was_down, np.zeros(len(now_down) - len(was_down), bool)])
         for i in np.flatnonzero(now_down & ~was_down):
+            shock = st is not None and float(st.health[i]) >= cfg.downed_health and float(st.injury[i]) < cfg.downed_injury
             emit(i, "downed", [(pid(last(i, "struck_by_agent", "predator_attack", "hurt_by_prey", "fall", "stung",
-                                        within=max(2, int(round(2 * per))))), "the wound")])
+                                        within=max(2, int(round(2 * per))))), "the wound")],
+                 **({"pain_shock": True} if shock else {}))
         for i in np.flatnonzero(was_down & ~now_down):
             if st is not None and bool(st.alive[i]):        # up again (not dead)
                 emit(i, "stood_up")

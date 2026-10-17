@@ -1110,6 +1110,19 @@ both off in the base config):
   eat what is on one's own cell. Others see them lying as they see a sleeper, and decide whether to
   bring food (drop it on their cell), keep watch, or finish them; predators find them easy. Events
   "downed" (caused by the last wound) and "stood_up".
+- **Pain shock** (`pain_shock`, RimWorld's): pain is 0.6 x injury (the ache of standing wounds) plus
+  fresh pain, 2.5 x the health each wound takes, fading with a half-life of about 4 hours (`pain_fade`).
+  At `pain_shock` (0.8) / sqrt(pain_aversion) one drops, so the heritable trait that weighs pain also
+  sets how much one can take (a pain-averse 4.0 drops at 0.4; a stoic 0.25 holds to 0.99), and gets up
+  again once the fresh pain fades. A few quick blows, a bear's maul or a bad fall can now drop someone
+  who is not near death; fights end with people down more often than dead. `pain_shock=0` turns it off.
+- **Finishing off**: the downed cannot ward off or roll away, so blows and bites on them land at
+  `downed_hit_mult` (2x), and each person's blow on a downed one has `coup_prob` (0.15) of striking
+  something vital and killing outright (cause: violence). The "death" event carries `finished_off` when
+  the dead was down the tick before; "downed" carries `pain_shock` when pain alone dropped them.
+  RimWorld itself has no damage multiplier: a downed pawn cannot dodge or block, and dies when a vital
+  part is destroyed (neck, head, heart), blood runs out, or consciousness reaches zero. Agon's health is
+  one number, not a body of parts, so the multiplier and the vital-hit chance stand in for that.
 - **Grazing** (`EnvConfig.grazing`): rabbits, fowl, tortoises, deer, aurochs, boar, horses and
   mammoths eat the plants where they stand (shared when a cell is crowded; a large grazer eats about
   seven times what a small one does) and drift toward the richest ground beside them; one that finds
@@ -1123,9 +1136,28 @@ both off in the base config):
 **Clothing** (`EnvConfig.clothing`, on in the living world; `--no-clothing` for the ablation): very
 basic. Each founder starts with hides covering a different share of the body (from `clothing_min`, 0.1,
 to all of it); babies are born bare. Clothing keeps heat in when it is colder than comfort: body
-temperature drifts toward the cold more slowly, by 1 + 0.8 x coverage. It does not wear out and cannot
-yet be made, so children born in a run stay bare (making clothes from hides is the natural next step).
+temperature drifts toward the cold more slowly, by 1 + 0.8 x (coverage + insulation of what one carries)
+(and more again on a bed while asleep; see Byproducts). Worn clothing does not wear out and cannot yet
+be sewn, but a carried hide (insulation 0.35 each, feathers 0.04) wraps one the same way.
 Exported per agent as `clothing`; the playback dresses each person by it.
+
+**Byproducts** (`EnvConfig.byproducts`, on by default): the living world sheds things people can pick
+up, carry and place like any mineral. Nothing says what they are for; each does only what its physics
+allows, and finding a use is the agents' to discover (tech tree nodes `hides`, `bedding`, `bone_tools`,
+`hafting`, `spear_hunting`).
+
+| item | from | what it does |
+|---|---|---|
+| leaves | fall under trees (`leaf_fall`, 5x in autumn, up to `leaf_max` a cell), rot | tinder: a spark on leaves catches `tinder_mult` (3x) likelier; bedding |
+| fiber | foraging greens on grass or marsh (`fiber_per_greens`) | binding; tinder; a little bedding |
+| feathers | fowl kills, fowl eaten by predators, moulting (`molt_prob`) | light insulation and bedding |
+| hide | large game killed by people or taken by predators (deer 2, mammoth 4) | insulation 0.35 carried; good bedding |
+| bone | the same carcasses (mammoth 6) | hard (0.6) and fairly sharp (0.5): a tool and a point |
+| spear | **placing fiber** on a cell holding a stick (wood) and a point (anything with sharpness >= `haft_edge`, 0.5: flint, obsidian, bone) binds them into one | hardness 0.8, sharpness 0.9, and its length keeps a struck animal off: counter-attacks (gore, trample, maul) land `spear_reach` (50%) less |
+
+Sleeping on a cell with leaves, fiber, feathers or hides makes a bed (up to `bedding_max`) that keeps the
+cold out like clothing; event "bedded". Binding a spear is event "made" (product "spear", by hand).
+Organic items rot slowly (leaves fastest) and are never found as deposits.
 
 ## Plant ecology and camp fouling (living world)
 
@@ -1311,6 +1343,13 @@ world, the exporter, viability and the benchmark; 30 is the calibration).
   about 4 m long; body depth, leg length and leg thickness follow per-species shares. Small animals
   (rabbit, fowl, tortoise, fish, bat, snake) are drawn no smaller than a legibility floor (a 14-pixel
   body), so they are larger than life; everything from a wolf up is true to scale.
+- **Things on the ground take room only when big.** Items under half a metre (leaves, feathers, fiber,
+  bones, stone chips) are scattered detail with no outline; a hide (1.2 m) or a spear (1.8 m) is an
+  outlined object with a shadow in the lower half of its cell.
+- **Fish are under water**: drawn faint and water-tinted, clipped to the water cell, with a glint; a
+  crocodile in water shows only its top third. **Animals and trees**: on a forest cell animals stand
+  beside the trunk rather than inside it and a resting fowl perches in the crown; on rock small animals
+  stand on the boulder and large ones beside it.
 - **Depth and line of sight.** Trees, animals and people are drawn as one scene sorted by where each
   stands (each row of trees on its own strip), so a tree hides whoever stands behind it. Where a tree or
   a big animal (mammoth, aurochs, horse, bear) hides someone, the hidden part of them shows through as a

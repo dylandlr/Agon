@@ -172,8 +172,23 @@ class EnvConfig:
     # Clothing (very basic): each founder starts with hides covering some share of the body, from
     # clothing_min to all of it, different for each; babies are born bare. It keeps heat in when it is
     # colder than comfort (body temperature drifts toward the cold more slowly: x 1 + insulation x
-    # coverage). It does not wear out and cannot yet be made, so children born in a run stay bare.
+    # coverage). It does not wear out. Children born bare can keep warm with what they carry: hides
+    # and feathers (byproducts below) count toward coverage while carried.
     clothing: bool = False
+    # Byproducts of the living world (lifesim/minerals.py ORGANIC): leaf litter under trees, fiber
+    # from foraging grasses, feathers, hides and bones from kills, a spear bound from a stick, a point
+    # and fiber. Carried hides and feathers keep warm; leaves and hides under a sleeper are a bed;
+    # leaves and fiber are tinder for sparks; a spear's length keeps a struck animal off.
+    byproducts: bool = True
+    leaf_fall: float = 0.004           # units per forest cell per 30-minute tick (x autumn_leaf_mult in autumn)
+    autumn_leaf_mult: float = 5.0
+    leaf_max: float = 3.0
+    fiber_per_greens: float = 0.5      # fiber per unit of greens foraged on grass or marsh
+    molt_prob: float = 0.004           # a feather per fowl per 30-minute tick
+    tinder_mult: float = 3.0           # a spark catches this much more readily on dry leaves or fiber
+    bedding_max: float = 0.6           # at most this much added insulation from what one lies on
+    haft_edge: float = 0.5             # how sharp a point must be to bind into a spear
+    spear_reach: float = 0.5           # a struck animal fights back this much less against a spear
     # Plant ecology (lifesim/ecology.py): greens, fruit, nuts and roots per cell, from biome densities
     # per km^2 times the cell's area; logistic regrowth and seed spread, seasonal crops, gathering
     # that takes time and pays less where food is thin. Off by default (the classic plants: one stock
@@ -224,6 +239,18 @@ class EnvConfig:
     downed: bool = False
     downed_health: float = 0.2      # health below this
     downed_injury: float = 0.8      # or injury at or above this (bleeding hard)
+    # Pain shock (RimWorld's): pain = pain_per_injury x injury + fresh pain (pain_per_wound x health a
+    # wound takes, fading by pain_fade per 30 minutes). At pain_shock / sqrt(pain_aversion) one drops
+    # (only with downed on) and gets up again once the fresh pain fades. 0 turns shock off.
+    pain_shock: float = 0.8
+    pain_per_injury: float = 0.6
+    pain_per_wound: float = 2.5
+    pain_fade: float = 0.08        # half-life about 4 hours
+    # Finishing off: blows and bites on the downed land square (x downed_hit_mult) and each blow from
+    # a person has coup_prob of striking something vital and killing outright (RimWorld has no
+    # multiplier: its downed simply cannot dodge or block, and die when a vital part is destroyed)
+    downed_hit_mult: float = 2.0
+    coup_prob: float = 0.15
 
     # Disease (SIR-style per agent)
     disease_duration: int = 96      # 2 days (was 200: with no healing while sick, a 0.8 health loss

@@ -821,6 +821,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   // hanging over their edge in ink-tipped drips; deep dark water with reeds and sparkles; a soft
   // shadow under each thing; a cream ring round the one selected; night graded violet
   const P = 16;
+  const PX_PER_M = 8, ROOM_M = 0.5;                  // art pixels a metre (a person ~13); things under ROOM_M take no room
   const INKP = "#203036";                    // ink: a lifted slate teal, never black (Mudborne)
   // Mudborne's colour discipline: ground muted (saturation ~0.15-0.25, leaning blue-green; bare ground
   // leaning mauve), water the one saturated surface, colour saved for the living
@@ -1805,6 +1806,29 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     ANIM.set(key, m);
     return m;
   }
+  const w0 = (s) => s.width / 2;
+  // Where an animal stands within its cell, given what is there: in a wood it stands beside the trunk
+  // (the tree's own row is drawn behind it, the row below in front), a fowl at rest perches in the
+  // crown; on rock a small animal climbs onto the boulder, a big one stands beside it.
+  function standing(r, c, n, size, moving, w) {
+    const t = DATA.terrain[r * G + c], out = { dx: 0, dy: 0, lift: 0, perch: false, onRock: false };
+    if (t === "1") {
+      if (n === "fowl" && !moving) { treeRow(r); const cr = CROWN.get(r * G + c);
+        if (cr) { out.dx = cr[0] + cr[2] / 2 - (c * P + 8); out.dy = cr[1] - (r * P + 14.5) + 3; out.perch = true; return out; } }
+      const side = hash(r, c, 950) < 0.5 ? -1 : 1;
+      out.dx = side * Math.min(6, 3 + Math.round(w / 3)); out.dy = 1;
+      return out;
+    }
+    if (t === "2" || t === "7") {
+      const h = (i) => hash(r, c, i + 800);
+      if (t === "2" && h(0) > 0.6) return out;                       // no boulder in this cell
+      const bw = t === "7" ? 12 : 6 + Math.floor(h(1) * 6), bh = t === "7" ? 9 : 4 + Math.floor(h(2) * 4);
+      const bx = Math.floor(h(3) * (P - bw - 2)) + 1;
+      if (size < 0.4 && t === "2") { out.dx = bx + bw / 2 - 8; out.dy = -(bh + 1); out.lift = bh + 1; out.onRock = true; }
+      else out.dx = bx + bw / 2 < 8 ? 5 : -5;                         // beside it
+    }
+    return out;
+  }
   function pixAnimal(r, c, k, g0 = ctx, mv = null) {
     const sp = (DATA.fauna || [])[k] || { name: "?" }, n = sp.name, col = PIX_SPRITE[n] || "#888";
     let rr = r, cc = c, face = 1, step = 0;
@@ -1817,10 +1841,29 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     if (n === "bat" || n === "fish" || n === "snake") step = reduced ? 0 : (flick + k) % 4;
     let s = smallSprite(n, col, step);
     if (face < 0) { const mk = "AM|" + n + "|" + step; let m = SPR.get(mk); if (!m) { m = mirror(s); SPR.set(mk, m); } s = m; }
-    const x = Math.round(cc * P * 2) / 2, y = Math.round(rr * P * 2) / 2, w = s.width / 2, h = s.height / 2;
-    if (n !== "fish" && n !== "bat") pixShadow(g0, x + 8, y + 13, Math.max(6, Math.round(w * 0.8)));
+    const moving = !!(mv && (mv.pr !== r || mv.pc !== c));
+    const st = standing(r, c, n, sp.size ?? 0.3, moving, w0(s));
+    let x = Math.round(cc * P * 2) / 2 + st.dx, y = Math.round(rr * P * 2) / 2 + st.dy;
+    const w = s.width / 2, h = s.height / 2;
+    const water = DATA.terrain[r * G + c] === "3";
+    if (n === "fish" || (n === "crocodile" && water)) {                 // in the water, not on it
+      if (SHADOW_MODE === 1) return;
+      const sink = n === "fish" ? 3 : 2, cut = n === "fish" ? 0 : Math.round(h * 0.35);   // a crocodile: eyes and back above
+      g0.save(); g0.beginPath(); g0.rect(Math.floor(cc * P), Math.floor(rr * P), P, P); g0.clip();
+      if (cut > 0) { g0.save(); g0.beginPath(); g0.rect(x + 8 - w / 2, y + 14.5 - h + sink, w, cut); g0.clip();
+        g0.drawImage(s, x + 8 - w / 2, y + 14.5 - h + sink, w, h); g0.restore(); }
+      g0.globalAlpha = n === "fish" ? 0.42 : 0.3;
+      g0.save(); g0.beginPath(); g0.rect(x + 8 - w / 2, y + 14.5 - h + sink + cut, w, h - cut); g0.clip();
+      g0.drawImage(s, x + 8 - w / 2, y + 14.5 - h + sink, w, h); g0.restore();
+      g0.globalAlpha = 0.55; g0.fillStyle = PAL.water[1]; g0.fillRect(x + 8 - w / 2, y + 14.5 - h + sink + cut, w, h - cut);   // seen through water
+      g0.restore();
+      const rip = (flick + k) % 4;                                            // the surface above it
+      if (!reduced && rip < 2) { px(g0, Math.round(x + 8 - w / 2 + rip), Math.round(y + 14.5 - h + sink), "#d8f4ee", Math.max(2, Math.round(w / 3)), 1); }
+      return;
+    }
+    if (n !== "fish" && n !== "bat" && !st.perch) pixShadow(g0, x + 8, y + 13 - st.lift, Math.max(6, Math.round(w * 0.8)));
     if (SHADOW_MODE === 1) return;
-    const lift = n === "bat" ? -6 : n === "fish" ? -2 : 0, walks = n !== "fish" && n !== "bat";
+    const lift = n === "bat" ? -6 : 0, walks = n !== "fish" && n !== "bat" && !st.perch && !st.onRock;
     const under = walks ? groundUnder(x, y) : null;
     if (under && (step === 1 || step === 3) && mv && (mv.pr !== r || mv.pc !== c)) footFx(g0, under, x + 8 - w / 4 + (step === 1 ? 0 : w / 2), y + 14, POSE.frac);
     g0.drawImage(s, x + 8 - w / 2, y + 14.5 - h + lift, w, h);
@@ -2084,12 +2127,42 @@ const DATA = /*__PLAYBACK_DATA__*/null;
         px(ctx, x, y, "rgba(70, 52, 32, 0.55)", 2, 1); }
       if (v >= 5 && !reduced) { const o = flick % 4; px(ctx, c * P + 6 + (o & 1), r * P + 4 + (o >> 1), "#1c2229"); px(ctx, c * P + 10 - (o & 1), r * P + 7, "#1c2229"); }
     });
-    const minByCell = new Map();
-    (f.minerals || []).forEach(([r, c, k]) => { const key = r * G + c; if (!minByCell.has(key)) minByCell.set(key, []); minByCell.get(key).push(k); });
-    minByCell.forEach((ks, key) => {
+    // What lies on the ground, drawn at its real size (PX_PER_M art pixels a metre: a person is about
+    // 13). Small things (under ROOM_M: leaves, feathers, fiber, bones, mineral chips) are scattered
+    // detail with no outline and take no room; bigger ones (a hide, a spear) are objects with an
+    // outline and a shadow, laid in the cell's lower half.
+    const byCell = new Map();
+    (f.minerals || []).forEach(([r, c, k, amt]) => { if (r < VR0 - 1 || r >= VR1 + 1 || c < VC0 - 1 || c >= VC1 + 1) return;
+      const key = r * G + c; if (!byCell.has(key)) byCell.set(key, []); byCell.get(key).push([k, amt ?? 1]); });
+    byCell.forEach((items, key) => {
       const r = Math.floor(key / G), c = key % G;
-      ks.slice(0, 3).forEach((k, j) => { const x = c * P + 10 + (j % 2) * 3, y = r * P + 1 + j * 3;
-        px(ctx, x, y, INKP, 4, 3); px(ctx, x + 1, y, (DATA.minerals || [])[k]?.color || "#888", 2, 2); });
+      let slot = 0;
+      items.forEach(([k, amt]) => {
+        const m = (DATA.minerals || [])[k] || {}, col = m.color || "#888", name = m.name || "", size = m.size ?? 0.08;
+        const n = Math.max(1, Math.min(8, Math.round(amt * (name === "leaves" ? 2.5 : 1))));
+        if (size < ROOM_M) {                                      // scattered detail
+          for (let j = 0; j < n; j++) {
+            const x = c * P + 1 + Math.floor(hash(r, c, 300 + 7 * k + j) * 14), y = r * P + 2 + Math.floor(hash(c, r, 310 + 7 * k + j) * 12);
+            if (name === "leaves") { const tone = ["#a8642c", "#c98a3a", "#7f5a2a", "#d0a040"][Math.floor(hash(r, c, 320 + j) * 4)]; px(ctx, x, y, tone, 2, 1); px(ctx, x + 1, y - 1, tone); }
+            else if (name === "feather") { px(ctx, x, y, "#f2efe6", 1, 2); px(ctx, x + 1, y - 1, "#d8d4c8"); }
+            else if (name === "fiber") { px(ctx, x, y, "#bfae6a", 3, 1); px(ctx, x + 1, y + 1, "#9a8a52", 2, 1); }
+            else if (name === "bone") { const w = Math.max(2, Math.round(size * PX_PER_M)); px(ctx, x, y, "#efe8d6", w, 1); px(ctx, x, y - 1, "#efe8d6"); px(ctx, x + w - 1, y + 1, "#efe8d6"); }
+            else px(ctx, x, y, col, 1 + (j % 2), 1);              // a chip, a nugget
+          }
+          return;
+        }
+        const len = Math.max(4, Math.min(P - 1, Math.round(size * PX_PER_M))), x = c * P + Math.floor((P - len) / 2), y = r * P + 9 + 3 * (slot++ % 2);
+        if (name === "spear") {                                   // a shaft with a stone point, lying diagonally
+          pixShadow(ctx, x + len / 2, y + 3, len);
+          for (let i = 0; i < len; i++) { const yy = y + 2 - Math.floor(i * 3 / len); px(ctx, x + i, yy, i < len - 3 ? "#8a5a36" : "#5c5f66"); }
+          px(ctx, x + len - 2, y - 1, "#3a3d44", 2, 1); px(ctx, x + 3, y + 1, "#bfae6a", 2, 1);   // the point; the binding
+        } else {                                                  // a hide: a pelt, fur up, legs splayed
+          const h = Math.max(3, Math.round(len * 0.55));
+          pixShadow(ctx, x + len / 2, y + h, len + 1);
+          px(ctx, x, y, INKP, len, h); px(ctx, x + 1, y + 1, col, len - 2, h - 2); px(ctx, x + 2, y + 1, "#6e4d2f", len - 4, 1);
+          px(ctx, x - 1, y, INKP, 2, 1); px(ctx, x + len - 1, y, INKP, 2, 1); px(ctx, x - 1, y + h - 1, INKP, 2, 1); px(ctx, x + len - 1, y + h - 1, INKP, 2, 1);
+        }
+      });
     });
     f.wood.forEach(([r, c]) => { const x = c * P + 1, y = r * P + 12; px(ctx, x, y, INKP, 8, 3); px(ctx, x + 1, y + 1, "#8a5a36", 6, 1); px(ctx, x + 6, y + 1, "#c9a072"); });
     f.meat.forEach(([r, c]) => { const x = c * P + 9, y = r * P + 10; px(ctx, x, y, INKP, 6, 4); px(ctx, x + 1, y + 1, "#c0392f", 4, 2); px(ctx, x + 1, y + 1, "#f0a0a0"); });
@@ -2972,7 +3045,8 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     if (a.injury > 0.2) why.push(`injured (${pct(a.injury)})`);
     if (a.sick) why.push("sick");
     if ((a.temp ?? 0) < -0.4) why.push("cold"); else if ((a.temp ?? 0) > 0.5) why.push("overheated");
-    if (a.downed) why.push("down and unable to stand");
+    if (a.downed) why.push((a.pain ?? 0) >= 0.6 && a.health >= 0.2 ? "down in shock from the pain" : "down and unable to stand");
+    else if ((a.pain ?? 0) > 0.3) why.push(`in pain (${pct(Math.min(a.pain, 1))})`);
     if ((a.stress || 0) > 0.6) { const src = stressTop(k, fj); why.push(`stressed ${pct(a.stress)}${src ? `, mostly by ${src}` : ""}`); }
     if (why.length) s += ` It was ${why.join(", ")}.`;
     const beside = fj.agents.map((b, q) => [b, q]).filter(([b, q]) => q !== k && b.alive && !!b.below === !!a.below && Math.max(Math.abs(b.r - a.r), Math.abs(b.c - a.c)) <= 1);
@@ -3015,7 +3089,8 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     if (e.type === "stung") s = `${who(e.agent)} was stung by bees`;
     if (e.type === "eat" && e.what) s += ` ${e.what}`;
     if (e.type === "gather" && e.what) s += ` ${e.what}`;
-    if (e.type === "death") s += ` of ${e.cause}`;
+    if (e.type === "death") s += ` of ${e.cause}${e.finished_off ? ", finished off where it lay" : ""}`;
+    if (e.type === "downed" && e.pain_shock) s += " in shock from the pain";
     if (e.type === "ignite") s += ` with ${e.method === "spark" ? "a spark" : "burning wood"}`;
     if (e.type === "gave_birth" && e.child && e.child.length) s += ` to ${e.child.map(who).join(" and ")}`;
     if (e.type === "touch") s += ` ${(e.targets || []).length ? e.targets.map(who).join(" and ") : "someone"}`;
@@ -4399,12 +4474,12 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       b.title = `${label(k, f.t)}: health ${Math.round(100 * a.health)}%, calm ${Math.round(100 * (1 - (a.stress || 0)))}%${a.below ? ", underground" : ""}`;
     });
   }
-  const LETTER = { death: ["#e05252", (e) => `${label(e.agent, e.t)} died${e.cause ? ` (${e.cause})` : ""}`],
+  const LETTER = { death: ["#e05252", (e) => `${label(e.agent, e.t)} died${e.cause ? ` (${e.cause}${e.finished_off ? ", finished off" : ""})` : ""}`],
     born: ["#6fb6ff", (e) => `${label(e.agent, e.t)} was born`], predator_attack: ["#ff9b3a", (e) => `${label(e.agent, e.t)} attacked${e.predator ? ` by a ${e.predator}` : ""}`],
     struck_by_agent: ["#ff9b3a", (e) => `${label(e.agent, e.t)} was struck`], conceived: ["#ff9ec4", (e) => `${label(e.agent, e.t)} conceived`],
     took_food: ["#7fd07a", (e) => `${label(e.agent, e.t)} took a gift`], ignite: ["#ffb347", (e) => `${label(e.agent, e.t)} made fire`],
     went_underground: ["#b49ae6", (e) => `${label(e.agent, e.t)} went underground`],
-    downed: ["#e05252", (e) => `${label(e.agent, e.t)} is down`] };
+    downed: ["#e05252", (e) => `${label(e.agent, e.t)} is down${e.pain_shock ? " (pain shock)" : ""}`] };
   let letters = [];
   function updateLetters(i) {
     const horizon = Math.max(1, Math.round(180 / TM));                  // the last three game hours

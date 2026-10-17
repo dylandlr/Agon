@@ -19,6 +19,8 @@ Habits, all from mechanics the world already has or adds here:
 - provoked only: attacks only when struck first or startled at close range (bears).
 - hibernates: inactive in winter (bears).
 - venom: a bite adds poison damage and lasting pain (snakes).
+- byproducts: a kill leaves hide, bone and feathers by species (BYPRODUCTS), the raw stuff of
+  cloaks, beds and points; fowl also moult feathers where they live.
 - caves (cfg.underground): any species whose habitat includes cave can go underground at a
   mouth. Predators follow a quarry that ducks into a cave close by (scent reaches 2 cells across
   the layers); prey that is fleeing may bolt down a mouth; denning species keep to the caves at
@@ -80,6 +82,11 @@ SPECIES = [
     dict(name="crocodile", group=PRED, share=0.1, habitat=("water", "marsh"), hp=3.5, armor=1.0, meat=8.0,
          notice=2, act=0.6, speed=1, attack=(0.4, 0.25, 0.25, 300), ambush=1, takes_large=1, look=(0.7, 1.0, 0.3)),
 ]
+# What a carcass leaves besides meat (units of lifesim/minerals.py organics): hide (skin and fur),
+# bone, feathers. A tortoise's "bone" is its shell; a fish leaves bones and scales.
+BYPRODUCTS = {'rabbit': (0.5, 0.3, 0), 'fowl': (0, 0.2, 3), 'fish': (0, 0.2, 0), 'tortoise': (0, 1.0, 0), 'bat': (0, 0, 0), 'deer': (2, 2, 0), 'aurochs': (3, 3, 0), 'boar': (2, 2, 0), 'horse': (2, 2, 0), 'mammoth': (4, 6, 0), 'wolf': (1, 1, 0), 'big cat': (1.5, 1, 0), 'bear': (3, 2, 0), 'snake': (0.3, 0.1, 0), 'crocodile': (2, 2, 0)}
+for s in SPECIES:
+    s["hide"], s["bone"], s["feather"] = BYPRODUCTS[s["name"]]
 for s in SPECIES:                       # defaults
     for k, v in dict(herd=0.0, nocturnal=0.0, evade=0.0, counter=(0.0, 0.0), attack=(0.0, 0.0, 0.0, 0), pack=0,
                      ambush=0, provoked=0, hibernates=0, venom=0.0, takes_large=0, den=0, cave_only=0).items():
