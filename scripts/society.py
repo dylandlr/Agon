@@ -66,7 +66,7 @@ import numpy as np
 
 from society_data import World, deliberate, perm_p, spearman  # noqa: F401
 
-SLEEP_ACTION = 70           # lifesim/env.py SLEEP; checked against the env in tests/test_society.py
+SLEEP_ACTION = 76           # lifesim/env.py SLEEP; checked against the env in tests/test_society.py
 TASKS = ["gathering", "hunting", "tending fire", "nursing", "leaving food"]
 
 
