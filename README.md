@@ -1122,6 +1122,26 @@ both off in the base config):
   last of the social features. The world model predicts it among its body targets ("pain"), so an agent
   can imagine that an action will hurt before taking it. The reward is unchanged: survival only, with
   health lost felt through pain_aversion as before.
+- **Everyone stands differently toward pain.** `pain_aversion` (heritable, sensitised by trauma) sets
+  both how much one's own lost health hurts and where one drops in shock. **Sadism** (`sadism`, heritable
+  at 0.35, drawn skewed: most near 0, about one in ten above 0.5) is pleasure in the pain one inflicts:
+  in the survival reward it turns care for those one has struck negative (`care_sadism`), so their
+  visible decline, pain included, is felt as gain; in the acts reward it pays `sadism_reward` per unit of
+  hurt one's blows cause, habituating together with revenge. Pain shows: a wince lowers how someone
+  looks (visible condition, -0.5 x felt pain), so empathy, kin care, revenge and sadism all respond to
+  pain seen, not only to health lost; empathy also weighs a hurt by how loudly the hurt one feels it.
+  Masochism is not modelled as reward for one's own pain: the clinical sense is pleasure in pain in a
+  safe, chosen setting, which this world cannot represent, and a heritable reward for being hurt would
+  only be a trait for selection to remove (people born unable to feel pain mostly die young). Low
+  pain_aversion (high tolerance) is the part of that spectrum the world can express.
+- **Emotional pain (heartache)**: seeing others hurt, x empathy (cognitive empathy, seeing the wince,
+  is everyone's; feeling it is empathy's), and the death of someone one is attached to (grief, x
+  attachment) raise `heartache`, which fades with a half-life of about 11 hours, adds
+  `heartache_stress` to stress each tick (stress source "heartache"), and is felt (an own-body feature).
+  It is not physical pain and never sends one into shock.
+- **Chronic and phantom pain**: a lasting injury flares now and then with no new wound
+  (`phantom_prob` 2% per half hour at the worst lasting injury, adding `phantom_pain` 0.3 of fresh pain),
+  so the old-wounded live with recurring pain that can stack with a new hurt toward shock.
 - **Finishing off**: the downed cannot ward off or roll away, so blows and bites on them land at
   `downed_hit_mult` (2x), and each person's blow on a downed one has `coup_prob` (0.15) of striking
   something vital and killing outright (cause: violence). The "death" event carries `finished_off` when

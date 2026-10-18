@@ -395,7 +395,7 @@ ol.events time { color: var(--accent); margin-right: 8px; }
       <ol class="events" id="events"></ol>
     </div>
     <div class="pane" id="pane-people" role="tabpanel" aria-labelledby="tab-people" hidden>
-      <p class="legend">Click someone to inspect them. <span class="who">Blue names</span> and <a class="place" href="#" onclick="return false">purple places</a> are links throughout. Bars on the right: empathy, kin care, envy, guilt, reciprocity, vengefulness.</p>
+      <p class="legend">Click someone to inspect them. <span class="who">Blue names</span> and <a class="place" href="#" onclick="return false">purple places</a> are links throughout. Bars on the right: empathy, kin care, envy, guilt, reciprocity, vengefulness, sadism.</p>
       <div id="agents"></div>
     </div>
     <div class="pane" id="pane-society" role="tabpanel" aria-labelledby="tab-society" hidden>
@@ -2917,7 +2917,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     const mid = document.createElement("div");
     mid.innerHTML = `<div class="name"></div><div class="sub body"></div><div class="sub needs"></div><div class="bar"><i></i></div>`;
     const morals = document.createElement("div"); morals.className = "morals";
-    const names = ["empathy", "kin care", "envy", "guilt", "reciprocity", "vengefulness"];
+    const names = ["empathy", "kin care", "envy", "guilt", "reciprocity", "vengefulness", "sadism"];
     Object.values(a.morals).forEach((v, j) => { const i = document.createElement("i"); i.style.height = `${Math.max(2, Math.round(v * 22))}px`; i.title = `${names[j]}: ${v}`; morals.appendChild(i); });
     morals.setAttribute("aria-label", names.map((n, j) => `${n} ${Object.values(a.morals)[j]}`).join(", "));
     row.append(sw, mid, morals); agentsEl.appendChild(row);
@@ -3045,8 +3045,9 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     if (a.injury > 0.2) why.push(`injured (${pct(a.injury)})`);
     if (a.sick) why.push("sick");
     if ((a.temp ?? 0) < -0.4) why.push("cold"); else if ((a.temp ?? 0) > 0.5) why.push("overheated");
-    if (a.downed) why.push((a.pain ?? 0) >= 0.6 && a.health >= 0.2 ? "down in shock from the pain" : "down and unable to stand");
-    else if ((a.pain ?? 0) > 0.3) why.push(`in pain (${pct(Math.min(a.pain, 1))})`);
+    if (a.downed) why.push((a.pain ?? 0) >= 1 && a.health >= 0.2 ? "down in shock from the pain" : "down and unable to stand");
+    else if ((a.pain ?? 0) > 0.3) why.push(`in pain (${pct(Math.min(a.pain, 1))} of what it can bear)`);
+    if ((a.heartache ?? 0) > 0.2) why.push(`heartsore (${pct(Math.min(a.heartache, 1))}): grief, or others' pain felt as its own`);
     if ((a.stress || 0) > 0.6) { const src = stressTop(k, fj); why.push(`stressed ${pct(a.stress)}${src ? `, mostly by ${src}` : ""}`); }
     if (why.length) s += ` It was ${why.join(", ")}.`;
     const beside = fj.agents.map((b, q) => [b, q]).filter(([b, q]) => q !== k && b.alive && !!b.below === !!a.below && Math.max(Math.abs(b.r - a.r), Math.abs(b.c - a.c)) <= 1);
@@ -3123,7 +3124,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     pain_aversion: "how much pain hurts", social_reward: "sociability", novelty: "curiosity", patience: "patience (discount)",
     lr_scale: "learning speed", critical_period: "learning window", social_learning: "learns by watching",
     temperament_drift: "shaped by experience", empathy: "feels others' harm", kin_care: "cares for kin",
-    envy: "envy", guilt: "guilt", reciprocity: "repays kindness", vengefulness: "vengefulness",
+    envy: "envy", guilt: "guilt", reciprocity: "repays kindness", vengefulness: "vengefulness", sadism: "pleasure in hurting",
     libido: "drive (intimacy calms)", selflessness: "selfless toward anyone",
   };
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -3395,6 +3396,8 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       (v) => `Adds ${K.care_reciprocity || 0.5} × ${f2(v)} care for agents who left food near it.`],
     vengefulness: ["Hostility toward those who have struck it.",
       (v) => `Subtracts ${K.care_revenge || 0.5} × ${f2(v)} from its care for agents who struck it: it feels their harm less, or as satisfaction.`],
+    sadism: ["Pleasure in the pain it inflicts (near 0 for most; high in a few).",
+      (v) => `Subtracts ${K.care_sadism || 0.5} × ${f2(v)} from its care for agents it has struck: their visible pain pleases it.`],
     libido: ["Drive: how much intimacy calms it.",
       (v) => `Mating lowers its stress by ${K.intimacy_relief || 0.2} × ${f2(v)}, less with repeats with the same partner.`],
     selflessness: ["Rare: weighs anyone's visible fortunes as its own.",
@@ -3837,7 +3840,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     const traits = meta.traits || Object.assign({}, meta.morals || {}, meta.libido !== undefined ? { libido: meta.libido } : {});
     if (Object.keys(traits).length) {
       html += "<h3>Traits (inborn)</h3>" + Object.entries(traits).map(([t, v]) => {
-        const [lo, hi] = TRAIT_RANGE[t] || (["empathy", "kin_care", "envy", "guilt", "reciprocity", "vengefulness",
+        const [lo, hi] = TRAIT_RANGE[t] || (["empathy", "kin_care", "envy", "guilt", "reciprocity", "vengefulness", "sadism",
           "social_learning", "temperament_drift"].includes(t) ? [0, 1] : [0.25, 2.5]);
         const w = Math.max(0, Math.min(1, (v - lo) / (hi - lo)));
         const mu = (meta.mutations || {})[t];

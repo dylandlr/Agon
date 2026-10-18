@@ -83,3 +83,60 @@ def test_one_feels_ones_own_pain_against_ones_tolerance_and_others_see_the_wince
 def test_the_world_model_learns_to_expect_pain():
     from lifesim.policy import DECODE_INDEX, DECODE_NAMES
     assert DECODE_NAMES[DECODE_INDEX.index(23)] == "pain"
+
+
+def test_an_old_wound_flares_with_no_new_hurt():
+    s = _world()._replace(lasting_injury=jnp.array([CFG.max_lasting_injury, 0.0]),
+                          injury=jnp.array([CFG.max_lasting_injury, 0.0]))
+    keys = jax.random.split(jax.random.PRNGKey(4), 400)
+    p = jax.vmap(lambda k: E.step(s._replace(key=k), jnp.array([E.REST, E.REST]), CFG)[0].pain)(keys)
+    p = np.asarray(p)
+    flared = (p[:, 0] > 0.2).mean()
+    assert 0.005 < flared < 0.06 and (p[:, 1] == 0).all()               # ~2% per half hour; the unhurt never
+
+
+def test_the_empathic_ache_with_others_pain_and_grieve_the_attached():
+    three = dataclasses.replace(CFG, n_agents=3)
+    s = E.reset(jax.random.PRNGKey(5), three)
+    s = s._replace(small=s.small._replace(alive=jnp.zeros_like(s.small.alive)),
+                   large=s.large._replace(alive=jnp.zeros_like(s.large.alive)),
+                   predators=s.predators._replace(alive=jnp.zeros_like(s.predators.alive)),
+                   conditions=jnp.zeros_like(s.conditions), pain_aversion=jnp.ones(3),
+                   birth_age=jnp.full(3, int(25 * three.ticks_per_bio_year), jnp.int32))
+    t = np.asarray(s.terrain)
+    w, m, e = next(((r, c - 1), (r, c), (r, c + 1)) for r in range(12) for c in range(1, 11)
+                   if (t[r, c - 1:c + 2] != E.WATER).all())
+    s = s._replace(pos=jnp.asarray([w, m, e], jnp.int32),
+                   genotype=s.genotype._replace(empathy=jnp.array([0.0, 0.0, 1.0])))
+    s1, *_ = E.step(s, jnp.array([E.STRIKE_N + 2, E.REST, E.REST]), three)  # 0 strikes 1; 2 watches
+    assert float(s1.heartache[2]) > 0.0 and float(s1.heartache[0]) == 0.0
+    # grief: someone one is attached to dies
+    dying = s._replace(health=s.health.at[1].set(1e-3), attachment=s.attachment.at[0, 1].set(1.0),
+                       genotype=s.genotype._replace(empathy=jnp.zeros(3)))
+    s1, _, _, info = E.step(dying, jnp.array([E.REST, E.REST, E.STRIKE_N + 6]), three)   # 2 strikes 1 dead
+    assert bool(info.died[1]) and float(s1.heartache[0]) >= 0.5 * CFG.heartache_grief
+
+
+def test_heartache_is_felt_and_stresses_but_never_shocks():
+    s = _world()._replace(heartache=jnp.array([2.0, 0.0]))
+    v, c = CFG.view_size, E.N_OBS_CHANNELS
+    assert np.isclose(np.asarray(E.observe(s, CFG))[0, v * v * c + 24], 1.0)
+    assert not bool(E.downed_of(s, CFG)[0])
+    s1, _, _, info = E.step(s, jnp.array([E.REST, E.REST]), CFG)
+    assert float(info.stress_from[0, E.STRESS_SOURCES.index("heartache")]) > 0
+    assert float(s1.stress[0]) > float(s1.stress[1])
+
+
+def test_a_sadist_is_pleased_by_its_victims_pain_and_an_empath_pained():
+    """Survival reward: care for those one has struck turns negative with sadism, so their visible
+    decline (pain shows) is felt as gain, where an empath feels it as loss."""
+    cfg = dataclasses.replace(CFG, reward_mode="survival", downed=False)
+    s = _world(cfg)
+    s = s._replace(memory=s.memory.at[1, 0, E.MEM_STRUCK_ME].set(1.0))  # 1 remembers 0 striking it
+    def felt(sadism, empathy):
+        g = s.genotype._replace(sadism=jnp.array([sadism, 0.0]), empathy=jnp.array([empathy, 0.0]),
+                                vengefulness=jnp.zeros(2), reciprocity=jnp.zeros(2), kin_care=jnp.zeros(2))
+        st = s._replace(genotype=g, attachment=jnp.zeros_like(s.attachment))
+        _, _, _, info = E.step(st, jnp.array([E.STRIKE_N + 2, E.REST]), cfg)
+        return float(info.moral_reward[0])
+    assert felt(1.0, 0.0) > 0.0 > felt(0.0, 1.0)

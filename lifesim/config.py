@@ -379,7 +379,7 @@ class EnvConfig:
 
     # ------------------------------------------------------------ moral sentiments
     # Weights on each agent's heritable moral traits (all in [0, 1]); see genotype.
-    empathy_weight: float = 0.5      # per unit of health a visible other loses
+    empathy_weight: float = 0.5      # per unit of health a visible other loses, x how much it shows (sqrt pain_aversion)
     kin_weight: float = 0.5          # same, scaled by appearance similarity
     inequity_weight: float = 0.01    # per tick, per unit of mean satiety gap to visible others
     reciprocity_reward: float = 0.05 # repaying someone who gave you food (fades with repetition)
@@ -517,6 +517,18 @@ class EnvConfig:
     habituation_half_life: int = 48  # ticks for a repeated feeling to recover half its strength (1 day)
     gift_window: int = 20            # dropped food taken by someone else within this many ticks is a gift
     revenge_reward: float = 0.05     # per strike on someone who has struck oneself
+    sadism_reward: float = 0.5       # per unit of health one's blows take from someone, x how much it shows;
+                                     # x the sadism trait; habituates with revenge (satisfaction in striking)
+    # Emotional pain (heartache): seeing others hurt (x empathy) and losing those one is attached to.
+    # It fades over days, raises stress by heartache_stress per tick, and is felt (observed); it is not
+    # physical pain and never sends one into shock.
+    heartache_empathy: float = 1.0   # per unit of visible others' hurt, x empathy
+    heartache_grief: float = 0.8     # per death of someone one is attached to, x attachment
+    heartache_fade: float = 0.03     # per 30 minutes (half-life about 11 hours)
+    heartache_stress: float = 0.01   # stress per tick at full heartache
+    # Phantom and chronic pain: a lasting injury flares now and then, with no new wound
+    phantom_prob: float = 0.02       # chance per 30 minutes at full lasting injury (x lasting / max)
+    phantom_pain: float = 0.3        # fresh pain a flare adds
 
     # ------------------------------------------------------------ observation
     view_radius: int = 5
@@ -538,6 +550,7 @@ class EnvConfig:
     care_kin: float = 0.5            # extra weight, x kin care x appearance similarity
     care_reciprocity: float = 0.5    # extra weight for those who have fed you, x reciprocity
     care_revenge: float = 0.5        # negative weight for those who have struck you, x vengefulness
+    care_sadism: float = 0.5         # negative weight for those you have struck, x sadism: their pain pleases
     care_inequity: float = 0.01      # envy and guilt over gaps in felt well-being (cost only)
     # Attachment: survival felt toward particular others. i's attachment to j (0..1) grows with
     # evidence that j keeps i alive (food j left that i took when hungry, warmth huddled beside j when cold,
@@ -667,7 +680,8 @@ _PER_TICK_AMOUNT = (       # added or lost per tick: x k
     "sleep_pressure", "sleep_recovery", "sleep_energy", "sleep_stress_relief", "sleep_debt_stress",
     "attach_warmth", "attach_company", "attach_coparent", "attach_nurse", "attach_shared_threat",
     "attach_absence", "attach_calm", "dark_stress", "guano_rate", "evaporation", "rain_use", "rain_drink",
-    "snow_rate", "snow_melt", "move_cost", "graze_small", "graze_large", "graze_starve", "predator_starve", "urge_rate", "urge_stress")
+    "snow_rate", "snow_melt", "move_cost", "graze_small", "graze_large", "graze_starve", "predator_starve", "urge_rate", "urge_stress",
+    "heartache_stress")
 _PER_TICK_CHANCE = (       # a chance each tick: 1 - (1 - p) ** k
     "contact_infection", "mosquito_infection", "spread_prob", "lightning_prob", "predator_prey_kill_prob",
     "predator_large_kill_prob", "small_prey_respawn", "large_prey_respawn", "predator_respawn",

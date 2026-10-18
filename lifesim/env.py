@@ -171,7 +171,7 @@ CH_SNOW = N_TERRAIN + 16
 CH_MINERALS = N_TERRAIN + 17      # N_MINERAL_CHANNELS channels, then fauna, then the social features
 CH_FAUNA = CH_MINERALS + N_MINERAL_CHANNELS
 CH_FLORA = CH_FAUNA + N_FAUNA_CHANNELS
-OWN_FEATURES = 24 + cond.K        # own body (felt pain last) and conditions, first in the body vector
+OWN_FEATURES = 25 + cond.K        # own body (felt pain, heartache last) and conditions, first in the body vector
 SHARED_START = OWN_FEATURES + N_MAT + N_MAT + 1    # after inventory, hand and torch: time and weather
 N_BODY_FEATURES = OWN_FEATURES + N_MAT + N_MAT + 1 + 5 + N_WEATHER + HEARD_FEATURES + READ_FEATURES
 
@@ -261,6 +261,7 @@ class State(NamedTuple):
     father_look: jnp.ndarray    # (N, N_APPEARANCE) father's appearance for each pregnancy
     lasting_injury: jnp.ndarray # (N,) floor that injury can no longer heal below
     pain: jnp.ndarray           # (N,) fresh pain from recent wounds, fading (pain_of adds the ache of injury)
+    heartache: jnp.ndarray      # (N,) emotional pain: others' hurt seen (x empathy) and grief; fades over days
     birth_age: jnp.ndarray      # (N,) int32 biological age in ticks when the run began
     genotype: gt.Genotype
     appearance: jnp.ndarray     # (N, 3) heritable look; lets kin resemble each other
@@ -368,7 +369,7 @@ class StepInfo(NamedTuple):
 
 GRAZERS = ("rabbit", "fowl", "tortoise", "deer", "aurochs", "boar", "horse", "mammoth")   # eat plants (cfg.grazing)
 STRESS_SOURCES = ("hurt", "danger", "unmet needs", "loneliness", "missing someone", "sleep debt", "darkness",
-                  "needing to relieve oneself")
+                  "needing to relieve oneself", "heartache")
 
 
 # ---------------------------------------------------------------- helpers
@@ -1032,7 +1033,7 @@ def reset(key: jax.Array, cfg: EnvConfig, genotype: gt.Genotype | None = None,
         conditions=draw_inborn(jax.random.fold_in(ks[4], 17), n, None, None).astype(jnp.float32), father_cond=jnp.zeros((n, cond.K)),
         life_moves=jnp.zeros(n, jnp.int32), life_strikes=jnp.zeros(n, jnp.int32), hardship=jnp.zeros(n, jnp.int32),
         impression=jnp.full((n, n), 2.5 * cfg.wellbeing_scale),   # founders know each other, all looking well
-        scars=jnp.zeros(n), lasting_injury=jnp.zeros(n), pain=jnp.zeros(n),
+        scars=jnp.zeros(n), lasting_injury=jnp.zeros(n), pain=jnp.zeros(n), heartache=jnp.zeros(n),
         sex=sex, existed=founders, gestation=jnp.zeros(n, jnp.int32), courting=jnp.zeros(n, jnp.int32),
         father=jnp.full(n, -1, jnp.int32), mother=jnp.full(n, -1, jnp.int32),
         relatedness=jnp.eye(n), fetus_r=jnp.zeros((n, n)), father_geno=geno, father_look=appearance,
@@ -1481,7 +1482,8 @@ def observe(state: State, cfg: EnvConfig) -> jnp.ndarray:
         state.scars, state.lasting_injury, state.sex.astype(jnp.float32),
         state.gestation / (cfg.gestation_years * cfg.ticks_per_bio_year),
         state.sleepiness, state.asleep.astype(jnp.float32),
-        state.below.astype(jnp.float32), state.urge, felt_pain(state, cfg)], axis=-1)  # (N, 24)
+        state.below.astype(jnp.float32), state.urge, felt_pain(state, cfg),
+        jnp.minimum(state.heartache, 1.0)], axis=-1)                                     # (N, 25)
     own = jnp.concatenate([own, state.conditions], axis=-1)                          # + its conditions
     feats = jnp.concatenate([own, state.inv / cfg.inventory_cap,
                              jax.nn.one_hot(state.hand, N_MAT),
@@ -1777,12 +1779,12 @@ def fly_density(meat, bodies, heat):
 
 
 # ---------------------------------------------------------------- step
-def visible_condition(health, injury, sick, weight, ideal_kg, scars, cfg: EnvConfig):
+def visible_condition(health, injury, sick, weight, ideal_kg, scars, cfg: EnvConfig, wince=0.0):
     """How an agent looks to others: wounds, injuries (including lasting ones), sickness,
     thinness and scars. Hunger, thirst, fatigue and stress are internal and cannot be seen."""
     thin = jnp.clip((weight / ideal_kg - 0.7) / 0.3, 0.0, 1.0)      # 1 at a healthy weight or above
     return cfg.wellbeing_scale * (health + 0.5 * (1.0 - injury) + 0.5 * (1.0 - sick) + 0.5 * thin
-                                  - 0.25 * scars)
+                                  - 0.25 * scars - 0.5 * wince)            # pain shows: one winces, cries out
 
 
 def wellbeing(health, satiety, hydration, energy, body_temp, stress, pain_weight, cfg: EnvConfig,
@@ -1822,10 +1824,12 @@ def _survival_reward(state, cfg, geno, alive0, alive, dead_now, similarity,
     # felt; a death is felt on seeing the body. Changes telescope, so no loop of acts pays.
     fed_me = jnp.clip(state.memory[:, :, MEM_GAVE_NEAR_ME], 0.0, 1.0)
     struck_me = jnp.clip(state.memory[:, :, MEM_STRUCK_ME], 0.0, 1.0)
+    struck_by_me = struck_me.T                                          # [i, j]: j remembers i striking j
     care = (cfg.care_empathy * geno.empathy[:, None]
             + cfg.care_kin * geno.kin_care[:, None] * similarity
             + cfg.care_reciprocity * geno.reciprocity[:, None] * fed_me
             - cfg.care_revenge * geno.vengefulness[:, None] * struck_me
+            - cfg.care_sadism * geno.sadism[:, None] * struck_by_me          # glad to see one's victims suffer
             + geno.selflessness[:, None]                                  # the rare selfless: anyone, as oneself
             + cfg.care_attachment * state.attachment)                      # those who keep one alive
     n = alive0.shape[0]
@@ -1884,7 +1888,7 @@ def _give_birth(ns: State, birthing, key, cfg: EnvConfig):
             body_temp=put(s.body_temp, 0.0), injury=put(s.injury, 0.0), infection=put(s.infection, 0),
             immunity=put(s.immunity, 0.0), stress=put(s.stress, 0.0), clothing=put(s.clothing, 0.0),   # born bare
             pain_aversion=put(s.pain_aversion, child_geno.pain_aversion[0]), genotype=geno,
-            weight=put(s.weight, ideal), scars=put(s.scars, 0.0), lasting_injury=put(s.lasting_injury, 0.0), pain=put(s.pain, 0.0),
+            weight=put(s.weight, ideal), scars=put(s.scars, 0.0), lasting_injury=put(s.lasting_injury, 0.0), pain=put(s.pain, 0.0), heartache=put(s.heartache, 0.0),
             appearance=put(s.appearance, look), last_msg=put(s.last_msg, jnp.zeros(MSG_LEN, jnp.int32)),
             mutations=put(s.mutations, jumps[0]),
             visited=put(s.visited, jnp.zeros(s.visited.shape[1:], bool).at[s.pos[i, 0], s.pos[i, 1]].set(True)),
@@ -2579,8 +2583,12 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     # Every wound scars by the health it takes: blows, predator attacks, burns and falls
     wound = predation + violence + jnp.where(burned, cfg.burn_damage, 0.0) + fall_damage
     scars = jnp.where(alive0, jnp.clip(state.scars + cfg.scar_per_wound * wound, 0.0, 1.0), state.scars)
-    # Fresh pain: each wound hurts by the health it takes, and the hurt fades over a few hours
-    pain = jnp.clip(state.pain * (1.0 - cfg.pain_fade) ** _k(cfg) + cfg.pain_per_wound * wound, 0.0, 2.0)
+    # Fresh pain: each wound hurts by the health it takes, and the hurt fades over a few hours.
+    # An old wound that never healed flares now and then with no new hurt (chronic and phantom pain).
+    flare = jax.random.uniform(jax.random.fold_in(keys[0], 93), (n,)) \
+        < (1.0 - (1.0 - cfg.phantom_prob) ** _k(cfg)) * state.lasting_injury / cfg.max_lasting_injury
+    pain = jnp.clip(state.pain * (1.0 - cfg.pain_fade) ** _k(cfg) + cfg.pain_per_wound * wound
+                    + jnp.where(flare & alive0, cfg.phantom_pain, 0.0), 0.0, 2.0)
 
     # ---------------------------------------------------------- psychology
     # Below without light where one stands (no burning branch near): fear of the dark
@@ -2622,7 +2630,8 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         gain * cfg.stress_from_damage * health_loss, gain * jnp.where(pred_near, cfg.stress_from_threat, 0.0),
         gain * cfg.stress_from_need * critical, cfg.loneliness_stress * geno.social_reward * lonely,
         cfg.attach_absence * attached_away, cfg.sleep_debt_stress * jnp.clip((state.sleepiness - 0.7) / 0.3, 0.0, 1.0),
-        gain * cfg.dark_stress * dark_now * ~sleeping, urge_stress], axis=-1) * jnp.ones((n, 1))
+        gain * cfg.dark_stress * dark_now * ~sleeping, urge_stress,
+        cfg.heartache_stress * state.heartache], axis=-1) * jnp.ones((n, 1))
     stress = state.stress * (cfg.stress_decay - cfg.social_buffering * (1.0 - lonely)
                              - cfg.attach_calm * attached_near) \
         + cfg.attach_absence * attached_away \
@@ -2631,6 +2640,7 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         + cfg.loneliness_stress * geno.social_reward * lonely \
         + cfg.sleep_debt_stress * jnp.clip((state.sleepiness - 0.7) / 0.3, 0.0, 1.0) \
         + fx.get("stress_gain", 1.0) * cfg.dark_stress * dark_now * ~sleeping + urge_stress \
+        + cfg.heartache_stress * state.heartache \
         - jnp.where(sleeping, cfg.sleep_stress_relief * depth, 0.0)
     stress = jnp.clip(stress, 0.0, 1.0)
     pain_aversion = state.pain_aversion + geno.temperament_drift * cfg.trauma_rate * health_loss \
@@ -2956,9 +2966,12 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         & alive0[:, None] & alive0[None, :]
     visf = vis.astype(jnp.float32)
     n_vis = jnp.maximum(visf.sum(1), 1.0)
-    others_harm = visf @ health_loss
+    # How hurt someone looks: the health they lose, as loudly as they feel it (a wimp cries out)
+    shows = jnp.sqrt(state.pain_aversion)
+    seen_hurt = health_loss * shows
+    others_harm = visf @ seen_hurt
     similarity = jnp.exp(-3.0 * jnp.linalg.norm(state.appearance[:, None, :] - state.appearance[None, :, :], axis=-1))
-    kin_harm = (visf * similarity) @ health_loss
+    kin_harm = (visf * similarity) @ seen_hurt
     gap = satiety[None, :] - satiety[:, None]                           # [i, j] = j's minus i's
     worse_off = (visf * jnp.maximum(gap, 0.0)).sum(1) / n_vis
     better_off = (visf * jnp.maximum(-gap, 0.0)).sum(1) / n_vis
@@ -2970,17 +2983,28 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     repay = (gifts & (state.memory[:, :, MEM_GAVE_NEAR_ME] > 0.5)).astype(jnp.float32)
     revenge = (hits & (state.memory[:, :, MEM_STRUCK_ME] > 0.5)).astype(jnp.float32)
     contact = (touches | touches.T).astype(jnp.float32)                 # touched or was touched by j
+    # Cruelty: the hurt one's own blows cause, as it shows on the one struck (sadism); satisfaction
+    # in striking habituates as one whole, revenge or cruelty
+    inflicted = hits.astype(jnp.float32) * (violence * shows)[None, :]
+    sadistic = (inflicted * fresh[:, :, HAB_REVENGE]).sum(1)
     felt = jnp.stack([repay, contact, revenge, intimate], axis=-1)      # (N, N, 4): acts this tick
     feeling = (felt * fresh).sum(axis=1)                                # (N, 3): how good they felt
-    habituation = habit + felt
+    cruel = (geno.sadism[:, None] > 0.05) & hits                        # cruelty wears off like revenge does
+    habituation = habit + felt.at[:, :, HAB_REVENGE].max(cruel.astype(jnp.float32))
     reciprocated = feeling[:, HAB_REPAY]
     retaliated = feeling[:, HAB_REVENGE]
     moral = (- geno.empathy * cfg.empathy_weight * others_harm
              - geno.kin_care * cfg.kin_weight * kin_harm
              - cfg.inequity_weight * (geno.envy * worse_off + geno.guilt * better_off)
              + cfg.reciprocity_reward * geno.reciprocity * reciprocated
-             + cfg.revenge_reward * geno.vengefulness * retaliated)
+             + cfg.revenge_reward * geno.vengefulness * retaliated
+             + cfg.sadism_reward * geno.sadism * sadistic)
     moral = jnp.where(alive0, moral, 0.0)
+    # Heartache: others' hurt imagined as one's own (x empathy), and grief for the attached who die
+    grief = state.attachment @ dead_now.astype(jnp.float32)
+    heartache = state.heartache * (1.0 - cfg.heartache_fade) ** _k(cfg) \
+        + cfg.heartache_empathy * geno.empathy * others_harm + cfg.heartache_grief * grief
+    heartache = jnp.where(alive0, jnp.clip(heartache, 0.0, 2.0), 0.0)
 
     # ---------------------------------------------------------- conditions: onset, events, use, fading
     kc = jax.random.split(jax.random.fold_in(keys[0], 91), 4)
@@ -3054,8 +3078,11 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     lighting = jnp.where(below_after[:, None], d_ij <= light0[:, None], lighting)   # below: only one's own light
     sees = alive0[:, None] & ~jnp.eye(n, dtype=bool) & (d_ij <= sight_radius(state, cfg)[:, None]) \
         & ~(sleeping[:, None] & (d_ij > 1)) & state.existed[None, :] & lighting
+    tol = shock_threshold(state._replace(pain_aversion=pain_aversion), cfg) if cfg.pain_shock > 0 \
+        else 0.8 / jnp.sqrt(pain_aversion)
+    wince_now = jnp.clip((cfg.pain_per_injury * injury + pain) / tol, 0.0, 1.0)
     looks = visible_condition(health, injury, (infection > 0).astype(jnp.float32), weight, bod["ideal_kg"],
-                              scars, cfg)
+                              scars, cfg, wince_now)
     looks = jnp.where(alive, looks, -cfg.death_penalty)               # a body: seen dead
     new_impression = jnp.where(sees, looks[None, :], state.impression)
 
@@ -3121,7 +3148,7 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         attachment=attachment, conditions=conditions, father_cond=father_cond,
         life_moves=keep(life_moves, state.life_moves), life_strikes=keep(life_strikes, state.life_strikes),
         hardship=keep(hardship, state.hardship),
-        scars=scars, lasting_injury=lasting_injury, pain=keep(pain, state.pain),
+        scars=scars, lasting_injury=lasting_injury, pain=keep(pain, state.pain), heartache=keep(heartache, state.heartache),
         sex=state.sex, existed=state.existed, gestation=gestation, courting=courting, father=father, mother=state.mother,
         relatedness=state.relatedness, fetus_r=fetus_r, father_geno=father_geno, father_look=father_look,
         appearance=state.appearance, memory=memory, last_msg=msg,

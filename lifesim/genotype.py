@@ -36,6 +36,7 @@ class Genotype(NamedTuple):
     guilt: jnp.ndarray            # displeasure at being better fed than visible others
     reciprocity: jnp.ndarray      # satisfaction in giving to someone who gave to oneself
     vengefulness: jnp.ndarray     # satisfaction in striking someone who struck oneself
+    sadism: jnp.ndarray           # pleasure in the pain one inflicts, on anyone (near 0 for most)
     # Drive: how much stress intimacy relieves. Pleasure is felt through the body (calm),
     # so selection can tune the drive without it becoming a reward of its own.
     libido: jnp.ndarray
@@ -57,7 +58,7 @@ _BOUNDS = {
     "social_learning": (0.0, 1.0),
     "temperament_drift": (0.0, 1.0),
     "empathy": (0.0, 1.0), "kin_care": (0.0, 1.0), "envy": (0.0, 1.0), "guilt": (0.0, 1.0),
-    "reciprocity": (0.0, 1.0), "vengefulness": (0.0, 1.0),
+    "reciprocity": (0.0, 1.0), "vengefulness": (0.0, 1.0), "sadism": (0.0, 1.0),
     "selflessness": (0.0, 2.0),
 }
 _FIELDS = Genotype._fields
@@ -70,6 +71,8 @@ def sample(key: jax.Array, n: int) -> Genotype:
     for k, name in zip(keys, _FIELDS):
         if name == "selflessness":
             vals[name] = jnp.zeros((n,))
+        elif name == "sadism":                  # skewed: most feel almost none, a few a great deal
+            vals[name] = jax.random.uniform(k, (n,)) ** 4
         elif name in _LOGNORMAL:
             vals[name] = jnp.exp(_LOGNORMAL[name] * jax.random.normal(k, (n,)))
         else:
@@ -99,7 +102,7 @@ HERITABILITY = {
     "pain_aversion": 0.4, "social_reward": 0.4, "novelty": 0.4, "patience": 0.4,
     "lr_scale": 0.4, "critical_period": 0.4, "social_learning": 0.4, "temperament_drift": 0.4,
     "empathy": 0.35, "kin_care": 0.35, "envy": 0.35, "guilt": 0.35,
-    "reciprocity": 0.35, "vengefulness": 0.35, "libido": 0.4,
+    "reciprocity": 0.35, "vengefulness": 0.35, "sadism": 0.35, "libido": 0.4,
 }
 
 

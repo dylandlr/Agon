@@ -132,7 +132,7 @@ def obs_groups(cfg):
     chan[E.CH_FLORA + 5] = 11                                                                 # something written there
     groups = [np.tile(chan, v * v)]
     own = np.full(E.OWN_FEATURES, 8)                                                           # body, underground, conditions
-    own[[0, 1, 2, 19, 20, 22, 23]] = 7                                                         # satiety, water, energy, sleepiness, asleep, urge, pain
+    own[[0, 1, 2, 19, 20, 22, 23, 24]] = 7                                                     # satiety, water, energy, sleepiness, asleep, urge, pain, heartache
     groups += [own, np.full(2 * E.N_MAT + 1, 9), np.full(5 + E.N_WEATHER, 10),
                np.full(E.HEARD_FEATURES, 11), np.full(E.READ_FEATURES, 11), np.full(E.map_features(cfg), 12)]
     g = np.concatenate(groups)
@@ -368,7 +368,7 @@ def build_frame(t, prev, state, a, info, evs, env_cfg, n_agents, minds=None):
                 "existed": bool(s.existed[i]), "sex": "female" if int(s.sex[i]) == E.FEMALE else "male",
                 "pregnant": bool(s.gestation[i] > 0), "courting": bool(s.courting[i] > 0), "mother": int(s.mother[i]),
                 "below": bool(s.below[i]), "dark": bool(np.asarray(info.dark)[i]),
-                "downed": bool(np.asarray(info.downed)[i]), "pain": round(float(E.pain_of(s, env_cfg)[i]), 2),
+                "downed": bool(np.asarray(info.downed)[i]), "pain": round(float(E.felt_pain(s, env_cfg)[i]), 2), "heartache": round(float(s.heartache[i]), 2),
                 "carrying": {E.MAT_NAMES[m]: round(float(s.inv[i, m]), 1) for m in range(E.N_MAT) if s.inv[i, m] > 0.05}}
     nz = lambda grid, thr=0.3: [[int(r), int(c)] for r, c in np.argwhere(grid > thr)]
     # The social web, read from the agents' own memories (nothing here feeds back into the world):
@@ -593,7 +593,7 @@ def main():
         frames.append(build_frame(t, prev, state, a, info, evs, env_cfg, args.agents, minds))
         if (t - skip) % 12 == 0:
             knowledge.append(knowledge_snapshot(t, state))
-    morals = ["empathy", "kin_care", "envy", "guilt", "reciprocity", "vengefulness"]
+    morals = ["empathy", "kin_care", "envy", "guilt", "reciprocity", "vengefulness", "sadism"]
     geno = jax.tree_util.tree_map(np.asarray, state.genotype)
     from lifesim import techtree
     skills = [dict() for _ in range(args.agents)]           # tech blocks each did in this recording
