@@ -3002,8 +3002,9 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     moral = jnp.where(alive0, moral, 0.0)
     # Heartache: others' hurt imagined as one's own (x empathy), and grief for the attached who die
     grief = state.attachment @ dead_now.astype(jnp.float32)
+    others_wounded = visf @ (wound * shows)                             # pain seen: wounds, not hunger or illness
     heartache = state.heartache * (1.0 - cfg.heartache_fade) ** _k(cfg) \
-        + cfg.heartache_empathy * geno.empathy * others_harm + cfg.heartache_grief * grief
+        + cfg.heartache_empathy * geno.empathy * others_wounded + cfg.heartache_grief * grief
     heartache = jnp.where(alive0, jnp.clip(heartache, 0.0, 2.0), 0.0)
 
     # ---------------------------------------------------------- conditions: onset, events, use, fading

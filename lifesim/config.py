@@ -522,10 +522,11 @@ class EnvConfig:
     # Emotional pain (heartache): seeing others hurt (x empathy) and losing those one is attached to.
     # It fades over days, raises stress by heartache_stress per tick, and is felt (observed); it is not
     # physical pain and never sends one into shock.
-    heartache_empathy: float = 1.0   # per unit of visible others' hurt, x empathy
+    heartache_empathy: float = 1.0   # per unit of health visible others lose to wounds (x how it shows), x empathy
     heartache_grief: float = 0.8     # per death of someone one is attached to, x attachment
     heartache_fade: float = 0.03     # per 30 minutes (half-life about 11 hours)
-    heartache_stress: float = 0.01   # stress per tick at full heartache
+    heartache_stress: float = 0.002  # stress per tick at full heartache: settles stress near 0.2, like
+                                     # loneliness (0.4) and below the healing block (0.7); 0.01 blocked healing
     # Phantom and chronic pain: a lasting injury flares now and then, with no new wound
     phantom_prob: float = 0.02       # chance per 30 minutes at full lasting injury (x lasting / max)
     phantom_pain: float = 0.3        # fresh pain a flare adds
