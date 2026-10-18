@@ -1759,48 +1759,53 @@ assumptions; confirm with `module spider Python` and `sinfo -p gpu`.
 (`conv_impl="auto"`); both share one parameter layout, so checkpoints move
 between CPU and GPU.
 
-## Known limits and next steps
+## Current state, limits and next steps
 
-- **Discount factor 0.997.** Threats unfold over 200 to 500 ticks; 0.99 sees
-  about 100 ahead. At 2M steps 0.997 beat 0.99 (mean life 1,421 vs 1,256,
-  full-year survival 31% vs 23%), but one seed each and noisy, so unconfirmed.
-- **Convolutional encoder is the default.** At 820k steps it led the flat
-  encoder (1,263 vs 1,163 ticks mean life) after trailing early; one seed.
-- **Genotype is not observed** by the agent, matching the design: agents do
-  not know their genes; genes act through the body and the reward.
-- **Speed.** About 5,000 steps/sec on one CPU core with 64 environments of
-  64 x 64.
-  Resets are about 50 times costlier than steps, so finished environments
-  draw from a pool of worlds generated once per update. Use a GPU and more
-  environments for real runs.
-- **Phase 1 gate:** agents reliably survive a full seasonal cycle and the
-  simulation is fast enough. See the evaluation output for current status.
+Agon: Eos now has the multi-agent society simulator, not just the original
+single-agent survival prototype. The ecology branch includes:
 
-Next (Phase 2): multiple agents per world with the full primitive set
-(release, strike, touch, cache access, tokens, pointing), relationship
-memory in observations, per-agent parameters, and the E0 scarcity replication.
+- Per-agent recurrent PPO, partial observations, heritable traits, reproduction,
+  relationship memory, communication, attachment, and learning during sleep.
+- A world model for imagined outcomes and selectable survival skills.
+- A physical material system with gathering, crafting, fire, cooking, and
+  researchable technology. These behaviors are possible through generic
+  actions; the reward does not directly pay agents for using them.
+- Continuous worlds with growing population capacity, plus playback, causal
+  traces, and analyses for society, culture, hierarchy, and archetypes.
+- A living ecology with seasonal food, weather, caves, animals, and camp
+  fouling. The system-level checks in VALIDATION.md currently pass 9/9, and
+  CI passed on the latest commit.
 
-- **Observation bug fixed (this version).** Since the observation grew to 11
-  channels, the code removing an agent from its own "other agents" channel
-  subtracted from the small-prey channel instead. Agents counted themselves as
-  company and saw a phantom -1 prey on their own cell. Earlier results ran
-  with this bug, and old checkpoints do not match the new action and
-  observation sizes anyway.
-- **Replay includes speech.** `record_episode` logs messages
-  (`messages.npy`) as well as actions, so runs with speech replay exactly.
-- **One extra compile per run.** The second `update` call retraces once
-  (array types settle after the first step), so expect two compiles at the
-  start of every run. Harmless, but worth fixing at the root later.
-- **Founder pretraining (deferred idea).** Train one survival brain in the
-  Phase 2 world and start every individual from it plus noise, so social
-  training begins with competent agents. Not implemented.
-- **Imagination uses today's options.** The world model predicts beliefs, rewards and the agent's
-  own state, not which actions will be possible; imagined habits choose among the actions possible
-  now. Its own-state predictions are unbounded and are clamped to valid ranges in the playback.
-- **Training brains belong to slots.** In training (B parallel worlds sharing one network per
-  slot) a newborn takes over its slot's network, whoever trained it. Only the continuous world
-  with `--learn` has true individual brains and real inheritance; read training as the lineage's
-  deep past.
-- **The slot count binds before food does.** A competent band fills its slots and stays there
-  (viability.py); food at 0.4 does not limit it. Pressure that makes cooperation pay needs either
-  scarcer food or more slots than the land can feed.
+The mechanical checks establish that key behaviors are possible and the
+environment is internally consistent. They do not establish that a trained
+population will discover those behaviors or sustain a society.
+
+**Next research gate:** run fresh validation on the current code with the
+society30 preset: benchmark the GPU, run the four validation conditions at
+100M agent-steps each, then test each trained policy in a 400-day continuous
+world. Run experiment.py gate and review the report before starting the core
+experiment. The gate should show that children born in the world grow up and
+that the population outlasts its founders. See hprc/README.md or the Colab
+notebook for resumable commands.
+
+After the gate passes, run the core 18-condition experiment: reward sharing
+alpha {0, 0.5, 1} x food abundance {1.0, 0.4} x three seeds. Compare survival,
+population persistence, cooperation, violence, hierarchy and cultural
+differences from the recorded runs.
+
+**Current limits**
+
+- Training uses recurrent PPO with fixed policy networks per slot. Continuous
+  worlds can retain and grow individual brains; training births inherit the
+  network associated with their slot rather than a parent's learned policy.
+- The agents act once per tick and send one message per tick. Long-running,
+  interruptible tasks and richer negotiated plans remain open design work.
+- The world model predicts beliefs, rewards, and the agent's own state, but
+  does not yet predict which actions will be available in imagined states.
+- The accelerated society30 calendar is for tractable learning and generational
+  experiments. It is not a real-time demographic model; use the real-time
+  preset for questions that depend on calendar-scale ages and rates.
+- Survival, society formation, and emergent technology remain empirical
+  questions. Passing unit tests or hand-scripted viability checks alone does
+  not answer them.
+
