@@ -1116,6 +1116,12 @@ both off in the base config):
   sets how much one can take (a pain-averse 4.0 drops at 0.4; a stoic 0.25 holds to 0.99), and gets up
   again once the fresh pain fades. A few quick blows, a bear's maul or a bad fall can now drop someone
   who is not near death; fights end with people down more often than dead. `pain_shock=0` turns it off.
+- **Pain is felt and seen.** Each agent observes its own *felt* pain: pain over its own shock threshold,
+  so 1.0 is the point of shock whatever one's tolerance (the same hurt reads 0.5 to an average person and
+  1.0 to someone with pain_aversion 4). Others in view see it as a wince (felt pain, capped at 1), the
+  last of the social features. The world model predicts it among its body targets ("pain"), so an agent
+  can imagine that an action will hurt before taking it. The reward is unchanged: survival only, with
+  health lost felt through pain_aversion as before.
 - **Finishing off**: the downed cannot ward off or roll away, so blows and bites on them land at
   `downed_hit_mult` (2x), and each person's blow on a downed one has `coup_prob` (0.15) of striking
   something vital and killing outright (cause: violence). The "death" event carries `finished_off` when

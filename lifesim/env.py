@@ -156,7 +156,7 @@ N_HEARD = 3
 HEARD_FEATURES = N_HEARD * (MSG_LEN * VOCAB + 2 + N_MEM)
 READ_FEATURES = MSG_LEN * VOCAB + 2   # an inscription on one's own cell or beside it, and where it is
 # Per visible agent: memory about it, its appearance, whether it spoke last tick
-N_SOCIAL_FEATURES = N_MEM + N_APPEARANCE + 1 + 8 + 1   # ... + height, weight, scars, lasting injury, sex, pregnant, asleep, courting, attachment
+N_SOCIAL_FEATURES = N_MEM + N_APPEARANCE + 1 + 8 + 1 + 1   # ... + height, weight, scars, lasting injury, sex, pregnant, asleep, courting, attachment, wincing
 
 # Observation: terrain one-hot, plants, meat, agents, small prey, large prey,
 # predators, out-of-bounds, then social features of agents in each cell
@@ -171,7 +171,7 @@ CH_SNOW = N_TERRAIN + 16
 CH_MINERALS = N_TERRAIN + 17      # N_MINERAL_CHANNELS channels, then fauna, then the social features
 CH_FAUNA = CH_MINERALS + N_MINERAL_CHANNELS
 CH_FLORA = CH_FAUNA + N_FAUNA_CHANNELS
-OWN_FEATURES = 23 + cond.K        # own body and conditions, first in the body vector
+OWN_FEATURES = 24 + cond.K        # own body (felt pain last) and conditions, first in the body vector
 SHARED_START = OWN_FEATURES + N_MAT + N_MAT + 1    # after inventory, hand and torch: time and weather
 N_BODY_FEATURES = OWN_FEATURES + N_MAT + N_MAT + 1 + 5 + N_WEATHER + HEARD_FEATURES + READ_FEATURES
 
@@ -1222,6 +1222,13 @@ def shock_threshold(state: State, cfg: EnvConfig) -> jnp.ndarray:
     return jnp.clip(cfg.pain_shock / jnp.sqrt(state.pain_aversion), 0.2, 0.99)
 
 
+def felt_pain(state: State, cfg: EnvConfig) -> jnp.ndarray:
+    """(N,) pain as one feels it: measured against one's own tolerance, so 1 is the point of shock.
+    Felt by the one in pain (observe) and shown to those who can see them (a wince)."""
+    tol = shock_threshold(state, cfg) if cfg.pain_shock > 0 else 0.8 / jnp.sqrt(state.pain_aversion)
+    return jnp.clip(pain_of(state, cfg) / tol, 0.0, 1.5)
+
+
 def downed_of(state: State, cfg: EnvConfig) -> jnp.ndarray:
     """(N,) bool: down (EnvConfig.downed): too hurt to stand, from wounds (injury), failing health,
     or pain shock (RimWorld's: pain past one's threshold, until it fades).
@@ -1340,6 +1347,7 @@ def observe(state: State, cfg: EnvConfig) -> jnp.ndarray:
                           state.scars, state.lasting_injury, state.sex.astype(jnp.float32),
                           showing, (state.asleep | downed_of(state, cfg)).astype(jnp.float32),   # lying down
                           (state.courting > 0).astype(jnp.float32)], axis=-1)       # visible to others
+    wince = jnp.minimum(felt_pain(state, cfg), 1.0)[:, None]                          # pain shows
     heat = fire_heat(state.fire, cfg)
     chans = [jnp.where(inb[..., None], jax.nn.one_hot(state.terrain[rc, cc], N_TERRAIN), 0.0),
              take(forage_grid(state, cfg) / cfg.plant_max)[..., None],
@@ -1391,7 +1399,7 @@ def observe(state: State, cfg: EnvConfig) -> jnp.ndarray:
         vis = jnp.all((rel >= 0) & (rel < v), axis=-1) & state.alive & (jnp.arange(n) != i) \
             & (state.below == state.below[i])                          # only those on one's own layer
         feats = jnp.concatenate([jnp.log1p(state.memory[i]), state.appearance, spoke, physique,
-                                 state.attachment[i][:, None]], axis=-1)
+                                 state.attachment[i][:, None], wince], axis=-1)
         feats = jnp.where(vis[:, None], feats, 0.0)
         relc = jnp.clip(rel, 0, v - 1)
         return jnp.zeros((v, v, N_SOCIAL_FEATURES)).at[relc[:, 0], relc[:, 1]].add(feats)
@@ -1473,7 +1481,7 @@ def observe(state: State, cfg: EnvConfig) -> jnp.ndarray:
         state.scars, state.lasting_injury, state.sex.astype(jnp.float32),
         state.gestation / (cfg.gestation_years * cfg.ticks_per_bio_year),
         state.sleepiness, state.asleep.astype(jnp.float32),
-        state.below.astype(jnp.float32), state.urge], axis=-1)                         # (N, 23)
+        state.below.astype(jnp.float32), state.urge, felt_pain(state, cfg)], axis=-1)  # (N, 24)
     own = jnp.concatenate([own, state.conditions], axis=-1)                          # + its conditions
     feats = jnp.concatenate([own, state.inv / cfg.inventory_cap,
                              jax.nn.one_hot(state.hand, N_MAT),

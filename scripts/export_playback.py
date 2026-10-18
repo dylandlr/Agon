@@ -107,7 +107,7 @@ from lifesim.policy import DECODE_NAMES  # noqa: E402
 # it gave each option, its expectation of how its future will go (the value estimate), and which
 # parts of what it perceived pushed the chosen action most (gradient x input, summed by group).
 MIND_GROUPS = ["the land (terrain, slopes, edges)", "food in sight", "others in sight", "animals",
-               "predators", "fire and materials", "the dead", "its own needs (food, water, energy, sleep)",
+               "predators", "fire and materials", "the dead", "its own needs (food, water, energy, sleep, pain)",
                "its own condition (health, injury, stress, warmth)", "what it carries", "time and weather",
                "voices it heard", "its memory of places"]
 
@@ -132,7 +132,7 @@ def obs_groups(cfg):
     chan[E.CH_FLORA + 5] = 11                                                                 # something written there
     groups = [np.tile(chan, v * v)]
     own = np.full(E.OWN_FEATURES, 8)                                                           # body, underground, conditions
-    own[[0, 1, 2, 19, 20, 22]] = 7                                                             # satiety, water, energy, sleepiness, asleep, urge
+    own[[0, 1, 2, 19, 20, 22, 23]] = 7                                                         # satiety, water, energy, sleepiness, asleep, urge, pain
     groups += [own, np.full(2 * E.N_MAT + 1, 9), np.full(5 + E.N_WEATHER, 10),
                np.full(E.HEARD_FEATURES, 11), np.full(E.READ_FEATURES, 11), np.full(E.map_features(cfg), 12)]
     g = np.concatenate(groups)

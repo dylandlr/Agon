@@ -66,3 +66,20 @@ def test_a_blow_on_the_downed_can_end_it():
     assert not bool(s1.alive[1]) and int(info.death_cause[1]) == E.CAUSE_VIOLENCE
     s1, _, _, info = E.step(s, jnp.array([E.STRIKE_N + 2, E.REST]), cfg)       # standing: no coup
     assert bool(s1.alive[1])
+
+
+def test_one_feels_ones_own_pain_against_ones_tolerance_and_others_see_the_wince():
+    s = _world()._replace(pain=jnp.array([0.4, 0.0]))
+    obs = np.asarray(E.observe(s, CFG))
+    v, r, c = CFG.view_size, CFG.view_radius, E.N_OBS_CHANNELS
+    felt = obs[:, v * v * c + 23]                                         # last of the own-body features
+    assert np.isclose(felt[0], 0.4 / 0.8) and felt[1] == 0.0
+    wimp = np.asarray(E.observe(s._replace(pain_aversion=jnp.array([4.0, 1.0])), CFG))[0, v * v * c + 23]
+    assert np.isclose(wimp, 1.0)                                          # the same hurt is shock to a wimp
+    win = obs[1, :v * v * c].reshape(v, v, c)                             # agent 1 sees agent 0, one cell west
+    assert np.isclose(win[r, r - 1, c - 1], 0.5) and win[r, r, c - 1] == 0.0
+
+
+def test_the_world_model_learns_to_expect_pain():
+    from lifesim.policy import DECODE_INDEX, DECODE_NAMES
+    assert DECODE_NAMES[DECODE_INDEX.index(23)] == "pain"

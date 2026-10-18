@@ -6,7 +6,7 @@ owns its own copy of these parameters, stacked and vmapped.
 World model (world_model=True). The GRU state h is the agent's belief about its situation. A
 small dynamics network predicts the next belief from the current one and an action,
 h' ~ dyn(h, a); heads read a belief as the reward it expects and as its own needs (food, water,
-energy, health, warmth, stress, sleepiness). All of it is learned from the agent's own experience
+energy, health, warmth, stress, sleepiness, pain). All of it is learned from the agent's own experience
 (see ppo_multi: world-model loss), so it can only imagine what its own life has taught it.
 
 Ideas. At each decision the agent takes its few most likely actions and, for each, imagines a
@@ -27,8 +27,8 @@ import jax.numpy as jnp
 
 MASK_VALUE = -1e9
 # own-state features the world model decodes (indices into the body vector after the window)
-DECODE_NAMES = ["food", "water", "energy", "health", "body temperature", "stress", "sleepiness"]
-DECODE_INDEX = [0, 1, 2, 3, 5, 9, 19]
+DECODE_NAMES = ["food", "water", "energy", "health", "body temperature", "stress", "sleepiness", "pain"]
+DECODE_INDEX = [0, 1, 2, 3, 5, 9, 19, 23]
 
 
 class ScannedGRU(nn.Module):
