@@ -1773,8 +1773,7 @@ single-agent survival prototype. The ecology branch includes:
 - Continuous worlds with growing population capacity, plus playback, causal
   traces, and analyses for society, culture, hierarchy, and archetypes.
 - A living ecology with seasonal food, weather, caves, animals, and camp
-  fouling. The system-level checks in VALIDATION.md currently pass 9/9, and
-  CI passed on the latest commit.
+  fouling. The system-level checks in VALIDATION.md currently pass 9/9.
 
 The mechanical checks establish that key behaviors are possible and the
 environment is internally consistent. They do not establish that a trained
