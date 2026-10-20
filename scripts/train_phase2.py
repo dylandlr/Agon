@@ -79,6 +79,13 @@ def main():
                          "survival skills (seek water, seek food, flee)")
     ap.add_argument("--saint-rate", type=float, default=1e-6,
                     help="chance each founder or newborn is selfless toward anyone (rare altruism)")
+    ap.add_argument("--memory-report", action="store_true",
+                    help="compile one update, print XLA's memory estimate for it, and exit")
+    ap.add_argument("--agent-chunk", type=int, default=0,
+                    help="compute the loss this many agents at a time (0: all at once); lowers memory, "
+                         "same gradients, ~30%% slower. Try 8 on a T4 or a CPU")
+    ap.add_argument("--lr", type=float, default=3e-4,
+                    help="base learning rate (each agent's is this x its lr_scale gene unless --no-agent-lr)")
     ap.add_argument("--ent-coef", type=float, default=0.005,
                     help="exploration: how strongly learning keeps choices varied (entropy bonus)")
     ap.add_argument("--world", choices=["classic", "living"], default="classic",
@@ -161,7 +168,7 @@ def main():
     env_cfg = with_threats(env_cfg, predators=args.predators, disease=args.disease, hazards=args.hazards)
     env_cfg = with_tick_minutes(env_cfg, args.tick_minutes)
     env_cfg = dataclasses.replace(env_cfg, max_steps=int(round(args.episode_years * env_cfg.year_length)))
-    cfg = MAConfig(num_worlds=args.worlds, num_steps=args.steps, total_ticks=args.ticks,
+    cfg = MAConfig(num_worlds=args.worlds, num_steps=args.steps, total_ticks=args.ticks, lr=args.lr, agent_chunk=args.agent_chunk,
                    encoder=args.encoder, gamma=args.gamma, trait_gamma=args.trait_gamma,
                    per_agent_lr=not args.no_agent_lr, seed=args.seed,
                    num_minibatches=min(4, args.worlds), imitation_coef=args.imitation,
@@ -176,6 +183,13 @@ def main():
 
     net, init, update = make_train(env_cfg, cfg)
     runner, pop = init(jax.random.PRNGKey(cfg.seed))
+    if args.memory_report:
+        ma = update.lower(runner, pop).compile().memory_analysis()
+        gb = lambda x: round(x / 2 ** 30, 2)
+        print(json.dumps({"temp_GiB": gb(ma.temp_size_in_bytes), "arguments_GiB": gb(ma.argument_size_in_bytes),
+                          "output_GiB": gb(ma.output_size_in_bytes), "agents": args.agents, "worlds": args.worlds,
+                          "agent_chunk": args.agent_chunk}))
+        return
     history, acc, start = [], None, 0
     ck_path = out / "checkpoint.pkl"
     if args.resume and ck_path.exists():

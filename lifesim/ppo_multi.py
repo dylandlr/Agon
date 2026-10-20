@@ -50,6 +50,11 @@ class MAConfig:
     max_grad_norm: float = 0.5
     update_epochs: int = 4
     num_minibatches: int = 4        # split over worlds
+    # Memory: 0 computes every agent's loss at once (fastest). k > 0 computes it k agents at a time
+    # and recomputes activations in the backward pass: the same gradients, with peak memory about
+    # k/N of the all-at-once pass, for ~30% more compute (a 64-agent society30 update asks ~19 GB
+    # all at once, beyond a T4 or a small CPU box).
+    agent_chunk: int = 0
     hidden: int = 128
     encoder: str = "conv"
     imitation_coef: float = 0.5     # 0 disables social learning
@@ -556,8 +561,15 @@ def make_train(env_cfg: EnvConfig, cfg: MAConfig):
 
         def total_loss(params, ic, tr, adv, tg, d_obs, d_act, d_mask, d_msg, d_w):
             # Agent axis is 0 for params/ic/genes/the store, 1 for (T, N, B, ...) data
-            losses, (ents, imits, wm, ret) = jax.vmap(agent_loss, in_axes=(0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0))(
-                params, ic, tr, adv, tg, d_obs, d_act, d_mask, d_msg, d_w, social_w, res)
+            if cfg.agent_chunk > 0:
+                lead = lambda x: jnp.moveaxis(x, 1, 0)
+                xs = (params, ic) + tuple(jax.tree_util.tree_map(lead, v)
+                                          for v in (tr, adv, tg, d_obs, d_act, d_mask, d_msg, d_w)) + (social_w, res)
+                losses, (ents, imits, wm, ret) = jax.lax.map(lambda a: jax.checkpoint(agent_loss)(*a), xs,
+                                                             batch_size=cfg.agent_chunk)
+            else:
+                losses, (ents, imits, wm, ret) = jax.vmap(agent_loss, in_axes=(0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0))(
+                    params, ic, tr, adv, tg, d_obs, d_act, d_mask, d_msg, d_w, social_w, res)
             return losses.sum(), (ents.mean(), imits.mean(), tuple(x.mean() for x in wm), ret.mean())
 
         lrs = lrs_of(pop)
@@ -653,7 +665,11 @@ def make_train(env_cfg: EnvConfig, cfg: MAConfig):
         def one(p, c0, obs, rst, mask):                                 # (B, H), (T, B, ...)
             _, out = net.apply(p, c0, (obs, rst, full_mask(mask)), method=net.trace)
             return out["h"], out["logits"]
-        h, logits = jax.vmap(one)(params, carry0, sw(traj.obs), sw(traj.reset), sw(traj.mask))   # (N, T, B, ...)
+        if cfg.agent_chunk > 0:                                         # a few agents at a time (memory)
+            h, logits = jax.lax.map(lambda a: one(*a), (params, carry0, sw(traj.obs), sw(traj.reset), sw(traj.mask)),
+                                    batch_size=cfg.agent_chunk)
+        else:
+            h, logits = jax.vmap(one)(params, carry0, sw(traj.obs), sw(traj.reset), sw(traj.mask))   # (N, T, B, ...)
         Tw = traj.reward.shape[0]
         carry_in = jnp.concatenate([carry0[:, None], h[:, :-1]], 1)     # (N, T, B, H): state going into each step
         tail = jax.tree_util.tree_map(lambda x: x[Tw - C:], traj)._replace(stage=next_stage) if C > 0 else None
