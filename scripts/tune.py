@@ -73,6 +73,9 @@ def main():
     ap.add_argument("--lr", type=float, nargs=2, default=(3e-5, 1e-3), help="log-uniform range")
     ap.add_argument("--ent-coef", type=float, nargs=2, default=(1e-3, 2e-2),
                     help="log-uniform range for the action entropy bonus (default 0.005)")
+    ap.add_argument("--tune-sleep", action="store_true",
+                    help="also tune sleep learning: --consolidation-ticks (2-24, default 8) and "
+                         "--retention-coef (0.01-1, default 0.1); needs more trials (20+)")
     args = ap.parse_args(argv[:argv.index("--")] if "--" in argv else argv)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -82,19 +85,26 @@ def main():
     study = optuna.create_study(study_name="agon", storage=storage, direction="maximize", load_if_exists=True,
                                 sampler=optuna.samplers.TPESampler(seed=0))
     if not study.trials:                       # start from the current defaults
-        study.enqueue_trial({"lr": 3e-4, "ent_coef": 0.005})
+        study.enqueue_trial({"lr": 3e-4, "ent_coef": 0.005,
+                             **({"consolidation_ticks": 8.0, "retention_coef": 0.1} if args.tune_sleep else {})})
     env = dict(os.environ, XLA_PYTHON_CLIENT_PREALLOCATE="false")
     env.pop("XLA_PYTHON_CLIENT_MEM_FRACTION", None)
 
     def objective(trial):
         lr = trial.suggest_float("lr", *args.lr, log=True)
         ent = trial.suggest_float("ent_coef", *args.ent_coef, log=True)
-        print(f"\n=== trial {trial.number}: lr {lr:.2e}, ent_coef {ent:.4f}", flush=True)
+        extra = []
+        if args.tune_sleep:
+            ct = trial.suggest_float("consolidation_ticks", 2.0, 24.0, log=True)
+            rc = trial.suggest_float("retention_coef", 0.01, 1.0, log=True)
+            extra = ["--consolidation-ticks", repr(ct), "--retention-coef", repr(rc)]
+        print(f"\n=== trial {trial.number}: lr {lr:.2e}, ent_coef {ent:.4f}"
+              + (f", consolidation {ct:.1f}, retention {rc:.3f}" if args.tune_sleep else ""), flush=True)
         scores = []
         for seed in range(args.seeds):
             run_dir = out / f"trial_{trial.number}" / f"seed_{seed}"
             run_dir.mkdir(parents=True, exist_ok=True)
-            cmd = [sys.executable, TRAIN, *passthrough, "--lr", repr(lr), "--ent-coef", repr(ent),
+            cmd = [sys.executable, TRAIN, *passthrough, "--lr", repr(lr), "--ent-coef", repr(ent), *extra,
                    "--seed", str(seed), "--out", str(run_dir), "--ckpt-every", "1000000"]
             print(f"  seed {seed}", flush=True)
             code, lines = run_one(cmd, run_dir / "train.log", env)
@@ -117,16 +127,16 @@ def main():
         study.optimize(objective, n_trials=left, catch=(RuntimeError,))
     done = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
     done.sort(key=lambda t: -t.value)
-    print("\nrank  score    sd      lr        ent_coef")
+    print("\nrank  score    sd      params")
     for i, t in enumerate(done):
-        print(f"{i + 1:>4}  {t.value:.4f}  {t.user_attrs.get('seed_sd', 0):.4f}  {t.params['lr']:.2e}  "
-              f"{t.params['ent_coef']:.4f}")
+        ps = ", ".join(f"{k} {v:.3g}" for k, v in t.params.items())
+        print(f"{i + 1:>4}  {t.value:.4f}  {t.user_attrs.get('seed_sd', 0):.4f}  {ps}")
     if done:
         best = done[0]
         json.dump({"best": best.params, "score": best.value, "seed_sd": best.user_attrs.get("seed_sd"),
                    "trials": [{"params": t.params, "score": t.value, **t.user_attrs} for t in done],
                    "train_args": passthrough}, open(out / "best.json", "w"), indent=1)
-        print(f"\nbest: lr {best.params['lr']:.2e}, ent_coef {best.params['ent_coef']:.4f} -> {out / 'best.json'}")
+        print(f"\nbest: {', '.join(f'{k} {v:.3g}' for k, v in best.params.items())} -> {out / 'best.json'}")
         print("A difference smaller than about two seed sds is noise, not a better setting.")
 
 

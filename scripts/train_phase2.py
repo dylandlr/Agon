@@ -79,6 +79,11 @@ def main():
                          "survival skills (seek water, seek food, flee)")
     ap.add_argument("--saint-rate", type=float, default=1e-6,
                     help="chance each founder or newborn is selfless toward anyone (rare altruism)")
+    ap.add_argument("--consolidation-ticks", type=float, default=8.0,
+                    help="deep sleep (per 30 minutes of game time) that must follow a step before it is "
+                         "learned in full; less sleep, a share of it")
+    ap.add_argument("--retention-coef", type=float, default=0.1,
+                    help="how strongly each sleep pulls the policy back toward old stored moments")
     ap.add_argument("--channel", choices=["full", "none", "shuffled"], default="full",
                     help="message channel control: none = no one is heard; shuffled = messages heard are "
                          "other speakers', shuffled each tick (Lowe et al. 2019 controls)")
@@ -177,6 +182,7 @@ def main():
     env_cfg = dataclasses.replace(env_cfg, max_steps=int(round(args.episode_years * env_cfg.year_length)))
     cfg = MAConfig(num_worlds=args.worlds, num_steps=args.steps, total_ticks=args.ticks, lr=args.lr, agent_chunk=args.agent_chunk,
                    msg_net=args.msg_net, msg_frozen=args.msg_frozen,
+                   consolidation_ticks=args.consolidation_ticks, retention_coef=args.retention_coef,
                    encoder=args.encoder, gamma=args.gamma, trait_gamma=args.trait_gamma,
                    per_agent_lr=not args.no_agent_lr, seed=args.seed,
                    num_minibatches=min(4, args.worlds), imitation_coef=args.imitation,
