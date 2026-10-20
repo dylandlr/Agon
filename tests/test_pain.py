@@ -140,3 +140,21 @@ def test_a_sadist_is_pleased_by_its_victims_pain_and_an_empath_pained():
         _, _, _, info = E.step(st, jnp.array([E.STRIKE_N + 2, E.REST]), cfg)
         return float(info.moral_reward[0])
     assert felt(1.0, 0.0) > 0.0 > felt(0.0, 1.0)
+
+
+def test_playback_records_ideas_with_pain_among_the_expected_body_values():
+    """export_playback.idea_record clips each expected body value to its range: one range per
+    DECODE_NAMES entry, pain included (it had 7 ranges for 8 values and crashed)."""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parents[1] / "scripts"))
+    import export_playback as X
+    from lifesim.policy import DECODE_NAMES
+    k, d = 3, len(DECODE_NAMES)
+    ideas = {"cand": np.array([[E.REST, E.SLEEP, E.EAT]]), "habit": np.array([[0.5, 0.3, 0.2]]),
+             "chosen": np.array([[0.5, 0.3, 0.2]]), "q": np.array([[1.0, 0.5, 0.2]]), "ok": np.ones((1, k), bool),
+             "best": np.array([E.REST]), "plan": np.array([[E.REST] * 6]),
+             "expect": np.array([[[0.5] * d] * 6]), "now": np.array([[0.4] * (d - 1) + [0.9]]),
+             "trust": np.array([0.1])}
+    rec = X.idea_record(ideas, 0)
+    assert rec["expects"]["pain"] < 0                                   # expects the pain to ease

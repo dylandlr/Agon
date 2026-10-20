@@ -195,8 +195,10 @@ def idea_record(ideas, i):
         return None
     best = E.ACTION_NAMES[int(d["best"])]
     habit_best = max(options, key=lambda o: o[1])[0]
-    lo = np.array([0, 0, 0, 0, -1.5, 0, 0.0])                   # the range each own-state value can take
-    hi = np.array([1, 1, 1, 1, 1.5, 1, 1.0])
+    # the range each own-state value can take, in DECODE_NAMES order (food .. sleepiness, pain)
+    ranges = {"body temperature": (-1.5, 1.5), "pain": (0.0, 1.5)}
+    lo = np.array([ranges.get(n, (0.0, 1.0))[0] for n in DECODE_NAMES])
+    hi = np.array([ranges.get(n, (0.0, 1.0))[1] for n in DECODE_NAMES])
     change = np.clip(d["expect"][-1], lo, hi) - np.clip(d["now"], lo, hi)
     return {"options": options, "best": best, "habit": habit_best,
             # a new idea: the best imagined action is one its habits clearly would not have chosen
