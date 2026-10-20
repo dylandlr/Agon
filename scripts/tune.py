@@ -27,7 +27,7 @@ from pathlib import Path
 
 import optuna
 from optuna.storages import JournalStorage
-from optuna.storages.journal import JournalFileBackend
+from optuna.storages.journal import JournalFileBackend, JournalFileOpenLock
 
 TRAIN = str(Path(__file__).resolve().parent / "train_phase2.py")
 
@@ -76,7 +76,9 @@ def main():
     args = ap.parse_args(argv[:argv.index("--")] if "--" in argv else argv)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    storage = JournalStorage(JournalFileBackend(str(out / "study.journal")))
+    # Lock by creating a file, not a symlink: Google Drive's Colab mount cannot make symlinks
+    journal = str(out / "study.journal")
+    storage = JournalStorage(JournalFileBackend(journal, lock_obj=JournalFileOpenLock(journal)))
     study = optuna.create_study(study_name="agon", storage=storage, direction="maximize", load_if_exists=True,
                                 sampler=optuna.samplers.TPESampler(seed=0))
     if not study.trials:                       # start from the current defaults
