@@ -217,6 +217,8 @@ svg.glyph { vertical-align: -2px; margin-right: 1px; } svg.glyph rect { fill: #1
 .inspector .trait span.track { background: var(--track); display: block; height: 6px; }
 .inspector .trait.cond { grid-template-columns: 9.5em 4em 1fr; }
 .inspector .trait:hover span:first-child { text-decoration: underline dotted; }
+.inspector dt.has-stat, .inspector dd.has-stat { cursor: help; }
+.inspector dt.has-stat:hover, .inspector dt.has-stat:hover + dd { text-decoration: underline dotted; }
 .inspector ol { margin: 0; padding-left: 24px; font-size: 12px; max-height: 240px; overflow-y: auto; }
 .inspector p.fine { font-size: 11.5px; color: var(--muted); margin: 6px 0 0; }
 .inspector .tag { font-size: 11px; padding: 0 5px; border-radius: 3px; text-align: center; }
@@ -3095,7 +3097,8 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     if (e.type === "ignite") s += ` with ${e.method === "spark" ? "a spark" : "burning wood"}`;
     if (e.type === "gave_birth" && e.child && e.child.length) s += ` to ${e.child.map(who).join(" and ")}`;
     if (e.type === "touch") s += ` ${(e.targets || []).length ? e.targets.map(who).join(" and ") : "someone"}`;
-    if (e.type === "struck_by_agent" && e.by && e.by.length) s = `${who(e.agent)} was struck by ${e.by.map(who).join(" and ")}`;
+    if (e.type === "struck_by_agent" && e.by && e.by.length) s = `${who(e.agent)} was struck at by ${e.by.map(who).join(" and ")}`;
+    if (e.type === "strike_agent" && e.part) s += ` (aimed at the ${e.part}${e.landed ? "" : ": missed"})`;
     if (e.type === "condition") {
       const c = (DATA.conditions || []).find((x) => x.name === e.condition);
       s = `${who(e.agent)} ${c && c.kind === "use" ? "earned" : "developed"} ${e.condition}${c ? ` (${c.good ? "good" : "bad"}: ${c.about})` : ""}`;
@@ -3411,6 +3414,38 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       age: "Comes with age: a chance each year past the onset age.", event: "Triggered by something that happened to it.",
       use: "Earned by doing something many times." }[c.kind] || "";
     return `<b>${escT(name)} (${c.good ? "good" : "bad"})</b>${escT(c.about)}<div>${escT(how)}</div>${when ? `<div class="k">Arrived ${escT(when)}, in this recording.</div>` : ""}`;
+  }
+  // How each number in "Body in numbers" is made up, from the factors the simulation itself used
+  // (env.body_breakdown, exported per agent as stats)
+  function statCard(st, k, f) {
+    const a = f.agents[k], s = a.stats || {}, x = (v, d = 2) => (+v).toFixed(d);
+    const parts = K.parts || ["head", "neck", "torso", "arms", "legs"];
+    const card = (title, lines) => `<b>${escT(title)}</b>${lines.map((l) => `<div>${escT(l)}</div>`).join("")}`;
+    if (st === "strength") return card(`Strength ${x(a.strength)}`, [
+      `= inborn ${x(s.strength_gene)} × age ${x(s.age_factor)} (rises to 20, falls after the prime) × condition ${x(s.condition)} (weight ${a.weight} kg of an ideal ${a.ideal_kg} kg) × conditions ${x(s.fx_strength)} × arms ${x(s.arms)} (hurt arms weaken).`,
+      "Sets how hard it strikes, hunts and fights."]);
+    if (st === "blow") return card(`A blow: about ${x(s.blow, 3)} before armour`, [
+      `= ${K.strike_damage ?? 0.6} × strength ${x(a.strength)} × body mass ${x(s.mass_force)} (lean mass^(2/3) against an average adult: muscle force follows its cross-section) × practice ${x(s.practice)} (up to +${Math.round(100 * (K.practice_max ?? 0.25))}%, half of it after ${K.practice_half ?? 200} strikes) × injury ${x(s.injury_factor)}.`,
+      `Then: × luck (about ±${Math.round(100 * (K.blow_luck ?? 0.25))}%; ${Math.round(100 * (K.glancing_prob ?? 0.1))}% of blows glance off at half), × a tool's hardness and edge, × the part aimed at; against people × ${K.agent_strike_scale ?? 0.25}.`,
+      "By part (lands on someone standing / how much reaches health): " + parts.map((p, j) =>
+        `${p} ${Math.round(100 * ((K.part_hit || [])[j] ?? 0))}% / ${(K.part_lethality || [])[j] ?? 1}×`).join(", ") + ". The downed are hit wherever one aims."]);
+    if (st === "speed") return card(`Speed ${x(a.speed)}`, [
+      `= inborn ${x(s.speed_gene)} × age ${x(s.age_factor)} × weight ${x(s.weight_factor)} (heavier than ideal is slower) × conditions ${x(s.fx_speed)} × legs ${x(s.legs)} (hurt legs slow; at ${Math.round(100 * (K.legs_unusable ?? 0.9))}% damage it cannot walk).`,
+      "Walking costs energy divided by speed."]);
+    if (st === "needs") return card("What it needs", [
+      `Food: −${x(100 * s.food_per_hour)}% an hour now = base × metabolism ${x(s.metabolism)} × size ${x(s.size_need)} (lean mass^0.75: Kleiber's law; children need less, big frames more) × activity ${x(s.activity)} (what it is doing this tick) × pregnancy ${x(s.pregnancy)} × sickness ${x(s.sickness)}.`,
+      `Water: −${x(100 * s.water_per_hour)}% an hour now (size and activity as for food; drought, desert and overheating add to it).`,
+      `Food ${pct(a.food)}, water ${pct(a.water)}, energy ${pct(a.energy)}. Each runs out: hunger and thirst then cost health.`]);
+    if (st === "parts") return card("Body parts", [
+      ...parts.map((p, j) => `${p}: ${pct((a.parts || [])[j] || 0)} damaged`),
+      `A head at ${pct(K.concussion_at ?? 0.6)} knocks one out; a ruined head or neck kills. Hurt arms weaken (−${Math.round(100 * (K.arm_weakness ?? 0.6))}% at worst), hurt legs slow (−${Math.round(100 * (K.leg_lameness ?? 0.6))}%). Parts heal as injuries do.`]);
+    if (st === "health") return card(`Health ${pct(a.health)}`, [
+      `Lost to hunger, thirst, cold, heat, illness, wounds and bleeding (injury ${pct(a.injury)} bleeds above 50%); healed while fed, watered, rested, well and calm (stress below 70%).`,
+      `Felt pain ${pct(Math.min(a.pain || 0, 1))} of what it can bear${(a.pain || 0) >= 1 ? ": in shock" : ""}.`]);
+    if (st === "frame") return card(`Height ${a.height} cm, weight ${a.weight} kg`, [
+      `Ideal weight ${a.ideal_kg} kg = BMI ${K.ideal_bmi ?? 22} × height² × build gene; height = ${K.base_height_cm ?? 165} cm × height gene × growth (adult by 18), shrinking a little after 60.`,
+      "Weight rises when well fed and burns when starving; its frame (lean mass) sets its needs and the force of its blows."]);
+    return "";
   }
   function traitCard(t, k, f) {
     if (t.startsWith("cond:")) return condCard(t.slice(5), k);
@@ -3801,7 +3836,8 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     $("insp-tile").hidden = !(a.existed !== false && (a.alive || a.was_alive));
     $("insp-back").hidden = true;
     const row = (pairs) => `<dl>${pairs.filter(([, v]) => v !== null && v !== undefined && v !== "")
-      .map(([d, v]) => `<dt>${esc(d)}</dt><dd>${v && v.html !== undefined ? v.html : esc(v)}</dd>`).join("")}</dl>`;
+      .map(([d, v, st]) => { const at = st && a.stats ? ` data-stat="${st}" class="has-stat"` : "";
+        return `<dt${at}>${esc(d)}</dt><dd${at}>${v && v.html !== undefined ? v.html : esc(v)}</dd>`; }).join("")}</dl>`;
     const link = (j) => ({ html: `${agentLink(j, f.t)}${f.agents[j] && !f.agents[j].alive ? " (died)" : ""}` });
     const children = f.agents.map((c, j) => [c, j]).filter(([c]) => c.existed !== false && c.mother === k).map(([, j]) => j);
     let html = "";
@@ -3826,13 +3862,18 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     if (a.alive && ART === "pixel") html += `<div class="model-strip" aria-label="How this person is drawn on the map: front, side, back"><canvas id="insp-model" width="216" height="104"></canvas></div>`;
     html += characterViewer(a, meta, f);
     html += inventoryView(a);
-    html += "<h3>Body in numbers</h3>" + row([
-      ["Health", pct(a.health)], ["Height", `${a.height} cm`], ["Weight", `${a.weight} kg`], ["Strength", a.strength],
-      ["Food / water / energy", `${pct(a.food)} / ${pct(a.water)} / ${pct(a.energy)}`],
+    const hurtParts = (a.parts || []).map((v, p) => [v, p]).filter(([v]) => v >= 0.05)
+      .map(([v, p]) => `${(K.parts || [])[p] || p} ${pct(v)}`).join(", ");
+    html += "<h3>Body in numbers</h3><p class='fine'>Hover a line for how it is worked out.</p>" + row([
+      ["Health", pct(a.health), "health"], ["Height", `${a.height} cm`, "frame"], ["Weight", `${a.weight} kg`, "frame"],
+      ["Strength", a.strength, "strength"], ["A blow", a.stats ? a.stats.blow.toFixed(3) : null, "blow"],
+      ["Speed", a.speed, "speed"],
+      ["Food / water / energy", `${pct(a.food)} / ${pct(a.water)} / ${pct(a.energy)}`, "needs"],
+      ["Body parts", a.parts ? (hurtParts || "unhurt") : null, "parts"],
       ["Sleepiness", a.sleepiness !== undefined ? pct(a.sleepiness) : null],
       ["Needs to relieve itself", a.urge !== undefined ? `${pct(a.urge)}${a.urge >= 0.7 ? " (pressing: stressful; at 100% it happens anyway)" : ""}` : null],
       ["Body temperature", a.temp !== undefined ? `${a.temp} (0 = comfortable)` : null],
-      ["Injury", pct(a.injury)], ["Lasting injury", pct(a.lasting_injury || 0)], ["Scars", pct(a.scars || 0)],
+      ["Injury", pct(a.injury), "health"], ["Lasting injury", pct(a.lasting_injury || 0)], ["Scars", pct(a.scars || 0)],
       ["Sick", a.sick ? "yes" : "no"], ["Pregnant", a.pregnant ? "yes" : null], ["Courting", a.courting ? "yes: open to mating for a few ticks" : null],
       ["Stress", a.stress !== undefined ? pct(a.stress) : null],
     ]);
@@ -4752,9 +4793,9 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   });
   // trait cards: what the trait means and how it acts on this agent right now
   $("insp-body").addEventListener("mouseover", (ev) => {
-    const el = ev.target.closest("[data-trait]"), tip = $("tip");
+    const el = ev.target.closest("[data-trait],[data-stat]"), tip = $("tip");
     if (!el || selected === null) { if (!ev.target.closest("#tip")) tip.hidden = true; return; }
-    tip.innerHTML = traitCard(el.dataset.trait, selected, F[cur]);
+    tip.innerHTML = el.dataset.stat ? statCard(el.dataset.stat, selected, F[cur]) : traitCard(el.dataset.trait, selected, F[cur]);
     tip.hidden = false;
     const b = el.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight;
     tip.style.left = `${Math.max(8, Math.min(b.left - w - 10, window.innerWidth - w - 8))}px`;

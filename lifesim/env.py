@@ -882,8 +882,45 @@ def body(state, cfg: EnvConfig) -> dict:
     legs = 1 - cfg.leg_lameness * state.part_damage[:, PART_LEGS] if cfg.body_parts else 1.0
     strength = g.strength * age_factor * condition * fx.get("strength", 1.0) * arms
     speed = g.speed * age_factor * jnp.clip(jnp.sqrt(ideal / state.weight), 0.8, 1.1) * fx.get("speed", 1.0) * legs
+    weight_factor = jnp.clip(jnp.sqrt(ideal / state.weight), 0.8, 1.1)
     return {"years": years, "height_cm": height, "weight_kg": state.weight, "ideal_kg": ideal,
-            "strength": strength, "speed": speed, "maturity": maturity}
+            "strength": strength, "speed": speed, "maturity": maturity,
+            # the factors strength and speed are made of (for the inspector; their products are above)
+            "age_factor": age_factor, "condition": condition, "fx_strength": fx.get("strength", 1.0) * jnp.ones_like(years),
+            "fx_speed": fx.get("speed", 1.0) * jnp.ones_like(years), "arms": arms * jnp.ones_like(years),
+            "legs": legs * jnp.ones_like(years), "weight_factor": weight_factor}
+
+
+def body_breakdown(state, cfg: EnvConfig, actions=None) -> dict:
+    """(N,) arrays: how strength, a blow, speed and food and water needs are made up, factor by
+    factor, as step() computes them (for the inspector). actions: what each is doing this tick."""
+    bod = body(state, cfg)
+    g = state.genotype
+    ref_kg = cfg.ideal_bmi * (cfg.base_height_cm / 100.0) ** 2
+    mass_force = (bod["ideal_kg"] / ref_kg) ** (2.0 / 3.0) if cfg.blow_by_mass else jnp.ones_like(bod["years"])
+    practice = 1.0 + cfg.practice_max * (1.0 - 0.5 ** (state.life_strikes / cfg.practice_half)) \
+        if cfg.blow_by_mass else jnp.ones_like(bod["years"])
+    size_need = (bod["ideal_kg"] / ref_kg) ** 0.75 if cfg.needs_by_size else jnp.ones_like(bod["years"])
+    if actions is not None and cfg.activity_needs:
+        a = actions
+        doing = jnp.where(a == SLEEP, cfg.activity_sleep, jnp.where((a >= STRIKE_N) & (a < STRIKE_N + 8), cfg.activity_strike,
+                jnp.where((a >= MOVE_N) & (a <= MOVE_NW), cfg.activity_walk,
+                          jnp.where((a == GRASP) | ((a >= PLACE_N) & (a < PLACE_N + 8)) | (a == WRITE),
+                                    cfg.activity_work, cfg.activity_rest)))) / cfg.activity_norm
+    else:
+        doing = jnp.ones_like(bod["years"])
+    preg = 1 + (state.gestation > 0) * cfg.pregnancy_need
+    sick = 1 + (state.infection > 0) * cfg.disease_hunger_mult
+    per_hour = 60.0 / cfg.tick_minutes
+    return {"strength_gene": g.strength, "age_factor": bod["age_factor"], "condition": bod["condition"],
+            "fx_strength": bod["fx_strength"], "arms": bod["arms"], "strength": bod["strength"],
+            "mass_force": mass_force, "practice": practice, "injury_factor": 1 - 0.5 * state.injury,
+            "blow": cfg.strike_damage * bod["strength"] * mass_force * practice * (1 - 0.5 * state.injury),
+            "speed_gene": g.speed, "weight_factor": bod["weight_factor"], "fx_speed": bod["fx_speed"],
+            "legs": bod["legs"], "speed": bod["speed"],
+            "metabolism": g.metabolism, "size_need": size_need, "activity": doing, "pregnancy": preg, "sickness": sick,
+            "food_per_hour": cfg.hunger_rate * g.metabolism * size_need * doing * preg * sick * per_hour,
+            "water_per_hour": cfg.thirst_rate * size_need * doing * per_hour}
 
 
 def climate_offset(t, drift, cfg: EnvConfig):

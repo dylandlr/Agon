@@ -242,7 +242,10 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
             victims = np.flatnonzero(hits[i]).tolist()
             answers = [(pid(A.get(i, {}).get(("struck_by", v))), f"striking back at #{v}") for v in victims
                        if A.get(i, {}).get(("struck_by", v)) and t - A[i][("struck_by", v)][1] <= retaliation]
-            ev = emit(i, "strike_agent", answers, victims=victims, **tool(i))
+            aimed = {}
+            if hasattr(info, "aim") and int(np.asarray(info.aim)[i]) >= 0:     # where it aimed; whether it landed
+                aimed = {"part": E.PARTS[int(np.asarray(info.aim)[i])], "landed": bool(np.asarray(info.blow_landed)[i])}
+            ev = emit(i, "strike_agent", answers, victims=victims, **tool(i), **aimed)
             same_tick[(i, "strike_agent")] = ev["id"]
         elif code == E.OUT_RELEASE:
             ev = emit(i, "release", near=np.flatnonzero(gifts[i]).tolist())

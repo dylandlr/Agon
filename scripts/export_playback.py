@@ -267,6 +267,12 @@ def world_static(state, cfg):
             "techtree": [{"id": b, "name": nm, "requires": req, "about": about} for b, nm, req, about, _ in _tech.NODES],
             "height_m": [round(float(v) * cfg.relief_m) for v in np.asarray(state.height).reshape(-1)],
             "consts": {"base_height_cm": cfg.base_height_cm, "ideal_bmi": cfg.ideal_bmi,
+                       "strike_damage": cfg.strike_damage, "agent_strike_scale": cfg.agent_strike_scale,
+                       "parts": list(E.PARTS), "part_hit": list(cfg.part_hit), "part_lethality": list(cfg.part_lethality),
+                       "concussion_at": cfg.concussion_at, "arm_weakness": cfg.arm_weakness,
+                       "leg_lameness": cfg.leg_lameness, "legs_unusable": cfg.legs_unusable,
+                       "blow_luck": cfg.blow_luck, "glancing_prob": cfg.glancing_prob,
+                       "practice_max": cfg.practice_max, "practice_half": cfg.practice_half,
                        "comfort_temp": cfg.comfort_temp, "air_min": AIR_MIN, "view_radius": cfg.view_radius,
                        "tick_minutes": cfg.tick_minutes, "day_length": cfg.day_length, "stress_sources": list(E.STRESS_SOURCES),
                        "cell_km": cfg.cell_km, "relief_m": cfg.relief_m,
@@ -339,6 +345,7 @@ def build_frame(t, prev, state, a, info, evs, env_cfg, n_agents, minds=None):
     p = jax.tree_util.tree_map(np.asarray, prev)
     s = jax.tree_util.tree_map(np.asarray, state)
     bod = jax.tree_util.tree_map(np.asarray, E.body(state, env_cfg))
+    brk = jax.tree_util.tree_map(np.asarray, E.body_breakdown(state, env_cfg, jnp.asarray(a)))   # for the inspector's hovers
     acts, outs, msgs = np.asarray(a), np.asarray(info.outcome), np.asarray(info.message)
     r_view = env_cfg.view_radius
     sf = np.asarray(info.stress_from)                 # stress gained this tick by source, x 1e4 (E.STRESS_SOURCES)
@@ -369,7 +376,9 @@ def build_frame(t, prev, state, a, info, evs, env_cfg, n_agents, minds=None):
                 "pregnant": bool(s.gestation[i] > 0), "courting": bool(s.courting[i] > 0), "mother": int(s.mother[i]),
                 "below": bool(s.below[i]), "dark": bool(np.asarray(info.dark)[i]),
                 "downed": bool(np.asarray(info.downed)[i]), "pain": round(float(E.felt_pain(s, env_cfg)[i]), 2), "heartache": round(float(s.heartache[i]), 2),
-                "carrying": {E.MAT_NAMES[m]: round(float(s.inv[i, m]), 1) for m in range(E.N_MAT) if s.inv[i, m] > 0.05}}
+                "carrying": {E.MAT_NAMES[m]: round(float(s.inv[i, m]), 1) for m in range(E.N_MAT) if s.inv[i, m] > 0.05},
+                "parts": [round(float(x), 2) for x in s.part_damage[i]],
+                "stats": {k: round(float(v[i]), 4) for k, v in brk.items()}}
     nz = lambda grid, thr=0.3: [[int(r), int(c)] for r, c in np.argwhere(grid > thr)]
     # The social web, read from the agents' own memories (nothing here feeds back into the world):
     # kinship, bonds (touching and food left near each other) and blows struck each way.
