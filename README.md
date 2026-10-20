@@ -514,7 +514,10 @@ HPRC: `hprc/README.md`. Colab: `agon_eos_colab_a100.ipynb`.
 `scripts/viability.py` runs the experiment's world with hand-scripted agents that do what a
 competent forager band would: flee predators when alone and stand together otherwise, drink and
 eat before needs run low, sleep at night, take cover and huddle when cold or hot, mothers stay
-with nursing children, fed couples mate. No fire, tools, hunting or sharing. `--knowledge full`
+with nursing children, fed couples mate, and fed parents carry food to their hungry children under
+12 and drop it where they stand. No fire, tools, hunting, or sharing beyond one's own children.
+(Before 40-day biological years the script fed no one, which hardly mattered when a child was
+self-sufficient within days; at 40 days a year it left children to starve.) `--knowledge full`
 routes from the true map (an upper bound); `--knowledge own` uses only the caveman slate's given
 skills and what each agent has seen, which is what trained agents can do. If such a band cannot
 keep its numbers up, no training can, and the world is what needs fixing.
@@ -1612,9 +1615,14 @@ adulthood with it.
   first, else a dead agent's). Traits come from both parents through
   `genotype.inherit` (heritable with random variation); appearance blends
   theirs; others' memories of the slot's last occupant are cleared.
-- **Infants** under 1 year cannot walk or forage. Until 2, a child within one
+- **Infants** under 1 year cannot walk or forage. Until 2.5 (`nurse_years`), a child within one
   cell of its mother is nursed: its food and water are topped up and she pays
   60% of what it takes.
+- **Children need less** (`needs_by_size`): hunger and thirst scale with body mass to the 3/4
+  power (Kleiber's law), from the body model's growth: a toddler needs about 0.57 of an adult's
+  food and water, a 9-year-old about 0.68, an adult exactly as before. Without it, a two-year-old
+  burned food at an adult's rate, and at 40-day biological years children starved: a scripted band
+  fell from 14 to 4 in 30 years, with one birth to a mother born in the world.
 - **Genetic survival:** in survival mode each agent's reward adds its living
   relatives' survival signal (+0.01 alive, -1 dying) times relatedness (true
   kinship, seen or not: 0.5 for parent, child or sibling, 0.25 for

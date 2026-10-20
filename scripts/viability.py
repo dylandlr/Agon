@@ -129,6 +129,23 @@ def scripted_policy(cfg: EnvConfig, knowledge: str = "full"):
         # a mother forages only near her child, unless need is pressing
         pressing = (state.satiety < 0.35) | (state.hydration < 0.35)
         a = jnp.where(child_far & ~pressing, to_child, a)
+        # Parents feed their hungry children (under 12): a fed parent gathers food, carries it to the
+        # child and drops it where the child stands; the child picks it up with its own food skill.
+        # (Trained agents must learn this; the script does it so the check measures what the world
+        # allows, not what a script that never shares can do.)
+        parent_of = (state.relatedness >= 0.45) & ((years[None, :] - years[:, None]) >= 14.0) \
+            & alive[:, None] & alive[None, :] & ~jnp.eye(n, dtype=bool)                    # [i, j]: i parent of j
+        hungry_kid = alive & (years < 12.0) & (years >= cfg.infant_years) & (state.satiety < 0.5)
+        kid_d = jnp.where(parent_of & hungry_kid[None, :], jnp.max(jnp.abs(pos[:, None] - pos[None]), -1), 10 ** 6)
+        kid = jnp.argmin(kid_d, axis=1)
+        provider = (jnp.min(kid_d, axis=1) < 10 ** 6) & (state.satiety > 0.55) & ~pressing
+        carrying = state.inv[:, E.PLANT] >= 0.5
+        with_kid = jnp.all(pos == pos[kid], axis=-1)
+        give = jnp.where(state.hand != E.PLANT, E.SELECT_0 + E.PLANT,
+               jnp.where(with_kid, E.RELEASE, _toward(pos, pos[kid], can_move, g)))
+        fetch = jnp.where(plants_here & (state.hand == E.PLANT) & mask[:, E.GRASP], E.GRASP,
+                jnp.where(plants_here, E.SELECT_0 + E.PLANT, go_food))
+        a = jnp.where(provider, jnp.where(carrying, give, fetch), a)
         sleepy_time = (night & (state.sleepiness > 0.25)) | (state.sleepiness > 0.8)
         a = jnp.where(sleepy_time & ~pressing & ~((cold | hot) & ~in_shelter) & ~child_far, E.SLEEP, a)
         a = jnp.where(state.satiety < 0.25, go_food, a)

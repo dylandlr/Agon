@@ -2503,9 +2503,11 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
 
     # ---------------------------------------------------------- metabolism
     carrying_child = (state.gestation > 0).astype(jnp.float32) * cfg.pregnancy_need   # 0 unless pregnant
+    # Kleiber's law: needs ~ mass^0.75; mass ~ height^2 (body), so needs ~ (height / adult height)^1.5
+    size_need = (0.55 + 0.45 * bod["maturity"]) ** 1.5 if cfg.needs_by_size else 1.0
     hunger = cfg.hunger_rate * geno.metabolism * (1 + jnp.where(sick, cfg.disease_hunger_mult, 0.0)) \
-        * (1 + carrying_child)
-    thirst = cfg.thirst_rate * jnp.where(weather == DROUGHT, cfg.drought_thirst_mult, 1.0) \
+        * (1 + carrying_child) * size_need
+    thirst = size_need * cfg.thirst_rate * jnp.where(weather == DROUGHT, cfg.drought_thirst_mult, 1.0) \
         * jnp.where(terr_here == DESERT, cfg.desert_thirst_mult if cfg.biomes else 1.0, 1.0) \
         * (1 + cfg.sweat_thirst_mult * jnp.maximum(body_temp - 0.2, 0.0))
     rest_gain = jnp.where(resting, cfg.rest_recovery * jnp.where(night, cfg.night_rest_bonus, 1.0), 0.0)

@@ -138,7 +138,11 @@ class EnvConfig:
     infant_years: float = 1.0          # cannot walk or forage
     mutation_rate: float = 0.01        # chance per trait per birth of a de novo mutation
     mutation_size: float = 2.5         # its size, in population standard deviations (up or down)
-    nurse_years: float = 2.0           # mother nurses within 1 cell until this age
+    nurse_years: float = 2.5           # mother nurses within 1 cell until this age (foragers wean at ~2.5-3)
+    # Children need less: food and water needs scale with body mass to the 3/4 power (Kleiber's law),
+    # so a toddler needs a bit over half of what an adult does (on this body model's sizes) and an
+    # adult is unchanged. Off, every age needs an adult's share.
+    needs_by_size: bool = True
     lactation_infertile_years: float = 2.0   # a mother cannot conceive while her child is younger (0: off)
     nurse_rate: float = 0.03           # food and water a nursing child can take per tick
     nurse_cost: float = 0.6            # share of what the child takes that the mother pays

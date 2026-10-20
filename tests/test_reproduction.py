@@ -370,3 +370,25 @@ def test_a_world_can_grow_its_slots_mid_run_and_children_fill_them():
     params = {"w": jnp.arange(6.0).reshape(2, 3)}
     p = G.pad_agents(params, 2, 4, fill="first")["w"]
     assert p.shape == (4, 3) and float(p[3, 2]) == 2.0
+
+
+def test_children_need_less_food_and_water_by_kleibers_law():
+    """Needs scale with body mass^0.75: a toddler loses food and water more slowly than an adult,
+    an adult exactly as before, and with needs_by_size off every age needs an adult's share."""
+    import dataclasses
+    import jax
+    import jax.numpy as jnp
+    from lifesim import env as E
+    from lifesim.config import EnvConfig
+    cfg = EnvConfig(grid_size=12, n_agents=2, climate_volatility=0.0, season_temp=(18.0,) * 4, day_temp_swing=0.0,
+                    lightning_prob=0.0)
+    s = E.reset(jax.random.PRNGKey(5), cfg)
+    tpy = cfg.ticks_per_bio_year
+    s = s._replace(birth_age=jnp.array([int(3 * tpy), int(30 * tpy)], jnp.int32),
+                   genotype=s.genotype._replace(metabolism=jnp.ones(2)),
+                   satiety=jnp.full(2, 0.9), hydration=jnp.full(2, 0.9), conditions=jnp.zeros_like(s.conditions))
+    loss = lambda c: [0.9 - float(x) for x in E.step(s, jnp.array([E.REST, E.REST]), c)[0].satiety]
+    toddler, adult = loss(cfg)
+    assert 0.4 * adult < toddler < 0.7 * adult
+    flat = loss(dataclasses.replace(cfg, needs_by_size=False))
+    assert abs(flat[0] - flat[1]) < 1e-6 and abs(flat[1] - adult) < 1e-6
