@@ -424,7 +424,9 @@ def main():
     ap.add_argument("--root", required=True)
     ap.add_argument("--worlds", type=int, default=64)
     ap.add_argument("--agent-steps", type=float, default=1e8, help="training budget per run")
-    ap.add_argument("--days", type=float, default=400, help="continuous world after training (0 = none)")
+    ap.add_argument("--days", type=float, default=1200,
+                    help="continuous world after training (0 = none); 1,200 days = 30 years at 40 days per "
+                         "year of age, long enough for a child born early to grow up (600 days)")
     ap.add_argument("--playback-every", type=int, default=8)
     ap.add_argument("--only", type=int, default=None, help="run just item K (HPRC array task)")
     ap.add_argument("--skip-gate", action="store_true", help="run even if the persistence gate fails")

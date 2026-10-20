@@ -11,10 +11,15 @@ from pathlib import Path
 # sleep, the cognitive map and convex needs (all on by default in the environment), and the
 # "caveman" slate: given survival skills, with social life left to learning; in the "living"
 # world (biomes, dynamic weather, a climate cycle); with a learned world model that imagines.
+# Biological time: a year of age lasts 40 days, the same as a calendar year (40 days per year,
+# days_per_year), so people age one year per year of seasons: adults at 15 years = 600 days, lives of
+# decades. (It was 1 day per year of age, which aged founders out within a year or two of seasons,
+# before their children grew up.) Training episodes last 25 years (1,000 days), so a child born early
+# in one can reach adulthood within it.
 PRESETS = {
     "society": dict(agents=16, founders=8, reproduction=True, reward_mode="survival",
                     grid=250, steps=192, encoder="conv", slate="caveman", world="living", world_model=True,
-                    episode_years=10, tick_minutes=1.0),
+                    episode_years=25, days_per_bio_year=40.0, tick_minutes=1.0),
     # The same society at half-hour ticks on a 32 x 32 map (a cell is 2 km at walking pace, so the map
     # is 64 km across): 30x less compute per game day than "society", so a 1e8-step budget lives ~50
     # game years per world instead of ~2, enough for many generations. Coarser in time (a tick is half
@@ -27,13 +32,13 @@ PRESETS = {
     # slots as needed (scripts/continuous_world.py, lifesim/grow.py), so they have no cap at all.
     "society30": dict(agents=64, founders=8, reproduction=True, reward_mode="survival",
                       grid=32, steps=128, encoder="conv", slate="caveman", world="living", world_model=True,
-                      episode_years=10, tick_minutes=30.0),
+                      episode_years=25, days_per_bio_year=40.0, tick_minutes=30.0),
     # A band large enough for culture to accumulate: 64 slots (24 founders) on a 300 x 300 world
     # (RimWorld's large map; 400 km^2),
     # so food and space, not the slot count, limit numbers. About 4.5x the compute of "society".
     "tribe": dict(agents=64, founders=24, reproduction=True, reward_mode="survival",
                   grid=300, steps=192, encoder="conv", slate="caveman", world="living", world_model=True,
-                  episode_years=10, tick_minutes=1.0),
+                  episode_years=25, days_per_bio_year=40.0, tick_minutes=1.0),
     # Real time: a 365-day year and real biological time (9-month pregnancies, adults at 15
     # calendar years, lives of decades). For realism checks of a single generation: no one born in a
     # run of this length grows up, so it cannot test persistence or culture across generations.

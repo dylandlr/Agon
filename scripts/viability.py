@@ -232,7 +232,9 @@ def main():
     ap.add_argument("--hazards", type=float, default=1.0, help="x extreme weather, lightning, falls")
     ap.add_argument("--shock", action="append", default=[], metavar="KIND:DAY:DAYS:STRENGTH",
                     help="inject a crisis, e.g. famine:40:10:0.2 (lifesim/threats.py)")
-    ap.add_argument("--days", type=float, default=160, help="160 = 4 years")
+    ap.add_argument("--days", type=float, default=1200,
+                    help="1,200 = 30 years: at 40 days per year of age, long enough for a child to grow up "
+                         "(600 days) and have children of its own")
     ap.add_argument("--tick-minutes", type=float, default=None, help="default: the preset's (1 for society)")
     ap.add_argument("--seeds", type=int, default=3)
     ap.add_argument("--knowledge", default="full", choices=["full", "own"],

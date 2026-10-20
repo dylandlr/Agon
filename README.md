@@ -474,7 +474,7 @@ for many generations. The scripted band persists there in 2 of 3 4-year worlds
 `PRESET=society30` (hprc/README.md).
 
 - `validate`: the preset; without sleep-consolidated learning; the blank slate; without the world
-  model; each followed by a 10-year continuous world.
+  model; each followed by a 30-year (1,200-day) continuous world.
 - `inheritance`: after `validate`, the caveman run's agents live on with learning, newborns
   inheriting a parent's learned brain or its inborn one (see below).
 - `core`: reward sharing alpha {0, 0.5, 1} x food {1.0, 0.4} x seeds {0, 1, 2}, 100M agent-steps
@@ -484,7 +484,8 @@ for many generations. The scripted band persists there in 2 of 3 4-year worlds
   (`--which`, default all 17; 2 seeds each and a control with none).
 - `culture`: replicate worlds on one map with different histories, with (`social`) and without
   (`solitary`) learning by watching (`--replicates`, default 4 each); see "Hierarchy and culture".
-- `gate`: did anyone born in the validated caveman agents' continuous world grow up (15 days)?
+- `gate`: did anyone born in the validated caveman agents' continuous world grow up (15 years of
+  age: 600 days at the presets' 40 days per year)?
   `core`, `archetypes`, `inheritance` and `stress` refuse to start until it passes
   (`--skip-gate` overrides).
 - `report`: training results by condition and how each continuous world went.
@@ -495,7 +496,8 @@ with different code, and `experiment.py` stops before doing anything if a run it
 was made by other code. Keep one `--root` per code version: the notebook and the HPRC jobs use
 `runs/exp_<code version>`.
 
-**Training worlds run for 10 years** (`--episode-years`, preset 10), or until everyone in them
+**Training worlds run for 25 years** (`--episode-years`, preset 25; it was 10, too short for anyone
+born in one to grow up at 40 days per year of age), or until everyone in them
 has died, and a world cut off by the clock is bootstrapped from the value of the state it was
 cut off in, not treated as death (`ppo_multi.gae`; Pardo et al., 2018, "Time limits in
 reinforcement learning"). Before this, every training world restarted after one year and the
@@ -1532,13 +1534,21 @@ Sleep is built in, as in people; how agents handle it is up to them.
 ## Reproduction
 
 Off by default; `--reproduction` (with `--agents` as slots and `--founders`
-alive at the start) or `config.with_reproduction()` turns it on, at 1 day per
-biological year (adult about day 15; deaths from age most likely around day 70, see
-*Senescence*).
+alive at the start) or `config.with_reproduction()` turns it on. The presets age people one year
+per 40-day year (`days_per_bio_year` 40, the same as the calendar): adults at 15 years (day 600),
+deaths from age most likely in the 70s (see *Senescence*). The config's own default is still 1 day
+per year of age, used by the tests and by runs made without a preset.
 
 **Time scale.** `--days-per-year` (calendar: seasons, climate) and `--days-per-bio-year`
-(age: growth, fertility, pregnancy, lifespan) set it; `config.with_time_scale()`. The default
-(40, 1) compresses both so winters and generations fit in a run. The `realtime` preset is
+(age: growth, fertility, pregnancy, lifespan) set it; `config.with_time_scale()`. The presets
+use (40, 40): a year of age per year of seasons. At 1 day per year of age (the earlier setting,
+still the config default) founders aged out within a year or two of seasons, before their children
+grew up. At 40, in society30 (half-hour ticks, 1,920 ticks a year): adults after 28,800 ticks
+(600 days); a 100M agent-step run of 64 slots in 8 worlds lives about 195,000 ticks per world, four
+25-year training episodes; continuous worlds default to 1,200 days (30 years), long enough for a
+child born early to grow up. Births come 40 times more slowly per day than at 1 day per year, while
+hunger, thirst, disease and predators kill at the same rate per day, so whether a band can still
+replace itself is checked with `viability.py` (default 1,200 days). The `realtime` preset is
 (365, 365): 365-day years, 9-month (274-day) pregnancies, adults at 15 calendar years. Its cost:
 a child is fertile after 262,800 ticks, while a 100M agent-step run of 16 agents in 32 worlds
 lives about 195,000 ticks per world, so no one born in training grows up and a 400-day
