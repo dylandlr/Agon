@@ -100,7 +100,7 @@ from lifesim import minerals as _min  # noqa: E402
 from lifesim import techtree as _tech  # noqa: E402
 from lifesim import fauna as _fa  # noqa: E402
 from lifesim import ecology as _eco  # noqa: E402
-from lifesim.policy import DECODE_NAMES  # noqa: E402
+from lifesim.policy import DECODE_NAMES, sample_outputs  # noqa: E402
 
 # ---------------------------------------------------------------- the decision behind each action
 # What a network "thinks" is not readable directly; these are the parts that are real: the chance
@@ -145,7 +145,7 @@ def make_thinker(net, cfg):
     probabilities, the value estimate, attribution of the chosen action to each MIND_GROUP and,
     with a world model, its ideas (the actions it imagined, how each looked, and the best one
     played out: what it would do after, and what it expects of its own body)."""
-    A, M = E.N_ACTIONS, E.MSG_LEN * E.VOCAB
+    A, M = E.N_ACTIONS, E.EXTRA_LOGITS
     seg = jnp.asarray(obs_groups(cfg))
     n_groups = len(MIND_GROUPS)
 
@@ -155,9 +155,7 @@ def make_thinker(net, cfg):
         apply = lambda p, c, o, m: net.apply(p, c, (o[None, None], reset[None, None], m[None, None]))
         carry2, logits, value = jax.vmap(apply)(params, carry, obs, full)
         logits, value = logits[:, 0, 0], value[:, 0, 0]
-        ka, km = jax.random.split(k)
-        a = jax.random.categorical(ka, logits[:, :A])
-        msg = jax.random.categorical(km, logits[:, A:].reshape(-1, E.MSG_LEN, E.VOCAB))
+        a, msg = sample_outputs(k, logits)                    # msg: [said, written, aim]
         probs = jax.nn.softmax(logits[:, :A], axis=-1)
 
         def lean(p, c, o, m, ai):
@@ -429,10 +427,12 @@ def build_frame(t, prev, state, a, info, evs, env_cfg, n_agents, minds=None):
 def load_population(run: Path, env_cfg: EnvConfig, hidden: int, encoder: str, world_model: bool | None = None):
     """Final outputs if training finished, else the latest checkpoint. world_model: read from the
     run's history when not given."""
+    hist = run / "history.json"
+    hargs = json.load(open(hist))["args"] if hist.exists() else {}
     if world_model is None:
-        hist = run / "history.json"
-        world_model = bool(json.load(open(hist))["args"].get("world_model")) if hist.exists() else False
-    net = make_network(env_cfg, hidden, encoder, messages=True, world_model=world_model)
+        world_model = bool(hargs.get("world_model"))
+    net = make_network(env_cfg, hidden, encoder, messages=True, world_model=world_model,
+                       msg_net=hargs.get("msg_net", "branch"))      # the brain's shape as it was trained
     if not (run / "params.msgpack").exists():
         from lifesim import checkpoint as ckpt
         state = ckpt.load(run / "checkpoint.pkl")
@@ -442,7 +442,7 @@ def load_population(run: Path, env_cfg: EnvConfig, hidden: int, encoder: str, wo
         pop = pickle.load(f)
     n = env_cfg.n_agents
     dummy = (jnp.zeros((1, 1, E.obs_dim(env_cfg))), jnp.zeros((1, 1), bool),
-             jnp.ones((1, 1, E.N_ACTIONS + E.MSG_LEN * E.VOCAB), bool))
+             jnp.ones((1, 1, E.N_ACTIONS + E.EXTRA_LOGITS), bool))
     template = jax.vmap(lambda k: net.init(k, jnp.zeros((1, hidden)), dummy))(
         jax.random.split(jax.random.PRNGKey(0), n))
     params = serialization.from_bytes(template, (run / "params.msgpack").read_bytes())
@@ -539,7 +539,7 @@ def main():
         if args.decisions:                        # untrained brains: each agent its own fresh network
             net = make_network(env_cfg, args.hidden, args.encoder, messages=True, world_model=args.world_model)
             dummy = (jnp.zeros((1, 1, E.obs_dim(env_cfg))), jnp.zeros((1, 1), bool),
-                     jnp.ones((1, 1, E.N_ACTIONS + E.MSG_LEN * E.VOCAB), bool))
+                     jnp.ones((1, 1, E.N_ACTIONS + E.EXTRA_LOGITS), bool))
             key, k_net = jax.random.split(key)
             params = jax.vmap(lambda k: net.init(k, jnp.zeros((1, args.hidden)), dummy))(
                 jax.random.split(k_net, args.agents))
@@ -548,7 +548,7 @@ def main():
             net, params, pop = load_population(Path(args.run), env_cfg, args.hidden, args.encoder)
             state = E.reset(k_env, env_cfg, jax.tree_util.tree_map(jnp.asarray, pop.genotype),
                             jnp.asarray(pop.appearance))
-        A, M = E.N_ACTIONS, E.MSG_LEN * E.VOCAB
+        A, M = E.N_ACTIONS, E.EXTRA_LOGITS
 
         @jax.jit
         def policy(params, carry, obs, mask, reset, k):
@@ -556,9 +556,7 @@ def main():
             carry, logits, _ = jax.vmap(lambda p, c, o, m: net.apply(
                 p, c, (o[None, None], reset[None, None], m[None, None])))(params, carry, obs, full)
             logits = logits[:, 0, 0]
-            ka, km = jax.random.split(k)
-            a = jax.random.categorical(ka, logits[:, :A])
-            msg = jax.random.categorical(km, logits[:, A:].reshape(-1, E.MSG_LEN, E.VOCAB))
+            a, msg = sample_outputs(k, logits)
             return carry, a, msg
 
         carry = jnp.zeros((args.agents, 1, args.hidden))

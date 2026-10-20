@@ -60,7 +60,9 @@ def test_blows_on_the_downed_land_square():
 
 
 def test_a_blow_on_the_downed_can_end_it():
-    cfg = dataclasses.replace(CFG, coup_prob=1.0)
+    """Without body parts, one roll (coup_prob) stands in for a blow to something vital; with them,
+    one aims at the neck or head (tests/test_body.py)."""
+    cfg = dataclasses.replace(CFG, coup_prob=1.0, body_parts=False)
     s = _world(cfg)
     s1, _, _, info = E.step(s._replace(pain=jnp.array([0.0, 1.0])), jnp.array([E.STRIKE_N + 2, E.REST]), cfg)
     assert not bool(s1.alive[1]) and int(info.death_cause[1]) == E.CAUSE_VIOLENCE

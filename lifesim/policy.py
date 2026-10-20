@@ -86,7 +86,13 @@ class ActorCritic(nn.Module):
     view_size: int = 11
     channels: int = 11
     conv_impl: str = "patch"
-    msg_out: int = 0          # extra logits for the message channel (MSG_LEN x VOCAB), 0 = none
+    msg_out: int = 0          # logits for the symbols said and written (OUT_TOKENS x VOCAB), 0 = none
+    aim_out: int = 0          # logits for the body part a strike aims at (N_PARTS), 0 = none
+    # Where speech and writing branch off (Lowe et al. 2019: sharing the layers that pick the action
+    # makes messages look meaningful when they are not): "branch" their own hidden layer on the shared
+    # trunk; "stopgrad" the same, but their learning does not shape the trunk; "separate" their own
+    # small network from the raw observation (a control: no memory, no shared features).
+    msg_net: str = "branch"
     world_model: bool = False
     imagine_k: int = 6        # actions considered per decision
     imagine_h: int = 6        # ticks imagined for each
@@ -104,13 +110,18 @@ class ActorCritic(nn.Module):
         self.mid_dense = nn.Dense(self.hidden)
         self.gru = ScannedGRU()
 
-        def head_bias(key, shape, dtype=jnp.float32):
-            # Start mostly silent: favour symbol 0 in the first message slot (~9% speech)
-            b = jnp.zeros(shape, dtype)
-            return b.at[self.n_actions].set(5.0) if self.msg_out else b
+        def silence_bias(key, shape, dtype=jnp.float32):
+            # Start mostly silent: favour symbol 0 in the first slot said. With 31 others at 0,
+            # a bias b gives speech 31 / (e^b + 31): 5.75 is ~9% (5.0 gave ~17%).
+            return jnp.zeros(shape, dtype).at[0].set(5.75)
         self.pol_hidden = nn.Dense(self.hidden)
-        self.pol_out = nn.Dense(self.n_actions + self.msg_out, kernel_init=nn.initializers.orthogonal(0.01),
-                                bias_init=head_bias)
+        self.pol_out = nn.Dense(self.n_actions + self.aim_out, kernel_init=nn.initializers.orthogonal(0.01))
+        if self.msg_out:
+            if self.msg_net == "separate":
+                self.msg_in = nn.Dense(self.hidden)
+            self.msg_hidden = nn.Dense(self.hidden)
+            self.msg_head = nn.Dense(self.msg_out, kernel_init=nn.initializers.orthogonal(0.01),
+                                     bias_init=silence_bias)
         self.val_hidden = nn.Dense(self.hidden)
         self.val_out = nn.Dense(1, kernel_init=nn.initializers.orthogonal(1.0))
         if self.world_model:
@@ -138,8 +149,22 @@ class ActorCritic(nn.Module):
             h = nn.relu(self.in_dense(obs))
         return nn.relu(self.mid_dense(h))
 
-    def policy_logits(self, h):
+    def action_logits(self, h):
+        """Logits of the action and of the part aimed at."""
         return self.pol_out(nn.relu(self.pol_hidden(h)))
+
+    def msg_logits(self, h, obs):
+        if self.msg_net == "separate":
+            x = nn.relu(self.msg_in(obs))
+        elif self.msg_net == "stopgrad":
+            x = jax.lax.stop_gradient(h)
+        else:
+            x = h
+        return self.msg_head(nn.relu(self.msg_hidden(x)))
+
+    def policy_logits(self, h, obs=None):
+        a = self.action_logits(h)
+        return jnp.concatenate([a, self.msg_logits(h, obs)], axis=-1) if self.msg_out else a
 
     def value_of(self, h):
         return self.val_out(nn.relu(self.val_hidden(h))).squeeze(-1)
@@ -158,7 +183,7 @@ class ActorCritic(nn.Module):
     def habit(self, z, mask_a):
         """The action its habits would take in an imagined situation, among actions possible now
         (the model does not predict what will be possible, so today's options stand in)."""
-        return jnp.argmax(jnp.where(mask_a, self.policy_logits(z)[..., :self.n_actions], MASK_VALUE), axis=-1)
+        return jnp.argmax(jnp.where(mask_a, self.action_logits(z)[..., :self.n_actions], MASK_VALUE), axis=-1)
 
     def imagine(self, h, logits_masked, mask):
         """Imagined return of each of the k most likely valid actions: (cand (..., k), q (..., k))."""
@@ -181,7 +206,7 @@ class ActorCritic(nn.Module):
         and (with a world model) candidates and their imagined returns."""
         obs, resets, mask = x
         carry, h = self.gru(carry, (self.encode(obs), resets))
-        prior = jnp.where(mask, self.policy_logits(h), MASK_VALUE)
+        prior = jnp.where(mask, self.policy_logits(h, obs), MASK_VALUE)
         out = {"h": h, "prior": prior, "value": self.value_of(h)}
         logits = prior
         if self.world_model:
@@ -190,7 +215,7 @@ class ActorCritic(nn.Module):
             ok = jnp.take_along_axis(mask[..., :self.n_actions], cand, -1)   # fewer valid actions than k
             mean = (q * ok).sum(-1, keepdims=True) / jnp.maximum(ok.sum(-1, keepdims=True), 1)
             bias = self.trust * (q - mean) * ok
-            full = jnp.sum(jax.nn.one_hot(cand, self.n_actions + self.msg_out) * bias[..., None], axis=-2)
+            full = jnp.sum(jax.nn.one_hot(cand, self.n_actions + self.aim_out + self.msg_out) * bias[..., None], axis=-2)
             logits = jnp.where(mask, prior + full, MASK_VALUE)
             out.update(cand=cand, q=q)
             if self.is_initializing():
@@ -238,9 +263,11 @@ class ActorCritic(nn.Module):
 
 
 def make_network(env_cfg, hidden: int = 128, encoder: str = "conv",
-                 conv_impl: str = "auto", messages: bool = False, world_model: bool = False) -> ActorCritic:
-    """messages=True adds MSG_LEN x VOCAB logits after the action logits; the mask
-    passed in must then cover them too (all True). conv_impl "auto" picks native convolutions
+                 conv_impl: str = "auto", messages: bool = False, world_model: bool = False,
+                 msg_net: str = "branch") -> ActorCritic:
+    """messages=True adds the aim and the symbols said and written after the action logits
+    (env.EXTRA_LOGITS; split_logits, sample_outputs); the mask passed in must then cover them too
+    (all True). conv_impl "auto" picks native convolutions
     on GPU/TPU and the patch path on CPU. world_model=True adds the dynamics, reward and
     own-state heads and imagination (see the module docstring)."""
     from . import env as E
@@ -249,4 +276,20 @@ def make_network(env_cfg, hidden: int = 128, encoder: str = "conv",
     return ActorCritic(n_actions=E.N_ACTIONS, hidden=hidden, encoder=encoder,
                        view_size=env_cfg.view_size, channels=E.N_OBS_CHANNELS,
                        conv_impl=conv_impl,
-                       msg_out=E.MSG_LEN * E.VOCAB if messages else 0, world_model=world_model)
+                       msg_out=E.OUT_LOGITS if messages else 0, aim_out=E.N_PARTS if messages else 0,
+                       msg_net=msg_net, world_model=world_model)
+
+
+def split_logits(logits):
+    """(action (..., N_ACTIONS), aim (..., N_PARTS), symbols (..., OUT_TOKENS, VOCAB))."""
+    from . import env as E
+    A, K = E.N_ACTIONS, E.N_PARTS
+    return logits[..., :A], logits[..., A:A + K], logits[..., A + K:].reshape(logits.shape[:-1] + (E.OUT_TOKENS, E.VOCAB))
+
+
+def sample_outputs(key, logits):
+    """An action and the packed rest, [said..., written..., aim] (env.OUT_SLOTS ints)."""
+    act, aim, sym = split_logits(logits)
+    ka, kb, kc = jax.random.split(key, 3)
+    out = jnp.concatenate([jax.random.categorical(kc, sym), jax.random.categorical(kb, aim)[..., None]], axis=-1)
+    return jax.random.categorical(ka, act), out

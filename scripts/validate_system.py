@@ -167,7 +167,7 @@ def transmission():
     import optax
     cfg = EnvConfig(grid_size=16, n_agents=2)
     net = make_network(cfg, hidden=64, encoder="mlp", messages=True, conv_impl="patch")
-    A, M = E.N_ACTIONS, E.MSG_LEN * E.VOCAB
+    A, M = E.N_ACTIONS, E.EXTRA_LOGITS
     keys = jax.random.split(jax.random.PRNGKey(0), 64)
     states = [E.reset(k, cfg) for k in keys]
     obs = jnp.stack([E.observe(st, cfg)[1] for st in states])          # agent 1 is the demonstrator

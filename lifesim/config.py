@@ -143,6 +143,26 @@ class EnvConfig:
     # so a toddler needs a bit over half of what an adult does (on this body model's sizes) and an
     # adult is unchanged. Off, every age needs an adult's share.
     needs_by_size: bool = True
+    # ... and with each person's own frame (height and build genes: lean mass^0.75 against an average
+    # adult's), and with what they do this tick: physical activity levels, as multiples of resting
+    # needs (sleep a little below, walking well above, fighting most). activity_norm divides them so
+    # that a typical forager's day (about 40% asleep, 30% resting, 25% walking, 5% working or
+    # fighting) costs what it did before. Hunger and thirst alike (exertion sweats).
+    activity_needs: bool = True
+    activity_sleep: float = 0.9
+    activity_rest: float = 1.0
+    activity_walk: float = 1.6
+    activity_work: float = 1.3      # gathering, placing, writing
+    activity_strike: float = 2.0
+    activity_norm: float = 1.13
+    # A blow's force: strength x (lean mass / an average adult's)^(2/3) (muscle force follows its
+    # cross-section), x practice (up to +practice_max, half of it after practice_half strikes in a
+    # life: technique), x luck (lognormal, sd blow_luck; a glancing_prob chance of half force).
+    blow_by_mass: bool = True
+    practice_max: float = 0.25
+    practice_half: float = 200.0
+    blow_luck: float = 0.25
+    glancing_prob: float = 0.1
     lactation_infertile_years: float = 2.0   # a mother cannot conceive while her child is younger (0: off)
     nurse_rate: float = 0.03           # food and water a nursing child can take per tick
     nurse_cost: float = 0.6            # share of what the child takes that the mother pays
@@ -219,6 +239,10 @@ class EnvConfig:
     # mark_days_paint (weather wears it off).
     language_mode: str = "emergent"
     writing: bool = False
+    # The message channel, for the communication controls (Lowe et al. 2019): "full"; "none" (no one
+    # is ever heard: every message is silence); "shuffled" (each tick the messages heard are those of
+    # other speakers, shuffled among them, so content is cut from its speaker's state).
+    channel: str = "full"
     heard_recency: float = 0.6         # how fresh a heard place is in one's map (seen is 1)
     mark_days: float = 90.0
     mark_days_rock: float = 365.0
@@ -254,7 +278,25 @@ class EnvConfig:
     # a person has coup_prob of striking something vital and killing outright (RimWorld has no
     # multiplier: its downed simply cannot dodge or block, and die when a vital part is destroyed)
     downed_hit_mult: float = 2.0
-    coup_prob: float = 0.15
+    coup_prob: float = 0.15         # only without body_parts (with them, a blow to the neck finishes)
+    # Body parts (env.PARTS: head, neck, torso, arms, legs). Every blow is aimed at one (the brain's
+    # aim output). By part: the chance it lands on someone standing (the downed are always hit), how
+    # much of its force reaches health, and how much damage the part itself takes per unit of blow.
+    # A head at concussion_at drops one (knocked out); a head or neck at 1 kills; hurt arms weaken
+    # (strength x (1 - arm_weakness x damage)), hurt legs slow (speed x (1 - leg_lameness x damage))
+    # and at legs_unusable one cannot walk. Parts heal as injuries do. Predator bites land on a part
+    # drawn from bite_parts; falls hurt the legs. For animals arms are forelegs, and a leg or foreleg
+    # blow lames the animal for animal_lame_ticks (no running, half its steps).
+    body_parts: bool = True
+    part_hit: tuple = (0.6, 0.45, 0.9, 0.8, 0.8)
+    part_lethality: tuple = (1.4, 2.0, 1.0, 0.4, 0.5)
+    part_fragility: tuple = (1.5, 2.0, 1.0, 1.5, 1.5)
+    concussion_at: float = 0.6
+    arm_weakness: float = 0.6
+    leg_lameness: float = 0.6
+    legs_unusable: float = 0.9
+    bite_parts: tuple = (0.1, 0.25, 0.35, 0.15, 0.15)
+    animal_lame_ticks: int = 96     # calibration ticks (2 days at half-hour ticks)
 
     # Disease (SIR-style per agent)
     disease_duration: int = 96      # 2 days (was 200: with no healing while sick, a 0.8 health loss

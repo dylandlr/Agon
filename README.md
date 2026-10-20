@@ -291,11 +291,31 @@ left burning is the only other way.
 ## Language and knowledge transfer
 
 Agents speak on a channel separate from their actions. Every tick each agent
-chooses an action (42, all generic) and a message: 3 symbols from a 16-symbol
-vocabulary, symbol 0 = silence. No symbol has a built-in meaning; speaking
-costs 0.0005 energy so noise is not free. Each listener hears the 3 nearest
-speakers in view: their symbols, where they stand, and its own memory of them.
-`env.step(state, actions, cfg, messages)`; omit `messages` for silence.
+chooses an action and, besides it, the part a strike would aim at, a message (4 symbols from a
+32-symbol vocabulary, symbol 0 first = silence) and the 4 symbols WRITE would put down. No symbol
+has a built-in meaning; speaking costs 0.0005 energy so noise is not free. Each listener hears
+the nearest speakers in view: their symbols, where they stand, and its own memory of them.
+`env.step(state, actions, cfg, out)` with `out` packed as [said x4, written x4, aim]
+(`env.OUT_SLOTS`; `policy.sample_outputs`); omit it for silence and torso blows. Brains start
+mostly silent (~9% speech).
+
+**Speech has its own branch of the brain.** Lowe et al. (2019) showed that when the message and
+the action come out of the same layers, speaker-side measures of meaning (speaker consistency,
+message-action mutual information) look healthy even with an untrained message head or scrambled
+messages. Messages and writing therefore come from their own hidden layer (`--msg-net branch`),
+with two alternatives: `stopgrad` (their learning does not shape the shared trunk) and `separate`
+(their own small network on the raw observation). The aim stays with the action. PPO clips each
+output on its own ratio (action, aim, said, written), so a message that moved a lot does not stop
+the action's update; an output that had no effect is left out of the ratio, the entropy bonus and
+imitation (the aim when not striking, the symbols after a silent first, the written symbols
+without WRITE). The log reports each output's clip fraction and KL (`per_output`).
+
+**Controls for whether messages mean anything** (train each from scratch, several seeds):
+`--channel none` (no one is heard), `--channel shuffled` (what is heard is other speakers'
+messages, shuffled each tick), `--msg-frozen` (speech never learns: the floor for any
+speaker-side number), and `--msg-net separate`. See `reports/Shared message action head.md`
+(and the project copy) for the protocol: listener-side influence by message intervention,
+per-token mutual information against a shuffled baseline, mark effects by age and by deletion.
 
 Social learning depends on language in three ways:
 - **Speech is copied with actions.** Imitation predicts the watched agent's
@@ -306,7 +326,7 @@ Social learning depends on language in three ways:
   flows faster through agents who talk while doing, so teaching can emerge
   without being coded.
 
-PPO treats the action and the message as one joint choice.
+PPO scores the action, aim, message and writing as separate outputs (above).
 
 **Speech attention and the teaching bonus are off by default.** In a matched
 pair of runs (614k agent-steps each), with them on, speech climbed from 136 to
@@ -1152,8 +1172,22 @@ both off in the base config):
   something vital and killing outright (cause: violence). The "death" event carries `finished_off` when
   the dead was down the tick before; "downed" carries `pain_shock` when pain alone dropped them.
   RimWorld itself has no damage multiplier: a downed pawn cannot dodge or block, and dies when a vital
-  part is destroyed (neck, head, heart), blood runs out, or consciousness reaches zero. Agon's health is
-  one number, not a body of parts, so the multiplier and the vital-hit chance stand in for that.
+  part is destroyed (neck, head, heart), blood runs out, or consciousness reaches zero. With body
+  parts (below) the vital-hit roll is off: finishing someone is aiming at the neck.
+- **Body parts and aimed blows** (`body_parts`, on): head, neck, torso, arms, legs. Every blow is
+  aimed (the brain's aim output). By part, the chance it lands on someone standing (head 60%, neck
+  45%, torso 90%, limbs 80%; the downed are always hit), how much of its force reaches health
+  (head 1.4x, neck 2x, torso 1x, arms 0.4x, legs 0.5x) and how much the part takes (fragility 1.5,
+  2, 1, 1.5, 1.5). A head at 0.6 knocks one out (down); a head or neck at 1 kills (counted to the
+  blow, else to the bite that did it). Hurt arms weaken (strength x (1 - 0.6 x damage)), hurt legs
+  slow (speed x (1 - 0.6 x damage)) and at 0.9 one cannot walk or delve. Predator bites land on a
+  part (throat 25%, torso 35%, ...); falls hurt the legs; parts heal as injuries do. Each agent
+  feels its own parts (five observation features). Animals: arms are forelegs; a blow to a leg or
+  foreleg lames the animal for two days (no running, half its steps), so hamstringing prey is a
+  choice: on a deer, the neck lands 44% of the time for 0.73 damage, the torso 90% for 0.25, a leg
+  78% for 0.07 and lames it. A blow's force: strength x (lean mass / an average adult's)^(2/3)
+  (muscle force follows cross-section) x practice (up to +25%, half of it after 200 strikes in a
+  life) x luck (lognormal, sd 0.25, and a 10% chance of a glancing blow at half force).
 - **Grazing** (`EnvConfig.grazing`): rabbits, fowl, tortoises, deer, aurochs, boar, horses and
   mammoths eat the plants where they stand (shared when a cell is crowded; a large grazer eats about
   seven times what a small one does) and drift toward the richest ground beside them; one that finds
@@ -1618,9 +1652,12 @@ adulthood with it.
 - **Infants** under 1 year cannot walk or forage. Until 2.5 (`nurse_years`), a child within one
   cell of its mother is nursed: its food and water are topped up and she pays
   60% of what it takes.
-- **Children need less** (`needs_by_size`): hunger and thirst scale with body mass to the 3/4
-  power (Kleiber's law), from the body model's growth: a toddler needs about 0.57 of an adult's
-  food and water, a 9-year-old about 0.68, an adult exactly as before. Without it, a two-year-old
+- **Needs follow the body and what it does** (`needs_by_size`, `activity_needs`): hunger and
+  thirst scale with lean mass to the 3/4 power (Kleiber's law), from one's own frame (height and
+  build genes) and growth against an average adult (a toddler about 0.57, a 9-year-old about 0.68,
+  a tall heavy-framed adult more than 1), times the metabolism gene, times what one is doing this
+  tick (sleep 0.9, rest 1.0, walking 1.6, gathering or working 1.3, fighting 2.0, all divided by
+  1.13 so that a typical day costs what it did before). Without it, a two-year-old
   burned food at an adult's rate, and at 40-day biological years children starved: a scripted band
   fell from 14 to 4 in 30 years, with one birth to a mother born in the world.
 - **Genetic survival:** in survival mode each agent's reward adds its living

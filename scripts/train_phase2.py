@@ -79,6 +79,13 @@ def main():
                          "survival skills (seek water, seek food, flee)")
     ap.add_argument("--saint-rate", type=float, default=1e-6,
                     help="chance each founder or newborn is selfless toward anyone (rare altruism)")
+    ap.add_argument("--channel", choices=["full", "none", "shuffled"], default="full",
+                    help="message channel control: none = no one is heard; shuffled = messages heard are "
+                         "other speakers', shuffled each tick (Lowe et al. 2019 controls)")
+    ap.add_argument("--msg-net", choices=["branch", "stopgrad", "separate"], default="branch",
+                    help="where speech and writing branch off the brain (policy.ActorCritic.msg_net)")
+    ap.add_argument("--msg-frozen", action="store_true",
+                    help="speech and writing never learn (their initial weights): the floor for speaker-side measures")
     ap.add_argument("--memory-report", action="store_true",
                     help="compile one update, print XLA's memory estimate for it, and exit")
     ap.add_argument("--agent-chunk", type=int, default=0,
@@ -161,7 +168,7 @@ def main():
     elif args.underground:
         raise SystemExit("--underground needs --world living (the cave mouths are a biome)")
     import dataclasses as _dc
-    env_cfg = _dc.replace(env_cfg, language_mode=args.language, writing=args.writing)
+    env_cfg = _dc.replace(env_cfg, language_mode=args.language, writing=args.writing, channel=args.channel)
     env_cfg = with_time_scale(env_cfg, args.days_per_year, args.days_per_bio_year)
     if args.reproduction:
         env_cfg = with_reproduction(env_cfg, n_founders=args.founders or None)
@@ -169,6 +176,7 @@ def main():
     env_cfg = with_tick_minutes(env_cfg, args.tick_minutes)
     env_cfg = dataclasses.replace(env_cfg, max_steps=int(round(args.episode_years * env_cfg.year_length)))
     cfg = MAConfig(num_worlds=args.worlds, num_steps=args.steps, total_ticks=args.ticks, lr=args.lr, agent_chunk=args.agent_chunk,
+                   msg_net=args.msg_net, msg_frozen=args.msg_frozen,
                    encoder=args.encoder, gamma=args.gamma, trait_gamma=args.trait_gamma,
                    per_agent_lr=not args.no_agent_lr, seed=args.seed,
                    num_minibatches=min(4, args.worlds), imitation_coef=args.imitation,
@@ -271,6 +279,10 @@ def main():
                 "sleep_memory": {"waiting_share": round(float(m["waiting_share"]), 3),
                                  "retention_kl": round(float(m["retention_kl"]), 5),
                                  "long_term_filled": round(float(m["long_term_filled"]), 3)},
+                # Per output (action, aim, said, written): share of updates clipped, and the KL moved
+                "per_output": {name: {"clip_fraction": round(float(m["clip_fraction"][j]), 4),
+                                      "approx_kl": round(float(m["approx_kl"][j]), 5)}
+                               for j, name in enumerate(["action", "aim", "said", "written"])},
                 **({"world_model": {"own_state_error": round(float(m["wm_own"]), 5),
                                     "belief_error": round(float(m["wm_latent"]), 5),
                                     "reward_error": round(float(m["wm_reward"]), 5),

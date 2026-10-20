@@ -49,6 +49,7 @@ from lifesim.threats import with_threats  # noqa: E402
 from lifesim.analysis import language_metrics  # noqa: E402
 from lifesim.config import EnvConfig, living_world, with_reproduction, with_tick_minutes, with_time_scale  # noqa: E402
 from lifesim.ppo_multi import MAConfig, Population, Transition, make_train  # noqa: E402
+from lifesim.policy import sample_outputs  # noqa: E402
 from lifesim.recorder import _stamp_events, extract_events  # noqa: E402
 
 MORALS = ["empathy", "kin_care", "envy", "guilt", "reciprocity", "vengefulness", "sadism"]
@@ -479,7 +480,8 @@ def main():
                                fouling=bool(hist.get("fouling", False)),
                                excretion=bool(hist.get("excretion", True)))   # runs from before the flag had it on
         import dataclasses as _dc
-        env_cfg = _dc.replace(env_cfg, language_mode=hist.get("language", "emergent"), writing=bool(hist.get("writing", False)))
+        env_cfg = _dc.replace(env_cfg, language_mode=hist.get("language", "emergent"), writing=bool(hist.get("writing", False)),
+                              channel=hist.get("channel", "full"))
     if hist.get("reproduction"):
         env_cfg = with_reproduction(with_time_scale(env_cfg, hist.get("days_per_year", 40),
                                                     hist.get("days_per_bio_year", 1.0)),
@@ -507,6 +509,8 @@ def main():
                         imitation_bias=hist.get("imitation_bias", "success"),
                         imitate_positive_only=not hist.get("imitate_all", False),
                         ent_coef=hist.get("ent_coef", 0.005), msg_ent_coef=hist.get("msg_ent_coef", 0.0005),
+                        msg_net=hist.get("msg_net", "branch"), msg_frozen=bool(hist.get("msg_frozen", False)),
+                        agent_chunk=hist.get("agent_chunk", 0),
                         sleep_learning=not hist.get("no_sleep_learning", False),
                         world_model=bool(hist.get("world_model")), per_agent_lr=not hist.get("no_agent_lr", False),
                         memory_span=min(env_cfg.day_length, args.learn_every),
@@ -519,7 +523,7 @@ def main():
     state = E.reset(k_env, env_cfg, jax.tree_util.tree_map(jnp.asarray, pop.genotype), jnp.asarray(pop.appearance))
     if args.map_seed is not None:                   # same world, own history
         state = state._replace(key=jax.random.fold_in(jax.random.PRNGKey(args.seed), 7))
-    A, M = E.N_ACTIONS, E.MSG_LEN * E.VOCAB
+    A, M = E.N_ACTIONS, E.EXTRA_LOGITS
 
     @jax.jit
     def policy(params, carry, obs, mask, reset, k):
@@ -527,10 +531,9 @@ def main():
         carry, logits, _ = jax.vmap(lambda p, c, o, m: net.apply(
             p, c, (o[None, None], reset[None, None], m[None, None])))(params, carry, obs, full)
         logits = logits[:, 0, 0]
-        ka, km = jax.random.split(k)
-        a = jax.random.categorical(ka, logits[:, :A])
+        a, out = sample_outputs(k, logits)                    # out: [said, written, aim]
         p = jnp.take_along_axis(jax.nn.softmax(logits[:, :A], -1), a[:, None], -1)[:, 0]   # how likely it rated its own choice
-        return carry, a, jax.random.categorical(km, logits[:, A:].reshape(-1, E.MSG_LEN, E.VOCAB)), p
+        return carry, a, out, p
 
     world_fns = {}
 
@@ -662,7 +665,7 @@ def main():
                 col = lambda x: jnp.asarray(x)[:, None]
                 buf.append(Transition(
                     col(reset_next | (t == 0)), col(info.died), col(prev.alive), col(a), col(jnp.zeros(n)), col(r),
-                    col(jnp.zeros(n)), obs[:, None], mask[:, None], msg[:, None], col(info.spoke & prev.alive),
+                    jnp.zeros((n, 1, 4)), obs[:, None], mask[:, None], msg[:, None], col(info.spoke & prev.alive),
                     E.layered_pos(prev.pos, prev.below)[:, None], col(prev.health), col(jnp.full(n, E.is_night(prev.t, env_cfg))), col(info.died),
                     col(info.slept * jnp.minimum(prev.sleep_depth + 1, env_cfg.sleep_deep_ticks) / env_cfg.sleep_deep_ticks),
                     col(jnp.ones(n)), col(jnp.zeros(n)), col(jnp.zeros(n, jnp.int32))))

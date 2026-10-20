@@ -385,10 +385,10 @@ def test_children_need_less_food_and_water_by_kleibers_law():
     s = E.reset(jax.random.PRNGKey(5), cfg)
     tpy = cfg.ticks_per_bio_year
     s = s._replace(birth_age=jnp.array([int(3 * tpy), int(30 * tpy)], jnp.int32),
-                   genotype=s.genotype._replace(metabolism=jnp.ones(2)),
+                   genotype=s.genotype._replace(metabolism=jnp.ones(2), height=jnp.ones(2), build=jnp.ones(2)),
                    satiety=jnp.full(2, 0.9), hydration=jnp.full(2, 0.9), conditions=jnp.zeros_like(s.conditions))
     loss = lambda c: [0.9 - float(x) for x in E.step(s, jnp.array([E.REST, E.REST]), c)[0].satiety]
     toddler, adult = loss(cfg)
     assert 0.4 * adult < toddler < 0.7 * adult
-    flat = loss(dataclasses.replace(cfg, needs_by_size=False))
+    flat = loss(dataclasses.replace(cfg, needs_by_size=False))      # an average adult frame: unchanged
     assert abs(flat[0] - flat[1]) < 1e-6 and abs(flat[1] - adult) < 1e-6
