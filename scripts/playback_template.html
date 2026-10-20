@@ -3181,16 +3181,18 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     const female = a.sex === "female";
     const ideal = (a.height / 100) ** 2 * 22 * (tr.build || 1);
     const lasting = a.lasting_injury > 0.02 ? `, of which ${pct(a.lasting_injury)} will never heal` : "";
+    const P = a.parts || [0, 0, 0, 0, 0];                      // damage to head, neck, torso, arms, legs
+    const hurtTxt = (j, name) => P[j] >= 0.05 ? ` ${name} damaged ${pct(P[j])}.` : "";
     const R = {
-      brain: ["Mind", 1 - Math.max(a.stress || 0, a.sleepiness || 0),
-        `Stress ${pct(a.stress || 0)}, sleepiness ${pct(a.sleepiness || 0)}${a.asleep ? ", asleep" : ""}. Learning speed ${t("lr_scale")}, learns by watching ${t("social_learning")}. Stress of 70% or more stops healing and conception.`],
+      brain: ["Mind", Math.min(1 - Math.max(a.stress || 0, a.sleepiness || 0), 1 - P[0]),
+        `Stress ${pct(a.stress || 0)}, sleepiness ${pct(a.sleepiness || 0)}${a.asleep ? ", asleep" : ""}. Learning speed ${t("lr_scale")}, learns by watching ${t("social_learning")}. Stress of 70% or more stops healing and conception.${hurtTxt(0, "Head")}${P[0] >= (K.concussion_at ?? 0.6) ? " Knocked out." : ""}`],
       eyes: ["Eyes", sight / (DATA.view_radius || 5), `Sees ${sight} cell${sight === 1 ? "" : "s"} around it: ${why}.`],
-      mouth: ["Mouth and throat", a.water, `Water ${pct(a.water)}. Thirst is felt more and more strongly as it runs low, and does damage once empty.`],
+      mouth: ["Mouth and throat", Math.min(a.water, 1 - P[1]), `Water ${pct(a.water)}. Thirst is felt more and more strongly as it runs low, and does damage once empty.${hurtTxt(1, "Neck")}${P[1] >= 0.05 ? " A ruined neck kills." : ""}`],
       neck: ["Immune system", a.sick ? 0.2 : 1, `${a.sick ? "Fighting an infection (it saps health and energy)." : "No infection."} Resists infection ${t("disease_resistance")}.`],
-      chest: ["Heart and lungs", a.health, `Overall health ${pct(a.health)}. Injury ${pct(a.injury)}${lasting}. The body is tracked as a whole: injury is not yet placed on body parts.`],
+      chest: ["Heart and lungs", Math.min(a.health, 1 - P[2]), `Overall health ${pct(a.health)}. Injury ${pct(a.injury)}${lasting}.${hurtTxt(2, "Torso")}`],
       belly: ["Stomach and reserves", a.food, `Food ${pct(a.food)}. Weight ${a.weight} kg, ${Math.round(100 * a.weight / ideal)}% of ideal for its frame (fat is burned when starving). Gets hungry ${t("metabolism")}x as fast as average.`],
-      arms: ["Arms", a.energy, `Strength ${a.strength} (inborn ${t("strength")}, changes with age and condition). Energy ${pct(a.energy)}.`],
-      legs: ["Legs", a.energy * (1 - a.injury), `Walking speed ${t("speed")}. Energy ${pct(a.energy)}.${a.injury > 0.2 ? " Injury makes stumbling more likely." : ""}${(a.sleepiness || 0) > 0.6 ? " Sleepiness makes falls more likely." : ""}`],
+      arms: ["Arms", Math.min(a.energy, 1 - P[3]), `Strength ${a.strength} (inborn ${t("strength")}, changes with age and condition). Energy ${pct(a.energy)}.${hurtTxt(3, "Arms")}`],
+      legs: ["Legs", Math.min(a.energy * (1 - a.injury), 1 - P[4]), `Walking speed ${t("speed")}. Energy ${pct(a.energy)}.${a.injury > 0.2 ? " Injury makes stumbling more likely." : ""}${(a.sleepiness || 0) > 0.6 ? " Sleepiness makes falls more likely." : ""}${hurtTxt(4, "Legs")}${P[4] >= (K.legs_unusable ?? 0.9) ? " Cannot walk." : ""}`],
       skin: ["Skin", 1 - (a.scars || 0), `Scars ${pct(a.scars || 0)}${a.scars > 0.05 ? " (others can see them)" : ""}. Keeps warm ${t("insulation")}. Body temperature ${a.temp !== undefined ? a.temp : "?"} (0 is comfortable; cold does damage below -0.7).`],
     };
     if (female) R.womb = ["Womb", a.pregnant ? 0.7 : 1, a.pregnant ? "Pregnant: needs 30% more food and water until the birth." : "Not pregnant."];
