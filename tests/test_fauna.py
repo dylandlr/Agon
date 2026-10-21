@@ -137,3 +137,24 @@ def test_agents_see_an_animals_size_and_fangs_not_its_name():
     o = np.asarray(E.observe(s, CFG))[0, :v * v * E.N_OBS_CHANNELS].reshape(v, v, -1)
     mam, wolf = o[r, r + 1, E.CH_FAUNA:E.CH_FAUNA + 3], o[r + 1, r, E.CH_FAUNA:E.CH_FAUNA + 3]
     assert mam[0] == 1.0 and wolf[1] == 1.0 and wolf[0] < mam[0]
+
+
+def test_wolves_stalk_deer_and_deer_run_from_them():
+    """cfg.animal_hunting: a hunting predator closes on prey it can take, and the prey moves away;
+    without it, neither notices the other. People are far off, so only the animals matter."""
+    import dataclasses
+    s, land = _world()
+    r, c = next((r, c) for r, c in land if c + 3 < 20 and all((r, c + k) in land for k in range(4)))
+    far = next(p for p in land if max(abs(p[0] - r), abs(p[1] - c)) > 10)
+    s = s._replace(pos=jnp.asarray([far, far], jnp.int32),
+                   predators=put(s.predators, 0, "wolf", (r, c)), large=put(s.large, 0, "deer", (r, c + 2)))   # a deer notices at 2
+
+    def gaps(cfg):
+        out = jax.vmap(lambda k: E.step(s._replace(key=k), jnp.full(2, E.REST, jnp.int32), cfg))(KEYS[:200])[0]
+        wolf_c, deer_c = np.asarray(out.predators.pos[:, 0, 1]), np.asarray(out.large.pos[:, 0, 1])
+        return (wolf_c - c).mean(), (deer_c - (c + 2)).mean()
+    wolf_move, deer_move = gaps(CFG)
+    off_w, off_d = gaps(dataclasses.replace(CFG, animal_hunting=False))
+    assert wolf_move > off_w + 0.15 and wolf_move > 0.2    # the wolf comes east
+    assert deer_move > off_d + 0.1 and deer_move > 0.1     # the deer runs east (at its flight rate)
+    assert abs(off_w) < 0.1                                # without hunting the wolf only wanders (the deer grazes)

@@ -1835,7 +1835,7 @@ def read_mind_map(mind_map, pos, cfg: EnvConfig):
 
 # ---------------------------------------------------------------- animals
 def _move_animals(key, an: Animals, agent_pos, agent_alive, terrain, approach, cfg: EnvConfig, night, season,
-                  sp: dict, caves=None, plants=None):
+                  sp: dict, caves=None, plants=None, others=None):
     """Each animal by its species: flee from (approach=False) or chase (approach=True) the nearest
     agent it notices; otherwise wander, or drift toward its own kind if it herds. Fast species
     take two steps; nocturnal hunters are less active by day; hibernators sleep through winter.
@@ -1848,7 +1848,11 @@ def _move_animals(key, an: Animals, agent_pos, agent_alive, terrain, approach, c
     fleeing animal on a mouth may bolt down (cfg.prey_bolt_prob); a calm one on a mouth goes to
     the layer it keeps (denning species: bats below by day, bears below in winter; the rest
     above) with cfg.den_prob. Below, they walk only along passages, trying a random way when the
-    way they want is rock."""
+    way they want is rock.
+
+    others: None, or dict(pos (P, 2), below (P,), ok (M, P) bool): animals that count as quarry
+    (approach=True: prey a predator can take) or as threat (prey: predators that could take it),
+    besides the agents (cfg.animal_hunting). Returns the nearest agent and its distance (for attacks)."""
     g = cfg.grid_size
     k_act, k_dir, k_wander, k_herd = jax.random.split(key, 4)
     m = an.pos.shape[0]
@@ -1862,16 +1866,29 @@ def _move_animals(key, an: Animals, agent_pos, agent_alive, terrain, approach, c
         cross = an.below[:, None] != caves["below"][None, :]
         d = jnp.where(cross & (d > cfg.scent_range), 10 ** 6, d)      # the other layer: scent only
     d = jnp.where(agent_alive[None, :], d, 10 ** 6)
-    nearest = jnp.argmin(d, axis=1)
+    nearest = jnp.argmin(d, axis=1)                      # the nearest agent (returned for attacks)
     dist = jnp.min(d, axis=1)
+    # what it reacts to: agents, and other animals (quarry or threat) when given
+    all_pos, d_all = agent_pos, d
+    all_below = caves["below"] if caves is not None else None
+    if others is not None:
+        d_o = _cheb(an.pos[:, None, :], others["pos"][None, :, :])
+        if caves is not None:
+            cross_o = an.below[:, None] != others["below"][None, :]
+            d_o = jnp.where(cross_o & (d_o > cfg.scent_range), 10 ** 6, d_o)
+            all_below = jnp.concatenate([caves["below"], others["below"]])
+        d_o = jnp.where(others["ok"], d_o, 10 ** 6)
+        all_pos, d_all = jnp.concatenate([agent_pos, others["pos"]]), jnp.concatenate([d, d_o], axis=1)
+    near_all = jnp.argmin(d_all, axis=1)
+    dist_all = jnp.min(d_all, axis=1)
     hunting = (an.rest <= 0) & ((sp["provoked"][spc] == 0) | (an.anger > 0)) if approach else jnp.ones_like(an.alive)
-    engaged = an.alive & awake & (dist <= notice) & hunting
-    toward = jnp.sign(agent_pos[nearest] - an.pos)
+    engaged = an.alive & awake & (dist_all <= notice) & hunting
+    toward = jnp.sign(all_pos[near_all] - an.pos)
     if caves is not None:
         mouths, mouth_ok = caves["mouths"], caves["mouth_ok"]
         dm = jnp.where(mouth_ok[None, :], _cheb(an.pos[:, None, :], mouths[None]), 10 ** 6)   # (M, K)
         on_mouth = jnp.min(dm, axis=1) == 0
-        other = caves["below"][nearest] != an.below
+        other = all_below[near_all] != an.below
         toward = jnp.where((other & ~on_mouth)[:, None], jnp.sign(mouths[jnp.argmin(dm, axis=1)] - an.pos), toward)
     step_engaged = toward if approach else -toward
     # herding: when calm, drift toward the nearest animal of the same species (on its own layer)
@@ -2479,10 +2496,30 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     else:
         caves = None
     graze_on = state.plants if cfg.grazing else None
-    small, _, _ = _move_animals(keys[6], small, pos_after, alive0, state.terrain, False, cfg, night, season, SP, caves, graze_on)
-    large, _, _ = _move_animals(keys[7], large, pos_after, alive0, state.terrain, False, cfg, night, season, SP, caves, graze_on)
-    predators, target, pdist = _move_animals(keys[8], predators, pos_after, alive0, state.terrain, True, cfg,
-                                             night, season, SP, caves)
+    if cfg.animal_hunting:
+        # Animals among animals: prey flee predators that could take them (cfg.animal_hunting), and a
+        # hunting predator chases the nearest quarry it notices, a person or an animal it can take
+        p_sp = predators.species
+        takes_big = SP["takes_large"][p_sp] > 0                                          # (P,)
+        big_ok = SP["size"][large.species] < 0.95                                         # not a mammoth
+        flee_small = dict(pos=predators.pos, below=predators.below,
+                          ok=jnp.broadcast_to(predators.alive[None, :], (small.pos.shape[0], p_sp.shape[0])))
+        flee_large = dict(pos=predators.pos, below=predators.below,
+                          ok=big_ok[:, None] & (predators.alive & takes_big)[None, :])
+        small, _, _ = _move_animals(keys[6], small, pos_after, alive0, state.terrain, False, cfg, night, season, SP,
+                                    caves, graze_on, flee_small)
+        large, _, _ = _move_animals(keys[7], large, pos_after, alive0, state.terrain, False, cfg, night, season, SP,
+                                    caves, graze_on, flee_large)
+        quarry = dict(pos=jnp.concatenate([small.pos, large.pos]), below=jnp.concatenate([small.below, large.below]),
+                      ok=jnp.concatenate([jnp.broadcast_to(small.alive[None, :], (p_sp.shape[0], small.pos.shape[0])),
+                                          takes_big[:, None] & (large.alive & big_ok)[None, :]], axis=1))
+        predators, target, pdist = _move_animals(keys[8], predators, pos_after, alive0, state.terrain, True, cfg,
+                                                 night, season, SP, caves, None, quarry)
+    else:
+        small, _, _ = _move_animals(keys[6], small, pos_after, alive0, state.terrain, False, cfg, night, season, SP, caves, graze_on)
+        large, _, _ = _move_animals(keys[7], large, pos_after, alive0, state.terrain, False, cfg, night, season, SP, caves, graze_on)
+        predators, target, pdist = _move_animals(keys[8], predators, pos_after, alive0, state.terrain, True, cfg,
+                                                 night, season, SP, caves)
     lp_pred = layered_pos(predators.pos, predators.below)
     # Predator attacks, by species: an adjacent hunting predator attacks its target unless the target
     # stands with others; each extra pack member beside the target cancels one defender. Ambushers

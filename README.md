@@ -598,7 +598,10 @@ of its kind, all through mechanics rather than scripts:
 | predators | wolf (night hunter in packs: each extra wolf beside the prey cancels one defender); big cat (ambush: notices late, strikes hard, not deterred); bear (attacks only when struck or startled close by, mauls back, hibernates in winter); snake (barely moves, venomous bite); crocodile (lies in water and takes whoever stands at the edge) |
 
 Predators also hunt animals: any takes small prey on its cell, and wolves, big cats, bears and
-crocodiles take large prey (never a mammoth), leaving a carcass for scavengers. A slot's species is
+crocodiles take large prey (never a mammoth), leaving a carcass for scavengers. With
+`animal_hunting` (on) they also stalk it: a hunting predator chases the nearest quarry it notices,
+a person or an animal it can take, and prey flee the nearest predator that could take them as they
+flee people (deer notice at 2 cells, a wolf at 5). A slot's species is
 fixed, so each world keeps the same mix (slot 0 of each group is the classic rabbit, deer and
 wolf, which take the group's config values). 6 predators per 1,000 cells (was 1) so that each
 kind is present: on a 32 x 32 map, 2 wolves, 2 big cats, a bear and a crocodile. The scripted
