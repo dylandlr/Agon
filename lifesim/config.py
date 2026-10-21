@@ -554,6 +554,7 @@ class EnvConfig:
     skills: bool = False
     skill_search_steps: int = 64       # route-planning sweeps (enough for any path on a 32 x 32 world)
     skill_cliff_avoid: float = 20.0    # a fully steep cell counts as this many steps on a route
+    animal_sleep: float = 0.6          # share of its resting half of the day an animal sleeps (0: never)
     animal_hunting: bool = True        # predators chase prey they can take; prey flee such predators
     prey_preference: float = 3.0       # a predator choosing whom to chase counts a person this many cells farther
     stalk_large: bool = False          # predators also stalk large prey (8 slots against 6 hunters: herds collapse)

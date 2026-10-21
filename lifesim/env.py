@@ -1834,8 +1834,17 @@ def read_mind_map(mind_map, pos, cfg: EnvConfig):
 
 
 # ---------------------------------------------------------------- animals
+def animal_asleep(key, an: Animals, sp: dict, night, cfg: EnvConfig):
+    """(M,) bool: asleep this tick (cfg.animal_sleep). Each species rests in its own half of the day,
+    day-active ones at night and nocturnal ones by day ('nocturnal' 0.5: either), and in that half
+    is asleep a share cfg.animal_sleep of the time. Hibernation is separate (winter, in _move_animals)."""
+    noct = sp["nocturnal"][an.species]
+    resting = jnp.where(night, 1.0 - noct, noct)
+    return an.alive & (jax.random.uniform(key, an.alive.shape) < cfg.animal_sleep * resting)
+
+
 def _move_animals(key, an: Animals, agent_pos, agent_alive, terrain, approach, cfg: EnvConfig, night, season,
-                  sp: dict, caves=None, plants=None, others=None):
+                  sp: dict, caves=None, plants=None, others=None, asleep=None):
     """Each animal by its species: flee from (approach=False) or chase (approach=True) the nearest
     agent it notices; otherwise wander, or drift toward its own kind if it herds. Fast species
     take two steps; nocturnal hunters are less active by day; hibernators sleep through winter.
@@ -1852,7 +1861,8 @@ def _move_animals(key, an: Animals, agent_pos, agent_alive, terrain, approach, c
 
     others: None, or dict(pos (P, 2), below (P,), ok (M, P) bool): animals that count as quarry
     (approach=True: prey a predator can take) or as threat (prey: predators that could take it),
-    besides the agents (cfg.animal_hunting). Returns the nearest agent and its distance (for attacks)."""
+    besides the agents (cfg.animal_hunting). Returns the nearest agent and its distance (for attacks).
+    asleep: None, or (M,) bool (animal_asleep): a sleeper stays put and notices only what is beside it."""
     g = cfg.grid_size
     k_act, k_dir, k_wander, k_herd = jax.random.split(key, 4)
     m = an.pos.shape[0]
@@ -1860,6 +1870,8 @@ def _move_animals(key, an: Animals, agent_pos, agent_alive, terrain, approach, c
     notice, act, speed = sp["notice"][spc], sp["act"][spc], sp["speed"][spc]
     act = act * jnp.where(night, 1.0, 1.0 - 0.6 * sp["nocturnal"][spc])                # day: nocturnal ones idle
     awake = ~((sp["hibernates"][spc] > 0) & (season == 3))
+    if asleep is not None:
+        notice = jnp.where(asleep, jnp.minimum(notice, 1), notice)       # woken only by what is beside it
     habitat = sp["habitat"][spc]                                                       # (M, N_TERRAIN)
     d = _cheb(an.pos[:, None, :], agent_pos[None, :, :])
     if caves is not None:
@@ -1888,6 +1900,8 @@ def _move_animals(key, an: Animals, agent_pos, agent_alive, terrain, approach, c
         near_all = jnp.argmin(score, axis=1)
     dist_all = jnp.take_along_axis(d_all, near_all[:, None], axis=1)[:, 0]
     hunting = (an.rest <= 0) & ((sp["provoked"][spc] == 0) | (an.anger > 0)) if approach else jnp.ones_like(an.alive)
+    if approach and asleep is not None:
+        hunting = hunting & ~asleep                                          # a sleeping predator does not hunt
     engaged = an.alive & awake & (dist_all <= notice) & hunting
     toward = jnp.sign(all_pos[near_all] - an.pos)
     if caves is not None:
@@ -1916,6 +1930,8 @@ def _move_animals(key, an: Animals, agent_pos, agent_alive, terrain, approach, c
     acts = jax.random.uniform(k_act, (an.pos.shape[0],))
     move_engaged = engaged & (acts < act)
     move_wander = ~engaged & awake & (jax.random.uniform(k_wander, acts.shape) < cfg.wander_prob)
+    if asleep is not None:
+        move_wander = move_wander & ~asleep
     delta = jnp.where(move_engaged[:, None], step_engaged, jnp.where(move_wander[:, None], calm_dir, 0))
     pos, below = an.pos, an.below
     if caves is not None:
@@ -2291,6 +2307,14 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     fall_damage = jnp.where(fell, severity, 0.0)                      # can exceed 1: instant death
     injury = state.injury + cfg.fall_injury_ratio * fall_damage
 
+    # Animals asleep this tick (cfg.animal_sleep): fixed for the tick, so a blow, a move and an attack agree
+    if cfg.animal_sleep > 0:
+        asleep_s = animal_asleep(jax.random.fold_in(keys[6], 77), state.small, SP, night, cfg)
+        asleep_l = animal_asleep(jax.random.fold_in(keys[7], 77), state.large, SP, night, cfg)
+        asleep_p = animal_asleep(jax.random.fold_in(keys[8], 77), state.predators, SP, night, cfg)
+    else:
+        asleep_s = asleep_l = asleep_p = None
+
     # ---------------------------------------------------------- strikes
     # Grids here are two layers stacked, (2G, G): row r + G for a cell below, so a blow, a dodge,
     # a kill or a counterattack only ever meets what is on the striker's own layer.
@@ -2314,12 +2338,13 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     tool = HARDNESS[hand0] * holding                     # a hard object in hand
     edge = SHARPNESS[hand0] * holding                    # ... with a sharp edge
     # Some animals dodge: birds take off, fish dart; a point (an edge in hand) cuts the misses
-    def dodge_grid(an):
-        return jnp.zeros((2 * g, g)).at[lrow(an.pos, an.below), an.pos[:, 1]].max(
-            jnp.where(an.alive, SP["evade"][an.species], 0.0))
+    def dodge_grid(an, asleep):
+        ev = SP["evade"][an.species] * (1.0 if asleep is None else jnp.where(asleep, 0.2, 1.0))   # a sleeper barely dodges
+        return jnp.zeros((2 * g, g)).at[lrow(an.pos, an.below), an.pos[:, 1]].max(jnp.where(an.alive, ev, 0.0))
     k_miss = jax.random.split(k_fire[5], 3)
-    for grp, (an, kk) in enumerate([(state.predators, k_miss[0]), (state.large, k_miss[1]), (state.small, k_miss[2])]):
-        miss = jax.random.uniform(kk, (n,)) < dodge_grid(an)[trl, tc] * (1.0 - 0.6 * edge)
+    for grp, (an, kk, zz) in enumerate([(state.predators, k_miss[0], asleep_p), (state.large, k_miss[1], asleep_l),
+                                        (state.small, k_miss[2], asleep_s)]):
+        miss = jax.random.uniform(kk, (n,)) < dodge_grid(an, zz)[trl, tc] * (1.0 - 0.6 * edge)
         if grp == 0:
             hit_pred = hit_pred & ~miss
         elif grp == 1:
@@ -2514,19 +2539,21 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         flee_large = dict(pos=predators.pos, below=predators.below,
                           ok=big_ok[:, None] & (predators.alive & takes_big)[None, :])
         small, _, _ = _move_animals(keys[6], small, pos_after, alive0, state.terrain, False, cfg, night, season, SP,
-                                    caves, graze_on, flee_small)
+                                    caves, graze_on, flee_small, asleep_s)
         large, _, _ = _move_animals(keys[7], large, pos_after, alive0, state.terrain, False, cfg, night, season, SP,
-                                    caves, graze_on, flee_large)
+                                    caves, graze_on, flee_large, asleep_l)
         quarry = dict(pos=jnp.concatenate([small.pos, large.pos]), below=jnp.concatenate([small.below, large.below]),
                       ok=jnp.concatenate([jnp.broadcast_to(small.alive[None, :], (p_sp.shape[0], small.pos.shape[0])),
                                           takes_big[:, None] & (large.alive & big_ok)[None, :] & cfg.stalk_large], axis=1))
         predators, target, pdist = _move_animals(keys[8], predators, pos_after, alive0, state.terrain, True, cfg,
-                                                 night, season, SP, caves, None, quarry)
+                                                 night, season, SP, caves, None, quarry, asleep_p)
     else:
-        small, _, _ = _move_animals(keys[6], small, pos_after, alive0, state.terrain, False, cfg, night, season, SP, caves, graze_on)
-        large, _, _ = _move_animals(keys[7], large, pos_after, alive0, state.terrain, False, cfg, night, season, SP, caves, graze_on)
+        small, _, _ = _move_animals(keys[6], small, pos_after, alive0, state.terrain, False, cfg, night, season, SP, caves,
+                                    graze_on, None, asleep_s)
+        large, _, _ = _move_animals(keys[7], large, pos_after, alive0, state.terrain, False, cfg, night, season, SP, caves,
+                                    graze_on, None, asleep_l)
         predators, target, pdist = _move_animals(keys[8], predators, pos_after, alive0, state.terrain, True, cfg,
-                                                 night, season, SP, caves)
+                                                 night, season, SP, caves, None, None, asleep_p)
     lp_pred = layered_pos(predators.pos, predators.below)
     # Predator attacks, by species: an adjacent hunting predator attacks its target unless the target
     # stands with others; each extra pack member beside the target cancels one defender. Ambushers
@@ -2540,6 +2567,8 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     pack_here = (predators.alive[None, :] & (psp[None, :] == psp[:, None]) & (SP["pack"][psp][:, None] > 0)
                  & (_cheb(lp_pred[None, :, :], lpa[target][:, None, :]) <= 1)).sum(axis=1)
     awake = ~((SP["hibernates"][psp] > 0) & (season == 3))
+    if asleep_p is not None:
+        awake = awake & ~asleep_p                                           # asleep: no attack, no hunt
     startled = (SP["provoked"][psp] > 0) & (pdist <= 1) & (jax.random.uniform(jax.random.fold_in(keys[10], 1), psp.shape) < 1 - 0.95 ** _k(cfg))
     willing = (SP["provoked"][psp] == 0) | (predators.anger > 0) | startled
     fire_guard = (heat0[pos_after[target][:, 0], pos_after[target][:, 1]] > 0) & ~below_after[target]

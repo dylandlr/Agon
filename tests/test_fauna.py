@@ -174,3 +174,37 @@ def test_a_wolf_prefers_a_deer_to_a_nearer_person():
     on = dataclasses.replace(CFG, stalk_large=True)
     assert drift(on) > 0.2                                               # toward the deer (east)
     assert drift(dataclasses.replace(on, prey_preference=0.0)) < 0.05   # no preference: the nearer person
+
+
+def _night_and_day():
+    ts = range(CFG.day_length)
+    night = next(t for t in ts if bool(E.is_night(jnp.int32(t), CFG)))
+    day = next(t for t in ts if not bool(E.is_night(jnp.int32(t), CFG)))
+    return night, day
+
+
+def test_animals_sleep_in_their_resting_half_of_the_day():
+    """cfg.animal_sleep: a day-active deer sleeps at night and then notices only what is beside it, so
+    a person 2 cells off rarely makes it run; a nocturnal wolf sleeps by day and does not attack."""
+    import dataclasses
+    s, land = _world()
+    r, c = next((r, c) for r, c in land if c + 3 < 20 and all((r, c + k) in land for k in range(4)))
+    far = next(p for p in land if max(abs(p[0] - r), abs(p[1] - c)) > 10)
+    night, day = _night_and_day()
+    deer = s._replace(pos=jnp.asarray([(r, c), far], jnp.int32), large=put(s.large, 0, "deer", (r, c + 2)))
+
+    def fled(t, cfg=CFG):
+        st = deer._replace(t=jnp.int32(t))
+        out = jax.vmap(lambda k: E.step(st._replace(key=k), jnp.full(2, E.REST, jnp.int32), cfg))(KEYS[:200])[0]
+        return (np.asarray(out.large.pos[:, 0, 1]) > c + 2).mean()
+    assert fled(day) > fled(night) + 0.15
+    off = dataclasses.replace(CFG, animal_sleep=0.0)
+    assert abs(fled(night, off) - fled(day, off)) < 0.1                  # without sleep: the same day and night
+    # a wolf beside a lone person: it attacks by night, far less by day (asleep)
+    wolf = s._replace(pos=jnp.asarray([(r, c), far], jnp.int32), predators=put(s.predators, 0, "wolf", (r, c + 1)))
+
+    def attacks(t, cfg=CFG):
+        st = wolf._replace(t=jnp.int32(t))
+        info = jax.vmap(lambda k: E.step(st._replace(key=k), jnp.full(2, E.REST, jnp.int32), cfg))(KEYS[:200])[3]
+        return np.asarray(info.attacked_by_predator[:, 0]).mean()
+    assert attacks(night) > 2 * attacks(day) + 0.02
