@@ -216,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# lifesim: training runs, recordings and local scratch never go in the repo
+runs/
+outputs/
+*.ckpt
+*.msgpack
