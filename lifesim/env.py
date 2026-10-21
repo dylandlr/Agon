@@ -90,7 +90,7 @@ MIN_TINDER = jnp.array(mn.TINDER)                                # (M,) how read
 MIN_ROT = jnp.array(mn.ROT)                                      # (M,) share lost per 30-minute tick, lying out
 MIN_SHARP = jnp.array(mn.SHARPNESS)
 N_MINERAL_CHANNELS = 5            # per cell: minerals present, and their colour (r, g, b) and lustre
-N_FAUNA_CHANNELS = 7              # per cell: animals' size, fangs, colour; mosquitoes, flies, hive, mound
+N_FAUNA_CHANNELS = 8              # per cell: animals' size, fangs, colour; mosquitoes, flies, hive, mound; at ease with me
 N_FLORA_CHANNELS = 6              # per cell: how well greens, fruit, nuts, roots would gather here; waste; an inscription
 assert PLACE_N == SELECT_0 + N_MAT, "one select action per material"
 _DIRS = ["n", "ne", "e", "se", "s", "sw", "w", "nw"]
@@ -223,6 +223,7 @@ class Animals(NamedTuple):
     species: jnp.ndarray  # (M,) int32 index into lifesim/fauna.py SPECIES (fixed for the slot)
     anger: jnp.ndarray    # (M,) int32 ticks left of being provoked (struck)
     lame: jnp.ndarray     # (M,) int32 ticks left lame from a blow to a leg (EnvConfig.body_parts)
+    bond: jnp.ndarray     # (M, N) 0..1: how at ease the animal is with each agent (taming; EnvConfig.taming)
 
 
 class State(NamedTuple):
@@ -414,6 +415,7 @@ class StepInfo(NamedTuple):
     grabbed: jnp.ndarray               # (N,) bool: someone got hold of it this tick
     pinned: jnp.ndarray                # (N,) bool: a hold from last tick kept it from stepping
     same_sex_mated: jnp.ndarray        # (N,) bool: intimacy with a partner of its own sex (no conception)
+    tamed: jnp.ndarray                 # (N,) int32: species of an animal that came to be at ease with it this tick, or -1
     soiled: jnp.ndarray                # (N,) bool: could not hold it any longer
 
 
@@ -809,7 +811,7 @@ def species_params(cfg: EnvConfig) -> dict:
          "atk_p": col("attack", 0), "atk_dmg": col("attack", 1), "atk_inj": col("attack", 2),
          "atk_rest": col("attack", 3), "pack": col("pack"), "ambush": col("ambush"), "provoked": col("provoked"),
          "hibernates": col("hibernates"), "venom": col("venom"), "takes_large": col("takes_large"),
-         "den": col("den"), "hide": col("hide"), "bone": col("bone"), "feather": col("feather"),
+         "den": col("den"), "tameable": col("tameable"), "hide": col("hide"), "bone": col("bone"), "feather": col("feather"),
          "size": col("look", 0), "fangs": col("look", 1), "colour": col("look", 2),
          "habitat": jnp.array(fa.HABITAT, bool),
          "grazer": jnp.array([s["name"] in GRAZERS for s in fa.SPECIES])}
@@ -877,7 +879,8 @@ def _new_animals(key, terrain, n, group, cfg: EnvConfig, passage=None):
         roost = jnp.zeros(n, bool)
     return Animals(pos=pos, below=roost, alive=jnp.ones(n, bool),
                    hp=species_params(cfg)["hp"][sp], rest=jnp.zeros(n, jnp.int32), species=sp,
-                   anger=jnp.zeros(n, jnp.int32), lame=jnp.zeros(n, jnp.int32))
+                   anger=jnp.zeros(n, jnp.int32), lame=jnp.zeros(n, jnp.int32),
+                   bond=jnp.zeros((n, cfg.n_agents)))
 
 
 def fire_heat(fire, cfg: EnvConfig):
@@ -1574,7 +1577,16 @@ def observe(state: State, cfg: EnvConfig) -> jnp.ndarray:
     bugs = jnp.stack([mosquito_density(state, cfg, season_now, night_now, heat),
                       fly_density(state.meat, _occupancy(state.pos, state.existed & ~state.alive & ~state.below, g).astype(jnp.float32), heat),
                       jnp.minimum(state.honey, 1.0) * state.hive, jnp.minimum(state.grubs, 1.0) * state.mound], -1)
-    chans.append(jnp.where(inb[..., None], jnp.concatenate([look, bugs], -1)[rc, cc], 0.0))
+    # How at ease with oneself the animals here are (cfg.taming): seen in how they behave around one
+    # (they do not shy, they come up), on one's own layer
+    ease = jnp.zeros((n, g, g))
+    if cfg.taming:
+        for an in (state.small, state.large, state.predators):
+            mine = an.alive[:, None] & (an.below[:, None] == state.below[None, :])          # (M, N)
+            ease = ease.at[:, an.pos[:, 0], an.pos[:, 1]].max(jnp.where(mine, an.bond, 0.0).T)
+    ease_win = jnp.where(inb, ease[jnp.arange(n)[:, None, None], rc, cc], 0.0)[..., None]
+    chans.append(jnp.concatenate([jnp.where(inb[..., None], jnp.concatenate([look, bugs], -1)[rc, cc], 0.0),
+                                  ease_win], -1))
     # Plants by kind (how well each would gather here) and waste, seen and smelled
     flora_look = jnp.concatenate([eco.quality(state.flora, cfg),
                                   (1.0 - jnp.exp(-state.foul / cfg.foul_ref))[..., None],
@@ -1630,7 +1642,8 @@ def observe(state: State, cfg: EnvConfig) -> jnp.ndarray:
              take(fl[..., WOOD] / cfg.wood_max)[..., None], take(jnp.minimum(fl[..., STONE], 1.0))[..., None],
              zero, zero, take(dead_deep)[..., None], zero, zero, zero, zero,
              jnp.where(inb[..., None], looks_d[rc, cc], 0.0),
-             jnp.where(inb[..., None], jnp.concatenate([look_d, jnp.zeros((g, g, N_FAUNA_CHANNELS - 3))], -1)[rc, cc], 0.0),
+             jnp.where(inb[..., None], jnp.concatenate([look_d, jnp.zeros((g, g, N_FAUNA_CHANNELS - 4))], -1)[rc, cc], 0.0),
+             ease_win,
              jnp.zeros((n, v, v, N_FLORA_CHANNELS)), social], axis=-1)
         # What is seen below: one's own cell and those next to it (felt), and whatever any burning
         # branch below lights (one's own or another's)
@@ -1837,17 +1850,27 @@ def read_mind_map(mind_map, pos, cfg: EnvConfig):
 
 
 # ---------------------------------------------------------------- animals
-def animal_asleep(key, an: Animals, sp: dict, night, cfg: EnvConfig):
-    """(M,) bool: asleep this tick (cfg.animal_sleep). Each species rests in its own half of the day,
-    day-active ones at night and nocturnal ones by day ('nocturnal' 0.5: either), and in that half
-    is asleep a share cfg.animal_sleep of the time. Hibernation is separate (winter, in _move_animals)."""
+def animal_asleep(an: Animals, sp: dict, t, cfg: EnvConfig):
+    """(M,) bool: asleep this tick (cfg.animal_sleep). Sleep comes in one consolidated bout, not
+    tick by tick: a day-active animal sleeps a bout centred on midnight, a nocturnal one a bout
+    centred on noon, and one that is both ('nocturnal' 0.5, a big cat) splits it between the two.
+    The bout is cfg.animal_sleep of half a day; each slot's falls a little earlier or later than its
+    neighbours' (up to cfg.animal_sleep_jitter of a day), so a herd does not all drop off at once.
+    A blow wakes it: an animal still angry from being struck (anger > 0) stays up.
+    Hibernation is separate (winter, in _move_animals)."""
     noct = sp["nocturnal"][an.species]
-    resting = jnp.where(night, 1.0 - noct, noct)
-    return an.alive & (jax.random.uniform(key, an.alive.shape) < cfg.animal_sleep * resting)
+    m = an.alive.shape[0]
+    jitter = (jnp.mod(jnp.arange(m) * 0.6180339887, 1.0) - 0.5) * 2.0 * cfg.animal_sleep_jitter
+    f = jnp.mod((t % cfg.day_length) / cfg.day_length + jitter, 1.0)         # 0 = midnight, 0.5 = noon
+    to_mid = jnp.minimum(f, 1.0 - f)
+    to_noon = jnp.abs(f - 0.5)
+    bout = 0.5 * cfg.animal_sleep                                             # share of a day asleep
+    asleep = (to_mid < 0.5 * bout * (1.0 - noct)) | (to_noon < 0.5 * bout * noct)
+    return an.alive & asleep & (an.anger <= 0)
 
 
 def _move_animals(key, an: Animals, agent_pos, agent_alive, terrain, approach, cfg: EnvConfig, night, season,
-                  sp: dict, caves=None, plants=None, others=None, asleep=None):
+                  sp: dict, caves=None, plants=None, others=None, asleep=None, bond=None, scent=None):
     """Each animal by its species: flee from (approach=False) or chase (approach=True) the nearest
     agent it notices; otherwise wander, or drift toward its own kind if it herds. Fast species
     take two steps; nocturnal hunters are less active by day; hibernators sleep through winter.
@@ -1865,7 +1888,12 @@ def _move_animals(key, an: Animals, agent_pos, agent_alive, terrain, approach, c
     others: None, or dict(pos (P, 2), below (P,), ok (M, P) bool): animals that count as quarry
     (approach=True: prey a predator can take) or as threat (prey: predators that could take it),
     besides the agents (cfg.animal_hunting). Returns the nearest agent and its distance (for attacks).
-    asleep: None, or (M,) bool (animal_asleep): a sleeper stays put and notices only what is beside it."""
+    asleep: None, or (M,) bool (animal_asleep): a sleeper stays put and notices only what is beside it.
+    bond: None, or (M, N) 0..1 (Animals.bond, cfg.taming): agents it is at ease with (>= cfg.tame_calm)
+    are neither fled nor chased (nor returned as its nearest, so not attacked); when calm it follows
+    the one it is closest to (>= cfg.tame_follow).
+    scent: None, or (G, G) meat lying about: a hungry predator not chasing anything often steps toward
+    the most of it beside it (cfg.scavenge_seek), as wolves came to camps for scraps."""
     g = cfg.grid_size
     k_act, k_dir, k_wander, k_herd = jax.random.split(key, 4)
     m = an.pos.shape[0]
@@ -1881,6 +1909,9 @@ def _move_animals(key, an: Animals, agent_pos, agent_alive, terrain, approach, c
         cross = an.below[:, None] != caves["below"][None, :]
         d = jnp.where(cross & (d > cfg.scent_range), 10 ** 6, d)      # the other layer: scent only
     d = jnp.where(agent_alive[None, :], d, 10 ** 6)
+    d_people = d                                         # (for following: the distance to each agent)
+    if bond is not None:
+        d = jnp.where(bond >= cfg.tame_calm, 10 ** 6, d)  # at ease with them: no flight, no chase
     nearest = jnp.argmin(d, axis=1)                      # the nearest agent (returned for attacks)
     dist = jnp.min(d, axis=1)
     # what it reacts to: agents, and other animals (quarry or threat) when given
@@ -1930,9 +1961,30 @@ def _move_animals(key, an: Animals, agent_pos, agent_alive, terrain, approach, c
         graze_step = MOVE_DELTAS[jnp.argmax(food, axis=1)]
         seek = sp["grazer"][spc] & ~an.below & (jax.random.uniform(jax.random.fold_in(k_herd, 9), act.shape) < cfg.graze_seek)
         calm_dir = jnp.where(seek[:, None], graze_step, calm_dir)
+    if scent is not None and approach:                 # a hungry hunter noses toward meat beside it
+        cand = jnp.clip(an.pos[:, None, :] + MOVE_DELTAS[None], 0, g - 1)
+        smell = scent[cand[..., 0], cand[..., 1]] + 1e-3 * (jnp.arange(9) == 0)
+        smell = jnp.where(habitat[jnp.arange(m)[:, None], terrain[cand[..., 0], cand[..., 1]]], smell, -1.0)
+        has_meat = jnp.max(smell, axis=1) > 0.05
+        nose = (an.rest <= 0) & has_meat & ~an.below \
+            & (jax.random.uniform(jax.random.fold_in(k_herd, 11), act.shape) < cfg.scavenge_seek)
+        calm_dir = jnp.where(nose[:, None], MOVE_DELTAS[jnp.argmax(smell, axis=1)], calm_dir)
     acts = jax.random.uniform(k_act, (an.pos.shape[0],))
     move_engaged = engaged & (acts < act)
     move_wander = ~engaged & awake & (jax.random.uniform(k_wander, acts.shape) < cfg.wander_prob)
+    if scent is not None and approach:
+        move_wander = move_wander | (~engaged & awake & nose)
+    if bond is not None:
+        # following: toward the agent it is closest to, if far enough to need to (same layer only)
+        b = jnp.where(agent_alive[None, :], bond, 0.0)
+        if caves is not None:
+            b = jnp.where(an.below[:, None] == caves["below"][None, :], b, 0.0)
+        best = jnp.argmax(b, axis=1)
+        far = jnp.take_along_axis(d_people, best[:, None], axis=1)[:, 0] > 1
+        follows = ~engaged & awake & far & (jnp.max(b, axis=1) >= cfg.tame_follow) \
+            & (jax.random.uniform(jax.random.fold_in(k_wander, 5), acts.shape) < cfg.tame_follow_prob)
+        calm_dir = jnp.where(follows[:, None], jnp.sign(agent_pos[best] - an.pos), calm_dir)
+        move_wander = move_wander | follows
     if asleep is not None:
         move_wander = move_wander & ~asleep
     delta = jnp.where(move_engaged[:, None], step_engaged, jnp.where(move_wander[:, None], calm_dir, 0))
@@ -1985,7 +2037,8 @@ def _respawn(key, an: Animals, terrain, prob, cfg: EnvConfig, hp_of, passage=Non
     return an._replace(pos=jnp.where(born[:, None], cells, an.pos), alive=an.alive | born,
                        below=jnp.where(born, roost, an.below),
                        hp=jnp.where(born, hp_of[an.species], an.hp), rest=jnp.where(born, 0, an.rest),
-                       anger=jnp.where(born, 0, an.anger), lame=jnp.where(born, 0, an.lame))
+                       anger=jnp.where(born, 0, an.anger), lame=jnp.where(born, 0, an.lame),
+                       bond=jnp.where(born[:, None], 0.0, an.bond))
 
 
 def generate_bugs(key, terrain, cfg: EnvConfig) -> dict:
@@ -2312,9 +2365,9 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
 
     # Animals asleep this tick (cfg.animal_sleep): fixed for the tick, so a blow, a move and an attack agree
     if cfg.animal_sleep > 0:
-        asleep_s = animal_asleep(jax.random.fold_in(keys[6], 77), state.small, SP, night, cfg)
-        asleep_l = animal_asleep(jax.random.fold_in(keys[7], 77), state.large, SP, night, cfg)
-        asleep_p = animal_asleep(jax.random.fold_in(keys[8], 77), state.predators, SP, night, cfg)
+        asleep_s = animal_asleep(state.small, SP, state.t, cfg)
+        asleep_l = animal_asleep(state.large, SP, state.t, cfg)
+        asleep_p = animal_asleep(state.predators, SP, state.t, cfg)
     else:
         asleep_s = asleep_l = asleep_p = None
 
@@ -2530,6 +2583,8 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     else:
         caves = None
     graze_on = state.plants if cfg.grazing else None
+    scent = meat if cfg.grazing else None                # (hungry predators scavenge: cfg.grazing)
+    bnd = (lambda an: an.bond) if cfg.taming else (lambda an: None)
     if cfg.animal_hunting:
         # Animals among animals: prey flee predators that could take them (cfg.animal_hunting), and a
         # hunting predator chases the nearest quarry it notices, a person or small prey (large prey
@@ -2542,21 +2597,23 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         flee_large = dict(pos=predators.pos, below=predators.below,
                           ok=big_ok[:, None] & (predators.alive & takes_big)[None, :])
         small, _, _ = _move_animals(keys[6], small, pos_after, alive0, state.terrain, False, cfg, night, season, SP,
-                                    caves, graze_on, flee_small, asleep_s)
+                                    caves, graze_on, flee_small, asleep_s, bnd(small))
         large, _, _ = _move_animals(keys[7], large, pos_after, alive0, state.terrain, False, cfg, night, season, SP,
-                                    caves, graze_on, flee_large, asleep_l)
+                                    caves, graze_on, flee_large, asleep_l, bnd(large))
+        # a hungry hunter goes after big game too: one run down below cfg.stalk_hungry_hp of its hp
+        stalks = cfg.stalk_large | (predators.hp < cfg.stalk_hungry_hp * SP["hp"][p_sp])            # (P,)
         quarry = dict(pos=jnp.concatenate([small.pos, large.pos]), below=jnp.concatenate([small.below, large.below]),
                       ok=jnp.concatenate([jnp.broadcast_to(small.alive[None, :], (p_sp.shape[0], small.pos.shape[0])),
-                                          takes_big[:, None] & (large.alive & big_ok)[None, :] & cfg.stalk_large], axis=1))
+                                          (takes_big & stalks)[:, None] & (large.alive & big_ok)[None, :]], axis=1))
         predators, target, pdist = _move_animals(keys[8], predators, pos_after, alive0, state.terrain, True, cfg,
-                                                 night, season, SP, caves, None, quarry, asleep_p)
+                                                 night, season, SP, caves, None, quarry, asleep_p, bnd(predators), scent)
     else:
         small, _, _ = _move_animals(keys[6], small, pos_after, alive0, state.terrain, False, cfg, night, season, SP, caves,
-                                    graze_on, None, asleep_s)
+                                    graze_on, None, asleep_s, bnd(small))
         large, _, _ = _move_animals(keys[7], large, pos_after, alive0, state.terrain, False, cfg, night, season, SP, caves,
-                                    graze_on, None, asleep_l)
+                                    graze_on, None, asleep_l, bnd(large))
         predators, target, pdist = _move_animals(keys[8], predators, pos_after, alive0, state.terrain, True, cfg,
-                                                 night, season, SP, caves, None, None, asleep_p)
+                                                 night, season, SP, caves, None, None, asleep_p, bnd(predators), scent)
     lp_pred = layered_pos(predators.pos, predators.below)
     # Predator attacks, by species: an adjacent hunting predator attacks its target unless the target
     # stands with others; each extra pack member beside the target cancels one defender. Ambushers
@@ -2577,6 +2634,20 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     fire_guard = (heat0[pos_after[target][:, 0], pos_after[target][:, 1]] > 0) & ~below_after[target]
     can_attack = predators.alive & awake & willing & (predators.rest <= 0) & (pdist <= 1) & alive0[target] \
         & ~fire_guard
+    if cfg.taming:
+        # never on someone it is at ease with; and a tame predator beside its person stands guard:
+        # it counts as one more defender against a wild one (wolf to dog)
+        at_ease = jnp.take_along_axis(predators.bond, target[:, None], axis=1)[:, 0] >= cfg.tame_calm
+        can_attack = can_attack & ~at_ease
+        tame_p = (predators.bond >= cfg.tame_calm) & (predators.alive & awake)[:, None]       # (P, N)
+        beside = _cheb(lp_pred[:, None, :], lpa[None, :, :]) <= 1                             # (P, N)
+        guards = (tame_p & beside).sum(0)                                                     # (N,)
+        group = group + guards[target]
+        # nor does it join a wild one's pack against its person
+        tame_to_tgt = predators.bond[:, target].T >= cfg.tame_calm                            # (attacker, other)
+        pack_here = pack_here - (tame_to_tgt & predators.alive[None, :] & (psp[None, :] == psp[:, None])
+                                 & (SP["pack"][psp][:, None] > 0)
+                                 & (_cheb(lp_pred[None, :, :], lpa[target][:, None, :]) <= 1)).sum(axis=1)
     defenders = group - jnp.maximum(pack_here - 1, 0)
     deterred = can_attack & (defenders >= 2) & (SP["ambush"][psp] == 0)
     keen = SP["atk_p"][psp] * jnp.where(night | predators.below, 1.0, 1.0 - 0.5 * SP["nocturnal"][psp])   # caves are night
@@ -2608,13 +2679,22 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     pred_sp_grid = jnp.full((2 * g, g), -1, jnp.int32).at[prow, predators.pos[:, 1]].max(jnp.where(hunter, psp, -1))
     big_grid = jnp.zeros((2 * g, g)).at[prow, predators.pos[:, 1]].add(jnp.where(hunter, SP["takes_large"][psp], 0.0))
     srow, lrow_ = lrow(small.pos, small.below), lrow(large.pos, large.below)
+
+    def vulnerable(an, asleep):
+        # Hunters take the easy ones: a sleeper caught unawares, a lame one that cannot run, a weak
+        # one (low hp: starved, wounded, old). A sound, alert animal mostly gets away.
+        weak = 1.0 - jnp.clip(an.hp / SP["hp"][an.species], 0.0, 1.0)
+        m = 1.0 + cfg.kill_weak_mult * weak + cfg.kill_lame_mult * (an.lame > 0)
+        return m * (1.0 if asleep is None else jnp.where(asleep, cfg.kill_asleep_mult, 1.0))
     eaten_by_pred = small.alive & (pred_sp_grid[srow, small.pos[:, 1]] >= 0) & \
-        (jax.random.uniform(keys[10], small.alive.shape) < cfg.predator_prey_kill_prob * hunt_scale)
+        (jax.random.uniform(keys[10], small.alive.shape)
+         < cfg.predator_prey_kill_prob * hunt_scale * vulnerable(small, asleep_s))
     small_preyed_by = jnp.where(eaten_by_pred, pred_sp_grid[srow, small.pos[:, 1]], -1)
     small = small._replace(alive=small.alive & ~eaten_by_pred)
     can_take = SP["size"][large.species] < 0.95                                   # not a mammoth
     large_taken = large.alive & can_take & (jax.random.uniform(jax.random.fold_in(keys[10], 2), large.alive.shape)
-                                           < cfg.predator_large_kill_prob * hunt_scale * big_grid[lrow_, large.pos[:, 1]])
+                                           < cfg.predator_large_kill_prob * hunt_scale * big_grid[lrow_, large.pos[:, 1]]
+                                           * vulnerable(large, asleep_l))
     large_preyed_by = jnp.where(large_taken, pred_sp_grid[lrow_, large.pos[:, 1]], -1)
     meat, cave_floor = carcass(meat, cave_floor, large, jnp.where(large_taken, 0.5 * SP["meat"][large.species], 0.0))
     mins, cave_floor = leftovers(mins, cave_floor, large, large_taken, ("hide", "bone"))
@@ -3242,6 +3322,7 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
             share = jnp.where(demand > 0, jnp.minimum(plants / jnp.maximum(demand, 1e-9), 1.0), 0.0)
             got = share[an.pos[:, 0], an.pos[:, 1]]
             return demand * share, got >= 0.5
+        dropped_food = loose if cfg.ecology else plants        # (taming: loose food is what someone dropped)
         if cfg.ecology:                                       # grazers eat greens (and what lies loose)
             plants = loose + flora[..., eco.GREENS]
         eaten_s, fed_s = graze(small, cfg.graze_small)
@@ -3254,6 +3335,17 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
             flora = flora.at[..., eco.GREENS].set(jnp.maximum(flora[..., eco.GREENS] - (ate - from_loose_g), 0.0))
         hungry = predators.alive & (predators.rest <= 0)
         on_carcass = hungry & ~predators.below & (meat[predators.pos[:, 0], predators.pos[:, 1]] >= cfg.predator_scavenge)
+        if cfg.taming:
+            def fed_by(an, ate):
+                # (M, N): it ate, where it stands, food that agent dropped there lately (above ground)
+                r_, c_ = an.pos[:, 0], an.pos[:, 1]
+                own = drop_owner[r_, c_]
+                lately = (state.t - drop_time[r_, c_]) <= int(round(cfg.tame_drop_window_days * cfg.day_length))
+                ok = ate & ~an.below & (own >= 0) & (own < n) & lately
+                return (jnp.arange(n)[None, :] == own[:, None]) & ok[:, None]
+            feed = (fed_by(small, fed_s & (dropped_food[small.pos[:, 0], small.pos[:, 1]] > 0.05)),
+                    fed_by(large, fed_l & (dropped_food[large.pos[:, 0], large.pos[:, 1]] > 0.05)),
+                    fed_by(predators, on_carcass))
         meat = meat.at[predators.pos[:, 0], predators.pos[:, 1]].add(jnp.where(on_carcass, -cfg.predator_scavenge, 0.0))
         meat = jnp.maximum(meat, 0.0)
         predators = predators._replace(rest=jnp.where(on_carcass, SP["atk_rest"][predators.species].astype(jnp.int32),
@@ -3321,6 +3413,32 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         food_p = cfg.immigration + 2.0 * prey_about
     else:
         food_s = food_l = food_p = 1.0
+    if cfg.taming:
+        # ---- bonds (taming): fed by someone, their harmless company, a blow from anyone, fading
+        if not cfg.grazing:
+            feed = tuple(jnp.zeros((an.pos.shape[0], n), bool) for an in (small, large, predators))
+        fade = 0.5 ** (1.0 / (cfg.tame_half_life_days * cfg.day_length))
+        striking = is_strike & tgt_ok & alive0
+
+        def rebond(an0, an, fed):
+            ease = SP["tameable"][an.species][:, None]
+            struck = striking[None, :] & (trl[None, :] == lrow(an0.pos, an0.below)[:, None]) \
+                & (tc[None, :] == an0.pos[:, 1][:, None]) & an0.alive[:, None]                  # (M, N): i struck at it
+            near = (_cheb(layered_pos(an.pos, an.below)[:, None, :], lpa[None, :, :]) <= 1) & alive0[None, :]
+            gain = cfg.tame_feed * fed + cfg.tame_company * (near & ~struck.any(1, keepdims=True))
+            b = an0.bond + jnp.clip(ease * gain, 0.0, 1.0) * (1.0 - an0.bond)
+            b = jnp.where(struck, b * (1.0 - cfg.tame_harm), b)
+            b = jnp.where(struck.any(1, keepdims=True), b * (1.0 - 0.5 * cfg.tame_harm * (~struck)), b)   # wary of people
+            b = b * fade * (an.alive[:, None] & alive0[None, :])
+            became = (an0.bond < cfg.tame_calm) & (b >= cfg.tame_calm)                          # (M, N)
+            tamed = jnp.max(jnp.where(became, an.species[:, None], -1), axis=0)                 # (N,) species or -1
+            return an._replace(bond=b), tamed
+        small, tamed_s = rebond(state.small, small, feed[0])
+        large, tamed_l = rebond(state.large, large, feed[1])
+        predators, tamed_p = rebond(state.predators, predators, feed[2])
+        tamed = jnp.maximum(jnp.maximum(tamed_s, tamed_l), tamed_p)
+    else:
+        tamed = jnp.full(n, -1, jnp.int32)
     small = _respawn(keys[13], small, state.terrain, cfg.small_prey_respawn * breed * food_s, cfg, SP["hp"], passage)
     large = _respawn(keys[14], large, state.terrain, cfg.large_prey_respawn * breed * food_l, cfg, SP["hp"], passage)
     predators = _respawn(keys[15], predators, state.terrain, cfg.predator_respawn * food_p, cfg, SP["hp"], passage)
@@ -3580,6 +3698,10 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     )
     if cfg.reproduction:
         next_state, born = _give_birth(next_state, birthing, jax.random.fold_in(keys[0], 78), cfg)
+        if cfg.taming:                                   # a newborn in a reused slot is a stranger to every animal
+            clear_b = lambda an: an._replace(bond=jnp.where(born[None, :], 0.0, an.bond))
+            next_state = next_state._replace(small=clear_b(next_state.small), large=clear_b(next_state.large),
+                                             predators=clear_b(next_state.predators))
         alive = next_state.alive
     else:
         born = jnp.zeros(n, bool)
@@ -3615,5 +3737,5 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         gathered_kind=took_kind if cfg.ecology else jnp.full(n, -1, jnp.int32),
         aim=jnp.where(hit_agent | hit_pred | hit_large | hit_small, aim, -1), blow_landed=blow_landed & hit_agent,
         how=jnp.where(is_strike, how, -1), shoved=tech["shoved"], thrown=tech["thrown"], grabbed=tech["grabbed"],
-        pinned=pinned, same_sex_mated=same_sex_mated)
+        pinned=pinned, same_sex_mated=same_sex_mated, tamed=tamed.astype(jnp.int32))
     return next_state, reward, done, info

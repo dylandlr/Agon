@@ -396,14 +396,21 @@ def build_frame(t, prev, state, a, info, evs, env_cfg, n_agents, minds=None):
             if max(kin, bond, i_hit_j, j_hit_i, att_ij, att_ji) > 0.05:
                 ties.append([i, j, round(kin, 2), round(bond, 2), round(i_hit_j, 2), round(j_hit_i, 2),
                              round(att_ij, 2), round(att_ji, 2)])
+    def animals(an):
+        bond = np.asarray(an.bond) if getattr(env_cfg, "taming", False) else np.zeros((an.pos.shape[0], 1))
+        out = []
+        for m, ((r, c), al, k, b) in enumerate(zip(an.pos, an.alive, an.species, an.below)):
+            if al:
+                j = int(np.argmax(bond[m])); v = float(bond[m, j])
+                out.append([int(r), int(c), int(k), int(b), j if v >= env_cfg.tame_calm else -1, round(v, 2)])
+        return out
     return {
         "t": int(t), "time": E.clock(t, env_cfg)["stamp"], "night": bool(E.is_night(jnp.int32(t), env_cfg)),
         "weather": E.WEATHER_NAMES[int(s.weather)],
         "agents": [agent_record(i) for i in range(n_agents)],
-        # animals: [row, column, species (lifesim/fauna.py), underground (0/1)]
-        "small": [[int(r), int(c), int(k), int(b)] for (r, c), al, k, b in zip(s.small.pos, s.small.alive, s.small.species, s.small.below) if al],
-        "large": [[int(r), int(c), int(k), int(b)] for (r, c), al, k, b in zip(s.large.pos, s.large.alive, s.large.species, s.large.below) if al],
-        "pred": [[int(r), int(c), int(k), int(b)] for (r, c), al, k, b in zip(s.predators.pos, s.predators.alive, s.predators.species, s.predators.below) if al],
+        # animals: [row, column, species (lifesim/fauna.py), underground (0/1), the agent it is most at
+        # ease with when tame (cfg.taming: bond >= tame_calm) or -1, that bond (0..1)]
+        "small": animals(s.small), "large": animals(s.large), "pred": animals(s.predators),
         # what lies on the cave floor (with caves): [row, column, material index (E.MAT_NAMES), amount]
         **({"cave_floor": [[int(r), int(c), int(k), round(float(s.cave_floor[r, c, k]), 1)]
                            for r, c, k in zip(*np.nonzero(s.cave_floor > 0.05))]} if env_cfg.underground else {}),

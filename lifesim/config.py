@@ -559,6 +559,26 @@ class EnvConfig:
     prey_preference: float = 3.0       # a predator choosing whom to chase counts a person this many cells farther
     stalk_large: bool = False          # predators also stalk large prey (8 slots against 6 hunters: herds collapse)
     hunt_kill_scale: float = 0.3       # with animal_hunting: x predator kill chances per meeting (more meetings)
+    # Taming, emergent: no act tames. Each animal is more or less at ease with each person (a bond,
+    # 0..1), built when it eats food that person dropped and, slowly, from that person's harmless
+    # company; a blow from them (and, less, from anyone) breaks it; it fades apart. At ease
+    # (tame_calm), it neither flees nor hunts that person; a tame predator beside them stands off wild
+    # ones as a defender; closer still (tame_follow) it follows them. Species differ (fauna TAMEABLE).
+    taming: bool = True
+    tame_feed: float = 0.2             # bond gained each tick it eats what that person dropped (x tameable)
+    tame_company: float = 0.002        # gained each tick that person is beside it doing it no harm (x tameable)
+    tame_harm: float = 0.8             # share of its bond with a striker lost to a blow (half that with anyone)
+    tame_half_life_days: float = 20.0  # bonds fade by half in this many days
+    tame_drop_window_days: float = 1.0  # food dropped within this long counts as fed by the dropper
+    tame_calm: float = 0.5             # at or above: at ease with that person
+    tame_follow: float = 0.7           # at or above: follows that person (cfg.tame_follow_prob of its steps)
+    tame_follow_prob: float = 0.6
+    scavenge_seek: float = 0.6         # a hungry predator not chasing anything steps toward meat beside it
+    stalk_hungry_hp: float = 0.75     # a predator below this share of its hp stalks large prey too (0: never)
+    animal_sleep_jitter: float = 0.075  # each slot's sleep bout starts up to this share of a day early or late
+    kill_asleep_mult: float = 3.0      # x a predator's kill chance on prey caught asleep
+    kill_lame_mult: float = 1.0        # + this x on lame prey (x2 in all)
+    kill_weak_mult: float = 2.0        # + this x the share of its hp the prey has lost (x3 at none left)
     patch_leave: float = 0.5           # seek-food skips and leaves patches poorer than this x the known average (0: off)
     # A rare temperament: selflessness weighs others' visible fortunes like one's own, kin or not,
     # so such an agent may give up its last food or its life for a stranger. Most agents have none;
@@ -762,7 +782,7 @@ _PER_TICK_AMOUNT = (       # added or lost per tick: x k
     "attach_warmth", "attach_company", "attach_coparent", "attach_nurse", "attach_shared_threat",
     "attach_absence", "attach_calm", "dark_stress", "guano_rate", "evaporation", "rain_use", "rain_drink",
     "snow_rate", "snow_melt", "move_cost", "graze_small", "graze_large", "graze_starve", "predator_starve", "urge_rate", "urge_stress",
-    "heartache_stress")
+    "heartache_stress", "tame_feed", "tame_company")
 _PER_TICK_CHANCE = (       # a chance each tick: 1 - (1 - p) ** k
     "contact_infection", "mosquito_infection", "spread_prob", "lightning_prob", "predator_prey_kill_prob",
     "predator_large_kill_prob", "small_prey_respawn", "large_prey_respawn", "predator_respawn",

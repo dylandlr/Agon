@@ -87,6 +87,15 @@ SPECIES = [
 BYPRODUCTS = {'rabbit': (0.5, 0.3, 0), 'fowl': (0, 0.2, 3), 'fish': (0, 0.2, 0), 'tortoise': (0, 1.0, 0), 'bat': (0, 0, 0), 'deer': (2, 2, 0), 'aurochs': (3, 3, 0), 'boar': (2, 2, 0), 'horse': (2, 2, 0), 'mammoth': (4, 6, 0), 'wolf': (1, 1, 0), 'big cat': (1.5, 1, 0), 'bear': (3, 2, 0), 'snake': (0.3, 0.1, 0), 'crocodile': (2, 2, 0)}
 for s in SPECIES:
     s["hide"], s["bone"], s["feather"] = BYPRODUCTS[s["name"]]
+# How readily a species comes to trust people who feed it and do it no harm (x every bond gain;
+# EnvConfig.taming): wolves (scavengers at camps, the first animal kept) fastest; boar, fowl, horses
+# and aurochs (all once domesticated) less; deer seldom; big cats, bears and mammoths hardly;
+# fish, bats, snakes and crocodiles never.
+TAMEABLE = {'rabbit': 0.4, 'fowl': 0.7, 'fish': 0.0, 'tortoise': 0.2, 'bat': 0.0, 'deer': 0.25, 'aurochs': 0.5,
+            'boar': 0.7, 'horse': 0.6, 'mammoth': 0.1, 'wolf': 1.0, 'big cat': 0.15, 'bear': 0.1, 'snake': 0.0,
+            'crocodile': 0.0}
+for s in SPECIES:
+    s["tameable"] = TAMEABLE[s["name"]]
 for s in SPECIES:                       # defaults
     for k, v in dict(herd=0.0, nocturnal=0.0, evade=0.0, counter=(0.0, 0.0), attack=(0.0, 0.0, 0.0, 0), pack=0,
                      ambush=0, provoked=0, hibernates=0, venom=0.0, takes_large=0, den=0, cave_only=0).items():

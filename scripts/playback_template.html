@@ -440,7 +440,8 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     if (fill) { g.fillStyle = fill; g.fill(); }
     if (ink) { g.lineWidth = lw; g.strokeStyle = ink; g.stroke(); }
   }
-  const shadowAt = (g, x, y, rx, ry, a = 0.26) => { g.beginPath(); g.ellipse(x, y, rx, ry, 0, 0, TAU); g.fillStyle = `rgba(0, 0, 0, ${a})`; g.fill(); };
+  let PICKING = false;                               // drawing a figure again to see if a click is on it: no shadows
+  const shadowAt = (g, x, y, rx, ry, a = 0.26) => { if (PICKING) return; g.beginPath(); g.ellipse(x, y, rx, ry, 0, 0, TAU); g.fillStyle = `rgba(0, 0, 0, ${a})`; g.fill(); };
   const hexRgb = (hex) => { const n = parseInt(hex.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; };
   const tone = (hex, k) => {                       // k < 0 darker, k > 0 lighter
     const [r, g2, b] = hexRgb(hex), f = (v) => Math.round(k < 0 ? v * (1 + k) : v + (255 - v) * k);
@@ -503,6 +504,8 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       if (n === "boar") { ell(g, hx + hr * 0.9, hy + 0.02, 0.05, 0.04, tone(col, 0.15)); line(g, [[hx + hr * 0.7, hy + 0.05], [hx + hr * 1.1, hy - 0.03]], "#efe6cf", 0.03); }
       if (n === "mammoth") curve(g, [hx + hr * 0.4, hy + hr * 0.4], [hx + hr * 1.6, hy + hr * 0.9], [hx + hr * 1.5, hy + hr * 0.1], "#f0ead8", 0.045);
       ell(g, hx + hr * 0.45, hy - hr * 0.15, 0.022, 0.022, "#141210", null);      // eye
+      if (TAME) { g.save(); g.scale(flip, 1); g.translate(0, -by - 0.12); g.fillStyle = "#d9485a";   // at ease with someone
+        g.beginPath(); g.moveTo(0, 0.05); g.bezierCurveTo(-0.09, -0.02, -0.04, -0.09, 0, -0.04); g.bezierCurveTo(0.04, -0.09, 0.09, -0.02, 0, 0.05); g.fill(); g.restore(); }
     });
   }
   const G = DATA.grid, F = DATA.frames;
@@ -572,19 +575,26 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   }
   const pointOfEvent = (ev) => { const b = mapRect();
     return [camR + (ev.clientY - b.top) / b.height * viewR(), camC + (ev.clientX - b.left) / b.width * viewC()]; };
-  // the person whose drawn figure is under the pointer (crowds stand apart in a cell, so by figure, not cell)
-  function agentAtEvent(ev) {
-    const [y, x] = pointOfEvent(ev), f = F[cur];
-    let best = -1, bd = 0.5;
-    (f ? f.agents : []).forEach((a, k) => {
-      if (a.existed === false || !AT[k] || (CAVES && !!a.below !== (LAYER === "caves"))) return;
-      const lie = !a.alive || a.asleep || a.downed;
-      const dx = (x - (AT[k][1] + 0.5)) / (lie ? 1.4 : 1), dy = y - (AT[k][0] + (lie ? 0.7 : 0.5));
-      const d = Math.hypot(dx, dy * (lie ? 1.6 : 0.8));
-      if (d < bd || (d === bd && a.alive)) { bd = d; best = k; }
-    });
-    return best;
+  // What is under the pointer, by what was drawn there (FIGS, TAGS): a label or a crowd badge on top
+  // first, then the figure the pointer is most squarely on (the front one where they overlap).
+  // Returns { k } (a person), { cell: [r, c] } (a crowd badge), or null.
+  function pickAt(ev) {
+    const b = mapRect(); if (!b.width) return null;
+    const u = (ev.clientX - b.left) / b.width, v = (ev.clientY - b.top) / b.height;
+    for (let j = TAGS.length - 1; j >= 0; j--) { const t = TAGS[j]; if (u >= t.x0 && u <= t.x1 && v >= t.y0 && v <= t.y1) return t.k !== undefined ? { k: t.k } : { cell: t.cell }; }
+    // on a figure's painted pixels: the front one (drawn last) there
+    for (const slack of [0, 1]) for (let j = FIGS.length - 1; j >= 0; j--) { const h = FIGS[j];   // exactly on, then nearly
+      if (u >= h.x0 && u <= h.x1 && v >= h.y0 && v <= h.y1 && opaqueAt(h, u, v, slack)) return { k: h.k }; }
+    // between figures: the one the pointer is most squarely near (0 at its middle, 0.5 at its box's edge)
+    const on = FIGS.map((h, j) => ({ k: h.k, j, d: Math.max(Math.abs(u - (h.x0 + h.x1) / 2) / Math.max(h.x1 - h.x0, 1e-6),
+                                                     Math.abs(v - (h.y0 + h.y1) / 2) / Math.max(h.y1 - h.y0, 1e-6)) }))
+      .filter((h) => h.d <= 0.6);
+    if (!on.length) return null;
+    const dmin = Math.min(...on.map((h) => h.d));
+    const front = on.filter((h) => h.d <= dmin + 0.08).reduce((a, h) => (h.j > a.j ? h : a));   // near ties: the one in front
+    return { k: front.k };
   }
+  function agentAtEvent(ev) { const p = pickAt(ev); return p && p.k !== undefined ? p.k : -1; }
   const cellOfEvent = (ev) => { const [y, x] = pointOfEvent(ev); return [Math.floor(y), Math.floor(x)]; };
   const blitBase = (cv, unit) => ctx.drawImage(cv, VC0 * unit, VR0 * unit, (VC1 - VC0) * unit, (VR1 - VR0) * unit,
                                                VC0 * unit, VR0 * unit, (VC1 - VC0) * unit, (VR1 - VR0) * unit);
@@ -639,6 +649,44 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   let selected = null;                            // the agent being inspected
   let hovered = null;                             // the agent under the pointer: a thin white outline (Mudborne)
   let AT = [];                                    // where each person was last drawn, in cells (gliding, crowd-slotted)
+  // What was drawn where, for clicks: boxes as shares of the canvas (0..1, so the map and the label
+  // canvas, which cover the same rectangle, compare directly), in drawing order (the last on top).
+  // FIGS: each person's figure as drawn; TAGS: their name label or speech, and crowd badges.
+  let FIGS = [], TAGS = [];
+  function hitBox(list, g, cv, x0, y0, x1, y1, what) {
+    const m = g.getTransform(), a = m.transformPoint({ x: x0, y: y0 }), b = m.transformPoint({ x: x1, y: y1 });
+    list.push({ x0: Math.min(a.x, b.x) / cv.width, y0: Math.min(a.y, b.y) / cv.height,
+                x1: Math.max(a.x, b.x) / cv.width, y1: Math.max(a.y, b.y) / cv.height, flipX: a.x > b.x, flipY: a.y > b.y, ...what });
+  }
+  // a sprite's alpha, read once per sprite canvas: clicks land on what is painted, not its empty corners
+  const ALPHA = new WeakMap();
+  const PICK = document.createElement("canvas"); PICK.width = PICK.height = 3;
+  const pickG = PICK.getContext("2d", { willReadFrequently: true });
+  function opaqueAt(h, u, v, slack = 1) {
+    if (h.redo) {                                    // a painted figure: draw it again, alone, round the point
+      const X = u * map.width, Y = v * map.height, R = h.redo;
+      pickG.setTransform(1, 0, 0, 1, 0, 0); pickG.clearRect(0, 0, 3, 3);
+      pickG.setTransform(new DOMMatrix().translate(1 - X, 1 - Y).multiply(R.m));
+      const sh = SHADOW_MODE; SHADOW_MODE = 0; PICKING = true;
+      try { drawAgent(R.a, R.info, R.r, R.c, pickG, h.k); } finally { SHADOW_MODE = sh; PICKING = false; }
+      const d = pickG.getImageData(0, 0, 3, 3).data;
+      if (!slack) return d[(1 * 3 + 1) * 4 + 3] > 40;
+      for (let q = 3; q < d.length; q += 4) if (d[q] > 40) return true;
+      return false;
+    }
+    const s = h.spr; if (!s) return true;
+    let al = ALPHA.get(s);
+    if (!al) { try { al = s.getContext("2d").getImageData(0, 0, s.width, s.height).data; } catch (e) { al = null; } ALPHA.set(s, al || false); }
+    if (!al) return true;
+    let fx = (u - h.x0) / Math.max(h.x1 - h.x0, 1e-9), fy = (v - h.y0) / Math.max(h.y1 - h.y0, 1e-9);
+    if (h.flipX) fx = 1 - fx; if (h.flipY) fy = 1 - fy;
+    const px_ = Math.min(s.width - 1, Math.max(0, Math.floor(fx * s.width))), py_ = Math.min(s.height - 1, Math.max(0, Math.floor(fy * s.height)));
+    // within a pixel of anything painted (a figure is a few pixels wide: forgiving, not exact)
+    for (let dy = -slack; dy <= slack; dy++) for (let dx = -slack; dx <= slack; dx++) {
+      const qx = px_ + dx, qy = py_ + dy; if (qx < 0 || qy < 0 || qx >= s.width || qy >= s.height) continue;
+      if (al[(qy * s.width + qx) * 4 + 3] > 40) return true; }
+    return false;
+  }
   const LBL = new Map();                          // map labels: key -> { cand, ox, oy } (last placement)
   let lblTime = performance.now();
   let selectedTile = null;                        // or the tile being inspected: [row, column]
@@ -841,7 +889,11 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     if (a.torch) { line(g, [[half + 0.02, 0.2], [half + 0.1, -0.12]], "#5a3b22", 0.05); ell(g, half + 0.11, -0.17, 0.06, 0.08, "#f0a43a", null); ell(g, half + 0.11, -0.19, 0.03, 0.05, "#ffe28a", null); }
     else if (held) ell(g, half + 0.05, 0.2, 0.06, 0.05, held, INK, LW * 0.7);
   }
+  let HIDE = -1;                                  // for UI tests: skip drawing this person (placement unchanged)
+  let REDO = null;                                // the painted figure being drawn: how to draw it again (pickAt)
   function drawAgent(a, info, r, c, g0 = ctx, k = info.id) {
+    if (k === HIDE && g0 === ctx) return;
+    if (g0 === ctx && ART !== "pixel") REDO = { a, info, r, c, m: ctx.getTransform() };   // (for clicks: drawn again on demand)
     const id = agentColour(info), L = bodyLook(a, info);
     if (ART === "pixel") { g0.save(); g0.imageSmoothingEnabled = false; g0.scale(T / P, T / P);
       const fx = c * P + 8, fy = r * P + 15; g0.translate(fx, fy); g0.scale(FIG, FIG); g0.translate(-fx, -fy);   // scaled about the feet
@@ -850,14 +902,18 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       if (!a.alive || a.asleep) {                            // lying down: the same pawn on its side
         shadowAt(g, 0.5, 0.64, 0.4, 0.1);
         if (a.alive) ell(g, 0.5, 0.74, 0.34, 0.07, null, id, 0.05);
+        if (g0 === ctx) hitBox(FIGS, g, map, 0.1, 0.02, 0.98, 0.8, { k, redo: REDO });   // (the body and its "z z")
         g.save(); g.translate(0.62, 0.58); g.rotate(-Math.PI / 2); g.scale(0.9 * L.sy, 0.9 * L.sy);
-        if (!a.alive) g.filter = "grayscale(1) brightness(0.85)";
-        pawn(g, a, L); g.restore();
+        // the dead in grey, by colour, not a canvas filter (a filter costs a full-canvas pass per body:
+        // in a year with many dead the painted map fell below one frame a second)
+        const grey = (c) => tone(mixHex(c, "#9a9a9a", 0.8), -0.15);
+        pawn(g, a, a.alive ? L : { ...L, skin: grey(L.skin), hair: grey(L.hair), eye: grey(L.eye) }); g.restore();
         if (a.alive) { g.fillStyle = "#e8edff"; g.font = "bold 0.26px sans-serif"; g.fillText("z", 0.74, 0.22); g.font = "bold 0.18px sans-serif"; g.fillText("z", 0.88, 0.08); }
         else { line(g, [[0.15, 0.36], [0.27, 0.48]], INK, 0.035); line(g, [[0.27, 0.36], [0.15, 0.48]], INK, 0.035); }
         return;
       }
       g.translate(0.5, 0.58); g.scale(L.sy, L.sy);
+      if (g0 === ctx) hitBox(FIGS, g, map, -0.27, -0.62, 0.27, 0.4, { k, redo: REDO });
       shadowAt(g, 0, 0.33, 0.25, 0.08);
       ell(g, 0, 0.32, 0.24, 0.075, null, id, 0.055);        // who it is
       pawn(g, a, L);
@@ -1591,12 +1647,18 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     const sc = o.scale || 1, key = ["BM", JSON.stringify(m), o.view, o.action || "rest", o.phase || 0, o.seed || 0, sc, o.eyesClosed ? 1 : 0].join("|");
     return fineSprite(key, Math.round(40 * sc), Math.round(50 * sc), (q) => modelPixels(m, o, q), sel, 1);
   }
+  const LIE_BOX = new Map();                          // a lying body's extent, by sprite key (rendering it is costly)
   function modelLying(m, k, dead, sel) {             // the same body on its side, head to the right, eyes shut
-    const key = ["BMlie", JSON.stringify(m), dead ? 1 : 0].join("|");
+    const key = ["BMlie", JSON.stringify(m), dead ? 1 : 0, k].join("|");
     const o = { view: "e", action: "rest", seed: k, eyesClosed: !dead, dead };
-    const r = BM.render(m, o);
-    let x0 = r.width, x1 = -1, y0 = r.height, y1 = -1;
-    for (let y = 0; y < r.height; y++) for (let x = 0; x < r.width; x++) if (r.slot[y * r.width + x]) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+    let bx = LIE_BOX.get(key);
+    if (!bx) {
+      const r = BM.render(m, o);
+      let x0 = r.width, x1 = -1, y0 = r.height, y1 = -1;
+      for (let y = 0; y < r.height; y++) for (let x = 0; x < r.width; x++) if (r.slot[y * r.width + x]) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+      bx = [x0, x1, y0, y1]; LIE_BOX.set(key, bx);
+    }
+    const [x0, x1, y0, y1] = bx;
     // turned a quarter: the standing figure's top becomes the right, its front the bottom
     return fineSprite(key, y1 - y0 + 1, x1 - x0 + 1, (q) => modelPixels(m, o, q, 0, 0, (x, y) => [y1 - y, x1 - x]), sel, 1);
   }
@@ -1665,6 +1727,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       pixShadow(g, x + 8, y + 14, 18);
       if (SHADOW_MODE === 1) return;
       blit(s, x + 8 - s.width / 4, yb - s.height / 2);
+      if (g === ctx) hitBox(FIGS, g, map, x + 8 - s.width / 4, yb - s.height / 2, x + 8 + s.width / 4, yb, { k, spr: s });
       { const u = groundUnder(x, y); contactBand(g, u, x + 1, yb, 14, 0); grassInFront(g, u, x + 1, yb, 14, 0, 0, k); }
       if (!dead && !reduced && a.asleep) { const o = Math.floor(flick / 2) % 3; px(g, x + 12, y + 1 - o, "#eef2ff", 3, 1); px(g, x + 13, y + 2 - o, "#eef2ff"); px(g, x + 12, y + 3 - o, "#eef2ff", 3, 1); }
       if (!dead && a.downed && !a.asleep) {            // down: a pool of blood beside, a red cross above
@@ -1727,6 +1790,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       g.save(); g.globalAlpha = 0.9; g.strokeStyle = col; g.lineWidth = 0.5; g.beginPath(); g.ellipse(x + 8, y + 14.25, 4.5, 1.5, 0, 0, TAU); g.stroke(); g.restore();
     }
     blit(s, x + 8 - s.width / 4, y + 15 - s.height / 2 + bob);
+    if (g === ctx) hitBox(FIGS, g, map, x + 8 - s.width / 4, y + 15 - s.height / 2 + bob, x + 8 + s.width / 4, y + 15 + bob, { k, spr: s });
     contactBand(g, under, x + 3, y + 15, 10, step);
     grassInFront(g, under, x + 3, y + 15, 10, step, face === 3 ? -1 : face === 2 ? 1 : 0, k);
     if ((a.stress || 0) >= 0.6 && !reduced) {       // a tell before it breaks (ONI): a sweat drop, a dark scribble when worse
@@ -1929,6 +1993,11 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     g0.drawImage(s, x + 8 - w / 2, y + 14.5 - h + lift, w, h);
     if (under && n !== "snake" && n !== "crocodile") contactBand(g0, under, Math.round(x + 8 - w * 0.4), y + 14.5, Math.round(w * 0.8), step);
     if (under) grassInFront(g0, under, Math.round(x + 8 - w * 0.4), y + 14.5, Math.round(w * 0.8), step, face, k + 77);
+    if (TAME) {                                                          // at ease with someone (taming): a small heart
+      const hx = Math.round(x + 8), hy = Math.round(y + 14.5 - h + lift - 4);
+      for (const [dx, dy] of [[-2, 0], [-1, -1], [-1, 0], [-1, 1], [0, 0], [0, 1], [0, 2], [1, -1], [1, 0], [1, 1], [2, 0]]) px(g0, hx + dx, hy + dy, "#d9485a", 1, 1);
+      px(g0, hx - 1, hy - 1, "#f4a3ae", 1, 1);
+    }
     })();
     g0.restore();
   }
@@ -2259,7 +2328,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   // attack on a person and a kill of an animal are matched to the nearest predator (a goring, to the
   // nearest large animal) within two cells.
   const ATK = new Map();
-  let LUNGE = null;
+  let LUNGE = null, TAME = false;   // TAME: the animal being drawn is at ease with someone (cfg.taming)
   function attacksOf(i) {
     let out = ATK.get(i); if (out) return out;
     out = [];
@@ -2316,13 +2385,13 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     const scene = [];
     for (const [grp, dk] of [["small", 0], ["large", 4], ["pred", 9]]) {
       const raw = (F[POSE.i] && F[POSE.i][grp]) || [], mvs = animalMoves(POSE.i, grp);
-      raw.forEach(([r, c, k, b], j) => { if ((b || 0) === 0 && r >= VR0 - 2 && r < VR1 + 2 && c >= VC0 - 2 && c < VC1 + 2) {
-        const mv = mvs[j], lg = lungeFor(grp, j, r, c);
-        if (!asScene) { LUNGE = lg; pixAnimal(r, c, k ?? dk, ctx, mv); LUNGE = null; return; }
+      raw.forEach(([r, c, k, b, tm], j) => { if ((b || 0) === 0 && r >= VR0 - 2 && r < VR1 + 2 && c >= VC0 - 2 && c < VC1 + 2) {
+        const mv = mvs[j], lg = lungeFor(grp, j, r, c), tame = (tm ?? -1) >= 0;
+        if (!asScene) { LUNGE = lg; TAME = tame; pixAnimal(r, c, k ?? dk, ctx, mv); LUNGE = null; TAME = false; return; }
         let rr = r;
         if (mv && POSE.frac < 1 && !reduced && (mv.pr !== r || mv.pc !== c)) { const fr = POSE.frac, e = fr < 0.5 ? 2 * fr * fr : 1 - 2 * (1 - fr) * (1 - fr); rr = mv.pr + (r - mv.pr) * e; }
         const big = SIZE_OF(k ?? dk) >= 0.6;                                  // big enough to hide a person
-        scene.push([rr * P + 14.5, () => pixelScale(() => { LUNGE = lg; pixAnimal(r, c, k ?? dk, ctx, mv); LUNGE = null; }),
+        scene.push([rr * P + 14.5, () => pixelScale(() => { LUNGE = lg; TAME = tame; pixAnimal(r, c, k ?? dk, ctx, mv); LUNGE = null; TAME = false; }),
                     big ? { r: rr, on: (g) => pixAnimal(r, c, k ?? dk, g, mv) } : null]);
       } });
     }
@@ -2479,7 +2548,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     });
     const down = (x) => x[3] === 1;
     if (ART === "pixel") { ctx.save(); ctx.imageSmoothingEnabled = false; ctx.scale(T / P, T / P);
-      for (const grp of ["small", "large", "pred"]) { const mvs = animalMoves(i, grp); (f[grp] || []).forEach((x_, j) => { if (down(x_)) pixAnimal(x_[0], x_[1], x_[2], ctx, mvs[j]); }); }
+      for (const grp of ["small", "large", "pred"]) { const mvs = animalMoves(i, grp); (f[grp] || []).forEach((x_, j) => { if (down(x_)) { TAME = (x_[4] ?? -1) >= 0; pixAnimal(x_[0], x_[1], x_[2], ctx, mvs[j]); TAME = false; } }); }
       ctx.restore(); }
     else { (f.small || []).filter(down).forEach(([r, c, k], j) => drawAnimal(r, c, k, j)); (f.large || []).filter(down).forEach(([r, c, k], j) => drawAnimal(r, c, k, j + 100));
       (f.pred || []).filter(down).forEach(([r, c, k], j) => drawAnimal(r, c, k, j + 200)); }
@@ -2888,7 +2957,18 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     if (overlay === "knowledge" && selected !== null) { const s = knowledgeOf(selected, f.t); return s ? `memory ${s.rec[selected][k]}/9, food remembered ${s.plants[selected][k]}/9` : null; }
     return null;
   }
+  let wantDraw = false;
+  const requestDraw = () => { wantDraw = true; };    // drawn on the next animation frame (loop), once
+  const PERF = { n: 0, ms: 0, worst: 0, since: performance.now() };   // frames drawn and what they cost (window.__agonPerf)
   function drawFrame(i, flick, frac = 1) {
+    const t0 = performance.now();
+    try { drawFrameInner(i, flick, frac); } finally {
+      const dt = performance.now() - t0; PERF.n++; PERF.ms += dt; PERF.worst = Math.max(PERF.worst, dt); PERF.last = dt;
+      PERF.avg = PERF.avg === undefined ? dt : 0.9 * PERF.avg + 0.1 * dt;
+    }
+  }
+  function drawFrameInner(i, flick, frac = 1) {
+    FIGS = [];
     camBegin(i, frac);
     if (typeof drawMini === "function" && camReady) drawMini(i);
     POSE.i = i; POSE.frac = frac; POSE.live = true;
@@ -2923,9 +3003,10 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       SHADOW_MODE = 2;
     }
     else {
-      (f.small || []).forEach(([r, c, k], j) => drawAnimal(r, c, k ?? 0, j));
-      (f.large || []).forEach(([r, c, k], j) => drawAnimal(r, c, k ?? 4, j + 100));
-      (f.pred || []).forEach(([r, c, k], j) => drawAnimal(r, c, k ?? 9, j + 200));
+      const tameDraw = (r, c, k, j, tm) => { TAME = (tm ?? -1) >= 0; drawAnimal(r, c, k, j); TAME = false; };
+      (f.small || []).forEach(([r, c, k, , tm], j) => tameDraw(r, c, k ?? 0, j, tm));
+      (f.large || []).forEach(([r, c, k, , tm], j) => tameDraw(r, c, k ?? 4, j + 100, tm));
+      (f.pred || []).forEach(([r, c, k, , tm], j) => tameDraw(r, c, k ?? 9, j + 200, tm));
       f.fire.forEach(([r, c]) => drawFire(r, c, flick));
     }
     // agents (the inspector's own figure, in the current look), then what they say on top
@@ -3042,7 +3123,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     morals.setAttribute("aria-label", names.map((n, j) => `${n} ${Object.values(a.morals)[j]}`).join(", "));
     row.append(sw, mid, morals); agentsEl.appendChild(row);
     row.tabIndex = 0;
-    row.addEventListener("click", () => select(a.id));
+    row.addEventListener("click", () => { if (selected !== a.id) select(a.id); else { openTab("agent"); $("inspector").hidden = false; } });   // (closing: the inspector's close)
     row.addEventListener("keydown", (ev) => { if (ev.key === "Enter") select(a.id); });
     return mid;
   });
@@ -3208,6 +3289,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     if (e.type === "predator_attack" && e.species) s = `${who(e.agent)} was attacked by a ${e.species}${e.venom ? " (venomous)" : ""}`;
     if (e.type === "hurt_by_prey") s = `${who(e.agent)} was hurt by the ${e.species} it struck`;
     if (e.type === "stung") s = `${who(e.agent)} was stung by bees`;
+    if (e.type === "tamed") s = `A ${e.animal} came to be at ease with ${who(e.agent)}`;
     if (e.type === "eat" && e.what) s += ` ${e.what}`;
     if (e.type === "gather" && e.what) s += ` ${e.what}`;
     if (e.type === "death") s += ` of ${e.cause}${e.finished_off ? ", finished off where it lay" : ""}`;
@@ -3268,6 +3350,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   });
   function select(k) {
     selected = selected === k ? null : k;
+    $("follow").disabled = selected === null;          // following no one would do nothing
     if (selected !== null) openTab("agent");
     selectedTile = null;
     if (CAVES && selected !== null && F[cur].agents[selected] && !!F[cur].agents[selected].below !== (LAYER === "caves"))
@@ -3691,8 +3774,9 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       ...[["Small prey", f.small], ["Large prey", f.large], ["Predators", f.pred]].map(([label, list]) => {
         const here = (list || []).filter(([rr, cc]) => rr === r && cc === c);
         if (!here.length) return [label, null];
-        return [label, { html: here.map(([, , k]) => { const sp = (DATA.fauna || [])[k] || { name: "?", about: "" };
-          return `<i class="swatch" style="background:${SPRITE[sp.name] || "#888"}"></i>${escT(sp.name)} <span class="fine">(${escT(sp.about)})</span>`; }).join("<br>") }];
+        return [label, { html: here.map(([, , k, , tm, bv]) => { const sp = (DATA.fauna || [])[k] || { name: "?", about: "" };
+          const ease = (tm ?? -1) >= 0 ? ` &middot; tame: at ease with ${agentLink(tm, f.t)} (bond ${bv})` : (bv > 0.05 ? ` <span class="fine">&middot; growing used to people (bond ${bv})</span>` : "");
+          return `<i class="swatch" style="background:${SPRITE[sp.name] || "#888"}"></i>${escT(sp.name)}${ease} <span class="fine">(${escT(sp.about)})</span>`; }).join("<br>") }];
       }),
       ["Bees", (DATA.hives || []).some(([rr, cc]) => rr === r && cc === c) ? { html: `a hive${at(f.honey) ? " with honey" : " (no honey now)"} <span class="fine">(${escT((DATA.bugs || {}).bees || "")})</span>` } : null],
       ["Termites", (DATA.mounds || []).some(([rr, cc]) => rr === r && cc === c) ? { html: `a mound${at(f.grubs) ? " with grubs" : " (no grubs now)"} <span class="fine">(${escT((DATA.bugs || {}).termites || "")})</span>` } : null],
@@ -4312,7 +4396,42 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   lblCv.style.cssText = "position:absolute;left:0;top:0;pointer-events:none;z-index:1";
   map.after(lblCv);
   const lblCtx = lblCv.getContext("2d");
+  // Hovering must not move anything under the pointer: every label is placed as if no one were
+  // hovered, and the hovered person's card is laid on top afterwards (hoverCard), touching nothing.
   function drawLabels(f, i, frac, below) {
+    const HOV = hovered; hovered = null;
+    try { drawLabelsPlaced(f, i, frac, below); } finally { hovered = HOV; }
+    if (HOV !== null && HOV !== selected) hoverCard(f, HOV, below);
+  }
+  function hoverCard(f, k, below) {
+    const a = f.agents[k];
+    if (!a || a.existed === false || !AT[k] || !!a.below !== below) return;
+    const rect = mapRect(), S = rect.width > 0 ? map.width / RES / rect.width : 1, ctx = lblCtx;
+    const name = label(k, f.t), col = agentColour(DATA.agents[k]), doing = doingShort(a), feels = feelingShort(a, k, f);
+    const said = a.alive && a.msg && a.msg.some((m) => m > 0) ? (GROUNDED ? glossOf(a.msg) : spokenOf(a.msg)) : "";
+    const FN = 11.5 * S, FD = 10.5 * S, ph = 5 * S;
+    ctx.save();
+    ctx.font = `600 ${FN}px ${UI_FONT}`; const nw = ctx.measureText(name).width;
+    ctx.font = `400 ${FD}px ${UI_FONT}`;
+    const line2 = [doing, ...feels.map((x) => x[0])].join(", "), l2 = ctx.measureText(line2).width;
+    ctx.font = `italic 400 ${FD}px ${UI_FONT}`; const l3 = said ? ctx.measureText(`\u201c${said}\u201d`).width : 0;
+    const w = Math.max(nw + 10 * S, l2, l3) + 2 * ph, h = FN + FD * 1.25 * (said ? 2 : 1) + 2 * ph;
+    const fx = (AT[k][1] + 0.5) * T, fy = (AT[k][0] + 1) * T;
+    const vx0 = camC * T, vy0 = camR * T, vx1 = vx0 + viewC() * T, vy1 = vy0 + viewR() * T;
+    let x = Math.max(vx0 + 2 * S, Math.min(vx1 - w - 2 * S, fx - w / 2)), y = fy + 2 * S;
+    if (y + h > vy1 - 2 * S) y = (AT[k][0] + 0.1) * T - h - 4 * S;        // no room below: above the head
+    // (not a click target: in a crowd it lies over the neighbours' labels, which must still answer)
+    ctx.globalAlpha = 1; ctx.fillStyle = "rgba(22, 24, 28, 0.92)"; roundRect(ctx, x, y, w, h, 4 * S); ctx.fill();
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x + ph + 3.5 * S, y + ph + FN * 0.48, 3.2 * S, 0, TAU); ctx.fill();
+    ctx.font = `600 ${FN}px ${UI_FONT}`; ctx.fillStyle = "#f2ecdc"; ctx.fillText(name, x + ph + 10 * S, y + ph + FN * 0.85);
+    ctx.font = `400 ${FD}px ${UI_FONT}`; let cx = x + ph; const cy = y + ph + FN + FD * 1.05;
+    ctx.fillStyle = "#c9c0aa"; ctx.fillText(doing, cx, cy); cx += ctx.measureText(doing).width;
+    feels.forEach(([t, need]) => { ctx.fillStyle = "#8e8572"; ctx.fillText(", ", cx, cy); cx += ctx.measureText(", ").width;
+      ctx.fillStyle = NEED_COL[need] || "#e0a83a"; ctx.fillText(t, cx, cy); cx += ctx.measureText(t).width; });
+    if (said) { ctx.font = `italic 400 ${FD}px ${UI_FONT}`; ctx.fillStyle = "#e8e2cf"; ctx.fillText(`\u201c${said}\u201d`, x + ph, cy + FD * 1.25); }
+    ctx.restore();
+  }
+  function drawLabelsPlaced(f, i, frac, below) {
     const rect = mapRect(), S = rect.width > 0 ? map.width / RES / rect.width : 1;   // world px per screen px
     const ctx = lblCtx, dpr = window.devicePixelRatio || 1, wb = map.parentElement.getBoundingClientRect();
     const cw = Math.max(1, Math.round(rect.width * dpr)), chh = Math.max(1, Math.round(rect.height * dpr));
@@ -4320,6 +4439,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     lblCv.style.left = `${rect.left - wb.left}px`; lblCv.style.top = `${rect.top - wb.top}px`;
     lblCv.style.width = `${rect.width}px`; lblCv.style.height = `${rect.height}px`;
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cw, chh);
+    TAGS = [];
     const kz = cw / map.width * RES;                            // label pixels per world pixel
     ctx.setTransform(kz, 0, 0, kz, Math.round(-Math.round(camC * P) * (T / P) * kz), Math.round(-Math.round(camR * P) * (T / P) * kz));
     if ($("show-groups").checked) {                     // groups: a soft ring round each, in one colour per group
@@ -4399,6 +4519,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       cands.push([hx + 0.4 * T, hy, 6], [hx - 0.4 * T - w, hy, 6]);
       cands.ax = hx; cands.ay = hy;
       let [x, y] = place(`s${k}`, w, h, cands, who.findIndex(([, q]) => q === k), true); x = snap(x); y = snap(y);
+      hitBox(TAGS, ctx, lblCv, x, y, x + w, y + h, { k });
       ctx.globalAlpha = al * (full ? 0.95 : 0.8);
       ctx.fillStyle = "rgba(14, 18, 20, 0.82)"; pill(x, y, w, h, 3 * S); ctx.fill();
       const over = hx > x + 2 * S && hx < x + w - 2 * S && y + h <= hy + 1;
@@ -4427,6 +4548,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
         cands.push([hx + 0.45 * T, hy, 6], [hx - 0.45 * T - w, hy, 6]);
         cands.ax = hx; cands.ay = hy;
         let [x, y] = place(`s${k}`, w, h, cands, who.findIndex(([, q]) => q === k), true); x = snap(x); y = snap(y);
+        hitBox(TAGS, ctx, lblCv, x, y, x + w, y + h, { k });
         ctx.globalAlpha = al;
         const over = hx > x + 4 * S && hx < x + w - 4 * S && y + h <= hy + 1 && hy - (y + h) < GAP * 2;
         ctx.fillStyle = "#f6f1e3"; ctx.strokeStyle = "rgba(24, 22, 18, 0.9)"; ctx.lineWidth = 1 * S;
@@ -4449,6 +4571,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       cands.push([hx + 0.5 * T + GAP, hy, 7], [hx - 0.5 * T - GAP - w, hy, 7]);
       cands.ax = hx; cands.ay = hy;
       let [x, y] = place(`s${k}`, w, h, cands, who.findIndex(([, q]) => q === k), true); x = snap(x); y = snap(y);
+      hitBox(TAGS, ctx, lblCv, x, y, x + w, y + h, { k });
       ctx.globalAlpha = al;
       const over = hx > x + R && hx < x + w - R && y + h <= hy + 1;
       ctx.fillStyle = "#f6f1e3"; ctx.strokeStyle = "rgba(24, 22, 18, 0.9)"; ctx.lineWidth = 1 * S;
@@ -4478,6 +4601,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       ctx.font = `700 ${10.5 * S}px ${UI_FONT}`; const w = ctx.measureText(txt).width + 12 * S, h = 15 * S;
       const cands = [[x - w / 2, y - h / 2, 0]]; cands.ax = x; cands.ay = y;
       const box = place(`c${a0.r},${a0.c}`, w, h, cands, -1, true);
+      hitBox(TAGS, ctx, lblCv, box[0], box[1], box[0] + w, box[1] + h, { cell: [a0.r, a0.c] });
       ctx.fillStyle = "#e0a83a"; pill(box[0], box[1], w, h, h / 2); ctx.fill(); ctx.strokeStyle = "rgba(24, 22, 18, 0.9)"; ctx.lineWidth = 1.2 * S; ctx.stroke();
       ctx.fillStyle = "#1d1a14"; ctx.textAlign = "center"; ctx.fillText(txt, box[0] + w / 2, box[1] + h * 0.72); ctx.textAlign = "left";
     });
@@ -4503,6 +4627,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       const box = place(`n${k}`, w, h, cands, who.findIndex(([, q]) => q === k), sel || hov);
       if (!box) return;
       const x = snap(box[0]), y = snap(box[1]);
+      hitBox(TAGS, ctx, lblCv, x, y, x + w, y + h, { k });
       ctx.globalAlpha = a.alive ? (a.asleep && !detail ? 0.6 : detail ? 1 : 0.85) : 0.5;
       if (!detail) {                                        // everyone else: just the name, small, with a dark halo
         ctx.font = `600 ${FN}px ${UI_FONT}`; ctx.lineJoin = "round"; ctx.lineWidth = 2.5 * S; ctx.strokeStyle = "rgba(10, 12, 14, 0.75)";
@@ -4647,7 +4772,10 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     const b = document.createElement("button"); b.className = "colonist"; b.type = "button";
     const cv = document.createElement("canvas"); cv.width = 2 * T; cv.height = 2 * T; cv.dataset.fig = k;
     b.innerHTML = `<span class="nm"></span><span class="b hp"><i></i></span><span class="b md"><i></i></span>`;
-    b.prepend(cv); b.addEventListener("click", () => select(k)); colBar.appendChild(b);
+    b.prepend(cv); b.addEventListener("click", () => {                 // select, and bring them into view (RimWorld's bar)
+      if (selected !== k) select(k); else { openTab("agent"); $("inspector").hidden = false; }
+      if (viewN() < G) { centreOnSelected(); applyCam(); show(cur); }
+    }); colBar.appendChild(b);
     return b;
   });
   function updateColonists(i) {
@@ -4749,6 +4877,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       try { localStorage.setItem("agon-boxes", BOXES ? "1" : "0"); } catch (e) { /* storage unavailable */ }
       show(cur); updateSide(cur); if (typeof updateInspector === "function") updateInspector(cur); });
   }
+  $("follow").disabled = selected === null; $("follow").title = "Follow the selected person (F)";
   $("follow").addEventListener("click", () => { follow = !follow; $("follow").setAttribute("aria-pressed", String(follow)); if (follow && viewN() === G) zoomTo(Math.min(2, VIEW_LEVELS.length - 1)); centreOnSelected(); applyCam(); });
   wrap.addEventListener("wheel", (ev) => { if (!ev.ctrlKey && !ev.metaKey) { ev.preventDefault(); const b = mapRect(); zoomTo(zi + (ev.deltaY < 0 ? 1 : -1), ev.clientX - b.left, ev.clientY - b.top); } }, { passive: false });
   map.addEventListener("mousedown", (ev) => { if (!wholeMap()) { drag = [ev.clientX, ev.clientY, camR, camC]; dragged = false; } });
@@ -5013,7 +5142,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       const [r, c] = cellOfEvent(ev);
       const here = agentAtEvent(ev);
       const h = here >= 0 && F[cur].agents[here].alive ? here : null;
-      if (h !== hovered) { hovered = h; drawFrame(cur, flick, playing ? acc : 1); }
+      if (h !== hovered) { hovered = h; requestDraw(); }
     }
     if (!$("web").checked) {
       const [r, c] = cellOfEvent(ev);
@@ -5036,7 +5165,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     tip.style.left = `${Math.min(ev.clientX + 14, window.innerWidth - w - 8)}px`;
     tip.style.top = `${Math.min(ev.clientY + 14, window.innerHeight - h - 8)}px`;
   });
-  map.addEventListener("mouseleave", () => { $("tip").hidden = true; if (hovered !== null) { hovered = null; drawFrame(cur, flick, playing ? acc : 1); } });
+  map.addEventListener("mouseleave", () => { $("tip").hidden = true; if (hovered !== null) { hovered = null; requestDraw(); } });
   const pickRegion = (ev) => {
     const el = ev.target.closest("[data-region]");
     if (el && el.dataset.region !== inspRegion && inspMode === "anatomy") { inspRegion = el.dataset.region; updateInspector(cur); }
@@ -5052,8 +5181,10 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   });
   map.addEventListener("click", (ev) => {
     const [r, c] = cellOfEvent(ev);
-    const pick = agentAtEvent(ev);
-    if (pick >= 0 && !ev.shiftKey) select(pick);
+    const pick = ev.shiftKey ? null : pickAt(ev);
+    window.__agonLastPick = pick;                      // (for UI tests)
+    if (pick && pick.k !== undefined) { if (selected !== pick.k) select(pick.k); else { openTab("agent"); $("inspector").hidden = false; } }
+    else if (pick && pick.cell) selectTile(pick.cell[0], pick.cell[1]);   // a crowd badge: everyone in that cell
     else selectTile(r, c);
   });
   map.style.cursor = "pointer";
@@ -5088,6 +5219,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   document.addEventListener("keydown", (e) => {
     if (e.target.tagName === "SELECT") return;
     if (e.code === "Space") { e.preventDefault(); $("play").click(); }
+    if (e.code === "Escape" && !$("inspector").hidden) { e.preventDefault(); $("insp-close").click(); }
     if (e.code === "ArrowLeft") { e.preventDefault(); $("back").click(); }
     if (e.code === "ArrowRight") { e.preventDefault(); $("fwd").click(); }
     if (/^Digit[1-4]$/.test(e.code) && !e.metaKey && !e.ctrlKey && !e.altKey) { $("speed").selectedIndex = +e.code.slice(5) - 1; syncSpeedButtons(); }
@@ -5109,8 +5241,15 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     const el = $("slowed"); el.textContent = `Slowed to 1\u00d7: ${DANGER_WORDS[e.type] || e.type} (${F[j].time})`; el.hidden = false;
     clearTimeout(slowTimer); slowTimer = setTimeout(() => { el.hidden = true; }, 5000);
   }
+  // At most one draw per animation frame. Between ticks people glide: drawn as often as the frame's
+  // cost allows (60 a second when a frame is cheap, never under 20), not at a fixed 30. A hover or
+  // anything else that only changes the look asks for a draw (requestDraw) instead of drawing at once.
   function loop(ts) {
     const dt = Math.min((ts - last) / 1000, 0.25); last = ts;
+    const every = Math.min(50, Math.max(15, 1.4 * (PERF.avg || 16)));      // ms between glide frames
+    let drew = false;
+    const flickNow = reduced ? flick : Math.floor(ts / 250), flicked = flickNow !== flick;
+    flick = flickNow;
     if (playing) {
       acc += dt * +$("speed").value;
       if (acc >= 1) {
@@ -5122,13 +5261,14 @@ const DATA = /*__PLAYBACK_DATA__*/null;
         if (hit) { slowedFor(hit[0], hit[1]); show(hit[0]); }
         else if (cur + n >= F.length - 1) { show(F.length - 1); setPlaying(false); }
         else show(cur + n);
-        lastDraw = ts;
-      } else if (!reduced && ts - lastDraw > 33) { lastDraw = ts; drawFrame(cur, flick, acc); }
+        lastDraw = ts; drew = true;
+      } else if (!reduced && ts - lastDraw >= every) { lastDraw = ts; drawFrame(cur, flick, acc); drew = true; }
     } else if (stepAnim) {                            // stepping forward while paused: play the one tick out
       const fr = Math.min(1, (ts - stepAnim.t0) / 450);
-      lastDraw = ts; if (fr >= 1) stepAnim = null; drawFrame(cur, flick, fr);
-    } else if (motes.length && ts - lastDraw > 33) { lastDraw = ts; drawFrame(cur, flick, 1); }
-    if (!reduced && Math.floor(ts / 250) !== flick) { flick = Math.floor(ts / 250); if (!stepAnim) drawFrame(cur, flick, playing ? acc : 1); }
+      lastDraw = ts; if (fr >= 1) stepAnim = null; drawFrame(cur, flick, fr); drew = true;
+    } else if (motes.length && ts - lastDraw >= every) { lastDraw = ts; drawFrame(cur, flick, 1); drew = true; }
+    if (!drew && (flicked || wantDraw)) { lastDraw = ts; drawFrame(cur, flick, playing ? acc : 1); }
+    wantDraw = false;
     requestAnimationFrame(loop);
   }
   function drawSidebarFigures(which = ".agent canvas[data-fig], .colonist canvas[data-fig]") { document.querySelectorAll(which).forEach((cv) => {
@@ -5169,6 +5309,16 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   window.__agonFauna = (n, step = 0) => smallSprite(n, PIX_SPRITE[n] || "#888", step);   // for size sheets                          // for sprite sheets
   window.__agonHover = (k) => { hovered = k; };
   window.__agonSelect = (k) => select(k);                         // for checking the hover outline
+  window.__agonState = () => ({ cur, selected, selectedTile, AT: AT.map((p) => p && [p[0], p[1]]), zi, camR, camC, RES, ART });   // for UI tests
+  window.__agonFrame = (i) => F[i];                               // for UI tests (the live frame object)
+  window.__agonFigs = () => FIGS; window.__agonTags = () => TAGS;   // for UI tests (what was drawn where)
+  window.__agonData = () => DATA;                                 // for UI tests
+  window.__agonHide = (k) => { HIDE = k; };                        // for UI tests
+  window.__agonPerf = (reset = false) => { const o = { ...PERF, secs: (performance.now() - PERF.since) / 1000 };
+    if (reset) Object.assign(PERF, { n: 0, ms: 0, worst: 0, since: performance.now() }); return o; };
+  window.__agonPickDebug = (x, y) => { const b = mapRect(), u = (x - b.left) / b.width, v = (y - b.top) / b.height;   // for UI tests
+    return { pick: pickAt({ clientX: x, clientY: y }), under: FIGS.map((h, j) => ({ j, k: h.k, inBox: u >= h.x0 && u <= h.x1 && v >= h.y0 && v <= h.y1, redo: !!h.redo, spr: !!h.spr }))
+      .filter((h) => h.inBox).map((h) => ({ ...h, exact: opaqueAt(FIGS[h.j], u, v, 0), near: opaqueAt(FIGS[h.j], u, v, 1) })) }; };
   requestAnimationFrame((ts) => { last = ts; loop(ts); });
 })();
 </script>

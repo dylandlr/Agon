@@ -161,6 +161,46 @@ def test_wolves_stalk_deer_and_deer_run_from_them():
     assert abs(off_w) < 0.1                                # without hunting the wolf only wanders (the deer grazes)
 
 
+def test_a_hungry_wolf_stalks_deer_a_fed_one_leaves_them():
+    """cfg.stalk_hungry_hp: without stalk_large, a wolf goes after large prey only once hunger has
+    worn it down; a wolf in good condition leaves the deer alone."""
+    import dataclasses
+    cfg = dataclasses.replace(CFG, stalk_large=False, animal_sleep=0.0)
+    s, land = _world()
+    r, c = next((r, c) for r, c in land if c + 3 < 20 and all((r, c + k) in land for k in range(4)))
+    far = next(p for p in land if max(abs(p[0] - r), abs(p[1] - c)) > 10)
+    s = s._replace(pos=jnp.asarray([far, far], jnp.int32),
+                   predators=put(s.predators, 0, "wolf", (r, c)), large=put(s.large, 0, "deer", (r, c + 2)))
+    top = float(E.species_params(cfg)["hp"][fa.IDX["wolf"]])
+
+    def drift(hp):
+        st = s._replace(predators=s.predators._replace(hp=s.predators.hp.at[0].set(hp)))
+        out = jax.vmap(lambda k: E.step(st._replace(key=k), jnp.full(2, E.REST, jnp.int32), cfg))(KEYS[:200])[0]
+        return (np.asarray(out.predators.pos[:, 0, 1]) - c).mean()
+    assert drift(0.5 * top) > 0.2                    # hungry: east, toward the deer
+    assert abs(drift(top)) < 0.1                      # fed: it only wanders
+
+
+def test_hunters_take_the_sleeping_and_the_weak():
+    """kill_asleep_mult, kill_weak_mult: a rabbit on a hunting wolf's cell dies far more often when
+    it is asleep or half-starved than when it is sound and awake."""
+    import dataclasses
+    cfg = dataclasses.replace(CFG, animal_sleep=0.0)
+    s, land = _world()
+    cell = land[0]
+    far = next(p for p in land if max(abs(p[0] - cell[0]), abs(p[1] - cell[1])) > 10)
+    s = s._replace(pos=jnp.asarray([far, far], jnp.int32), predators=put(s.predators, 0, "wolf", cell),
+                   small=put(s.small, 0, "rabbit", cell))
+
+    def killed(st, c=cfg):
+        out = jax.vmap(lambda k: E.step(st._replace(key=k), jnp.full(2, E.REST, jnp.int32), c))(KEYS)[0]
+        return 1.0 - np.asarray(out.small.alive[:, 0]).mean()
+    sound = killed(s)
+    weak = killed(s._replace(small=s.small._replace(hp=s.small.hp.at[0].multiply(0.25))))
+    asleep = killed(s._replace(t=jnp.int32(0)), dataclasses.replace(CFG, animal_sleep=1.0))   # midnight: a day animal sleeps
+    assert weak > 1.5 * sound and asleep > 1.5 * sound, (sound, weak, asleep)
+
+
 def test_a_wolf_prefers_a_deer_to_a_nearer_person():
     import dataclasses
     s, land = _world()
@@ -177,15 +217,15 @@ def test_a_wolf_prefers_a_deer_to_a_nearer_person():
 
 
 def _night_and_day():
-    ts = range(CFG.day_length)
-    night = next(t for t in ts if bool(E.is_night(jnp.int32(t), CFG)))
-    day = next(t for t in ts if not bool(E.is_night(jnp.int32(t), CFG)))
-    return night, day
+    """Midnight and noon: the middle of a day-active animal's sleep bout and of a nocturnal one's."""
+    return 0, CFG.day_length // 2
 
 
 def test_animals_sleep_in_their_resting_half_of_the_day():
-    """cfg.animal_sleep: a day-active deer sleeps at night and then notices only what is beside it, so
-    a person 2 cells off rarely makes it run; a nocturnal wolf sleeps by day and does not attack."""
+    """cfg.animal_sleep: a day-active deer sleeps a bout around midnight and then notices only what is
+    beside it, so a person 2 cells off rarely makes it run; a nocturnal wolf sleeps around noon and does
+    not attack. Sleep is one consolidated bout (the same animal is asleep all through it), and a blow
+    wakes it."""
     import dataclasses
     s, land = _world()
     r, c = next((r, c) for r, c in land if c + 3 < 20 and all((r, c + k) in land for k in range(4)))
@@ -208,3 +248,11 @@ def test_animals_sleep_in_their_resting_half_of_the_day():
         info = jax.vmap(lambda k: E.step(st._replace(key=k), jnp.full(2, E.REST, jnp.int32), cfg))(KEYS[:200])[3]
         return np.asarray(info.attacked_by_predator[:, 0]).mean()
     assert attacks(night) > 2 * attacks(day) + 0.02
+    # one bout, not a coin flip each tick: the deer is asleep every tick from 23:00 to 01:00
+    d = CFG.day_length
+    span = [t % d for t in range(-d // 24, d // 24 + 1)]
+    sp = E.species_params(CFG)
+    assert all(bool(E.animal_asleep(deer.large, sp, jnp.int32(t), CFG)[0]) for t in span)
+    assert not bool(E.animal_asleep(deer.large, sp, jnp.int32(d // 2), CFG)[0])          # awake at noon
+    struck = deer.large._replace(anger=deer.large.anger.at[0].set(5))
+    assert not bool(E.animal_asleep(struck, sp, jnp.int32(0), CFG)[0])                     # a blow wakes it

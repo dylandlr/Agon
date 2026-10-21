@@ -99,7 +99,7 @@ EVENT_PHASE = {
     "fed_fire": "social", "meat_to_heat": "social", "infected": "bodies", "recovered": "bodies",
     "burned": "bodies", "death": "deaths", "took_food": "gathering", "born": "deaths",
     "shock": "weather", "shock_end": "weather", "made": "fire", "preyed": "animals",
-    "hurt_by_prey": "strikes", "stung": "gathering",
+    "hurt_by_prey": "strikes", "stung": "gathering", "tamed": "animals",
 }
 
 
@@ -368,6 +368,10 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
             same = bool(np.asarray(info.same_sex_mated)[i]) if hasattr(info, "same_sex_mated") else False
             ev = emit(i, "mated", **({"same_sex": True} if same else {}))
             same_tick[(i, "mated")] = ev["id"]
+        if hasattr(info, "tamed") and int(np.asarray(info.tamed)[i]) >= 0:
+            # an animal came to be at ease with it (cfg.taming): fed by it, and done no harm
+            emit(i, "tamed", [(pid(A.get(i, {}).get("release_food")), "food it left")],
+                 animal=_fa.NAMES[int(np.asarray(info.tamed)[i])])
     for i in range(n):
         if bool(info.conceived[i]):
             dad = int(st.father[i]) if st is not None else -1

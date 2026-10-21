@@ -600,20 +600,58 @@ of its kind, all through mechanics rather than scripts:
 Predators also hunt animals: any takes small prey on its cell, and wolves, big cats, bears and
 crocodiles take large prey (never a mammoth), leaving a carcass for scavengers. With
 `animal_hunting` (on) they also stalk it: a hunting predator chases the nearest quarry it notices,
-a person or small prey (large prey only with `stalk_large`, off: with a handful of large-prey
-slots against six hunters, stalking empties the herds within two months, since a slot refills in
-about 42 days), and prey flee the nearest predator that could take them as they
+a person or small prey, and large prey once hunger has worn it below 75% of its hp
+(`stalk_hungry_hp`; always with `stalk_large`, off: with a handful of large-prey slots against six
+hunters, stalking at all times empties the herds within two months, since a slot refills in about 42
+days), and prey flee the nearest predator that could take them as they
 flee people (deer notice at 2 cells, a wolf at 5). Predators prefer their usual prey: choosing whom
 to chase, a person counts as 3 cells farther off (`prey_preference`), so a wolf with a deer in
-reach goes for the deer; a person beside it can still be attacked. Animals sleep (`animal_sleep` 0.6): each
-species rests in its own half of the day (day-active ones at night, nocturnal ones by day, the
-half-nocturnal big cat in both) and is asleep 60% of that time. A sleeper stays put, notices only
-what is beside it, dodges a fifth as well, and a sleeping predator neither hunts nor attacks: a
-deer is easiest to approach at night, a wolf safest to pass by day. Hibernation is separate. A slot's species is
+reach goes for the deer; a person beside it can still be attacked. Hunters take the easy ones: a
+kill is 3x as likely on prey caught asleep (`kill_asleep_mult`), 2x on a lame one
+(`kill_lame_mult`), and up to 3x on one worn down (`kill_weak_mult`, by the hp it has lost), so a
+herd loses its sleepers and its weak first. On the society30 world over 60 days (agents resting),
+herds hold at 75-85% of their slots and lose 3-6 animals to predators (0-1 before hungry stalking),
+and predators stay food-limited (about 6 deaths per 60 days among 6 slots). Animals sleep
+(`animal_sleep` 0.6) in one consolidated bout, not a coin flip each tick: a day-active animal
+sleeps a bout centred on midnight, a nocturnal one a bout centred on noon, the half-nocturnal big
+cat half of each; the bout is 60% of half a day (about 7 hours), and each slot's falls up to 1.8
+hours earlier or later than its neighbours' (`animal_sleep_jitter`), so a herd does not all drop off
+at once. A blow wakes it. A sleeper stays put, notices only what is beside it, dodges a fifth as
+well, and a sleeping predator neither hunts nor attacks: a deer is easiest to approach at night, a
+wolf safest to pass by day. Hibernation is separate. A slot's species is
 fixed, so each world keeps the same mix (slot 0 of each group is the classic rabbit, deer and
 wolf, which take the group's config values). 6 predators per 1,000 cells (was 1) so that each
 kind is present: on a 32 x 32 map, 2 wolves, 2 big cats, a bear and a crocodile. The scripted
 competent band still persists with them (viability.py: 2 of 2, 3 years).
+
+### Taming (emergent)
+
+No act tames an animal (`taming`, on). Each animal is more or less at ease with each person, a bond
+from 0 to 1, built by what happens between them:
+
+- It eats food that person dropped where it stands (a grazer at dropped plants, a hungry predator at
+  dropped meat): +0.2 a meal (`tame_feed`). Hungry predators not chasing anything nose toward meat
+  beside them (`scavenge_seek`), as wolves came to camps for scraps.
+- That person is beside it doing it no harm: +0.002 a tick (`tame_company`).
+- That person strikes at it: the bond with them loses 80% (`tame_harm`), and its bond with everyone
+  else 40%: it grows wary of people.
+- Apart, it fades by half in 20 days (`tame_half_life_days`). A new animal in a slot, or a newborn
+  in a person's slot, starts at 0.
+
+Every gain is scaled by how readily the species takes to people (fauna.py `TAMEABLE`): wolf 1,
+boar and fowl 0.7, horse 0.6, aurochs 0.5, rabbit 0.4, deer 0.25, tortoise 0.2, big cat 0.15, bear
+and mammoth 0.1, and fish, bats, snakes and crocodiles 0. A wolf fed four times is at ease.
+
+At ease (`tame_calm` 0.5), it neither flees nor chases nor attacks that person. A tame predator
+beside its person counts as one more defender against a wild one (and never joins a wild pack
+against them), so a tame wolf turns a lone person into a pair that a single wolf will not attack.
+Closer still (`tame_follow` 0.7), it follows them when calm. People see how at ease the animals in
+view are with them (a fauna channel: in how they behave, they do not shy, they come up), and the
+recorder logs a `tamed` event when an animal comes to be at ease with someone. In the player a tame
+animal has a small heart over it, and the cell inspector says whom it is at ease with.
+
+Whether anyone ever tames anything is up to them: they have to learn, by habit or by imagining it
+(the world model's ideas), that leaving food for an animal and not hurting it pays.
 
 Bugs are fields: mosquitoes (marsh and water edges in warm seasons, worse at night, driven off by
 smoke) carry fever; flies on meat and bodies speed rot and sickness; bees keep hives of honey in
@@ -719,8 +757,16 @@ tabs sits on the right: Inspect, Log, People, Language and World.
 - **Crowds.** People sharing a cell stand in formation slots: two side by side, three in a triangle,
   four in a square, up to a 3 × 3 block, with lying people in front. Past nine, the rest stand
   behind. The slots blend over the tick, so a crowd re-forms smoothly.
-  - Four or more in one cell get a count badge.
-  - Clicking and hovering pick the figure under the pointer, not the cell.
+  - Four or more in one cell get a count badge; clicking it opens that cell, with everyone in it.
+  - Clicking and hovering pick what is drawn under the pointer: a label or badge on top first, then
+    the figure whose painted pixels are there (the front one where figures overlap; in the pixel
+    look by each sprite's own alpha, in the painted look by drawing the candidates again at the
+    point), then, between figures, the nearest.
+  - Hovering never moves anything: labels are laid out as if no one were hovered, and the hovered
+    person's card (what they are doing and feeling, and what they said) is laid on top, under them.
+  - Clicking someone, their name, their portrait in the colonist bar or their row always opens them
+    (it no longer toggles them off when already open); the inspector's close button or Escape closes
+    it. The colonist bar also brings them into view.
   - The social web's lines run between drawn figures.
 - **Beds.** Where someone lay (asleep, down or dead), grass is pressed flat and yellowed in a
   body-shaped oval. In snow it is a blue-grey hollow, in sand a scuffed dip. The mark deepens over
@@ -1390,6 +1436,22 @@ world, the exporter, viability and the benchmark; 30 is the calibration).
   ecology needs re-checking (`scripts/viability.py --tick-minutes 1`). `--tick-minutes 2` halves the cost.
 
 ## Playback: pacing, animation and colony-sim UI
+
+- **Refresh.** At most one draw per animation frame. Between ticks people glide at as many frames as
+  a frame's cost allows (60 a second when cheap, never under 20; measured in `window.__agonPerf()`),
+  not a fixed 30; a hover only asks for a draw on the next frame. Measured headless (software
+  rendering, 1400 x 950, a 44-person year-28 recording, frames a second while playing):
+
+  | | before | after |
+  |---|---|---|
+  | pixel, whole map | 22-24 | 27-33 |
+  | pixel, zoomed in | 29-32 | 47-55 |
+  | painted, whole map | under 1 (0.6, paused) | 20-32 |
+  | painted, zoomed in | not measured (the page stopped responding) | 37-43 |
+
+  The painted look drew the dead through a canvas filter (a full-canvas pass per body: in a year of
+  many deaths the page all but froze); they are now drawn in grey directly. A lying body's size was
+  measured by re-rendering its body model every frame; it is now cached.
 
 - **Speeds.** With short ticks the speeds are RimWorld's: 1x = 1.44 game minutes a second (a day in
   16 min 40 s), 3x, 6x and 15x (keys 1-4, or the buttons on the map). With 30-minute ticks they are
