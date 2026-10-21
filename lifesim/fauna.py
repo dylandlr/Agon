@@ -96,6 +96,14 @@ TAMEABLE = {'rabbit': 0.4, 'fowl': 0.7, 'fish': 0.0, 'tortoise': 0.2, 'bat': 0.0
             'crocodile': 0.0}
 for s in SPECIES:
     s["tameable"] = TAMEABLE[s["name"]]
+# Room a body takes in a cell (EnvConfig.cell_room; a standing adult person is 1): small things next
+# to nothing, a deer about a person lying down, a mammoth a whole cell. Fish and bats (in water, in
+# the air) take none.
+ROOM = {'rabbit': 0.1, 'fowl': 0.1, 'fish': 0.0, 'tortoise': 0.15, 'bat': 0.0, 'deer': 1.2, 'aurochs': 2.5,
+        'boar': 1.0, 'horse': 2.0, 'mammoth': 4.0, 'wolf': 0.5, 'big cat': 0.8, 'bear': 2.0, 'snake': 0.1,
+        'crocodile': 1.5}
+for s in SPECIES:
+    s["room"] = ROOM[s["name"]]
 for s in SPECIES:                       # defaults
     for k, v in dict(herd=0.0, nocturnal=0.0, evade=0.0, counter=(0.0, 0.0), attack=(0.0, 0.0, 0.0, 0), pack=0,
                      ambush=0, provoked=0, hibernates=0, venom=0.0, takes_large=0, den=0, cave_only=0).items():
@@ -127,7 +135,7 @@ def table():
               "bat": "roosts in caves by day, flies at night; most blows miss; its guano is saltpetre", "crocodile": "lies in water: strikes whoever stands at the edge"}
     return [{"name": s["name"], "group": GROUPS[s["group"]], "size": s["look"][0], "fangs": s["look"][1],
              "colour": s["look"][2], "hp": s["hp"], "meat": s["meat"], "about": habits[s["name"]],
-             "lives": ", ".join(s["habitat"])} for s in SPECIES]
+             "lives": ", ".join(s["habitat"]), "room": s["room"]} for s in SPECIES]
 
 
 BUGS = {"mosquitoes": "marsh and water edges in warm seasons, worse at night; carry fever; smoke drives them off",

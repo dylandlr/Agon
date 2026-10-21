@@ -127,11 +127,14 @@ def init(key, terrain, cfg):
     return flora, patch
 
 
-def grow(flora, terrain, patch, season, growth_mult, burning, cfg):
-    """One tick of growth and loss. growth_mult (G, G): rain, drought and snow; burning (G, G) bool."""
+def grow(flora, terrain, patch, season, growth_mult, burning, cfg, bear=None):
+    """One tick of growth and loss. growth_mult (G, G): rain, drought and snow; burning (G, G) bool;
+    bear: None, or (G, G, 4) x each kind's capacity and growth (what the trees there bear: trees.crop)."""
     dt = float(cfg.tick_minutes) / 1440.0                            # days per tick
     K = capacity(terrain, patch, cfg)
     P = production(terrain, patch, cfg)
+    if bear is not None:
+        K, P = K * bear, P * bear
     s = SEASON_GROWTH[:, season]                                     # (4,)
     loss = SEASON_LOSS[:, season]
     Ks = jnp.maximum(K, 1e-9)

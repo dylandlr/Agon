@@ -100,6 +100,7 @@ EVENT_PHASE = {
     "burned": "bodies", "death": "deaths", "took_food": "gathering", "born": "deaths",
     "shock": "weather", "shock_end": "weather", "made": "fire", "preyed": "animals",
     "hurt_by_prey": "strikes", "stung": "gathering", "tamed": "animals",
+    "body_covered": "deaths", "body_burned": "deaths", "bones": "deaths",
 }
 
 
@@ -294,7 +295,9 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
                       [(pid(last(i, "starving")), "relief from hunger")] if A.get(i, {}).get("_starving") else [], **ate)
             same_tick[(i, "eat")] = ev["id"]
         elif code in (E.OUT_GATHER_LOST, E.OUT_STRIKE_ANIMAL, E.OUT_MOVE_FAILED):
-            ev = emit(i, E.OUTCOME_NAMES[code], **(tool(i) if code == E.OUT_STRIKE_ANIMAL else {}))
+            crowd = code == E.OUT_MOVE_FAILED and hasattr(info, "crowded") and bool(np.asarray(info.crowded)[i])
+            ev = emit(i, E.OUTCOME_NAMES[code], **(tool(i) if code == E.OUT_STRIKE_ANIMAL else {}),
+                      **({"crowded": True} if crowd else {}))
             same_tick[(i, E.OUTCOME_NAMES[code])] = ev["id"]
         for j in np.flatnonzero(gifts[:, i]):                   # took food that j had left
             emit(i, "took_food", [(pid(A.get(int(j), {}).get("release_food")), f"food #{int(j)} left")], giver=int(j))
@@ -468,6 +471,32 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
                 events.append({"id": f"{t}:world:made:{r}:{c}:{k}", "t": t, "agent": -1, "type": "made",
                                "product": mn.NAMES[int(k)], "pos": p, "parents": [parent] if parent else [],
                                "because": ["the fire's heat"] if parent else []})
+    # the dead: a body covered over (with who heaped earth or stone on it this tick), burned, or gone to bones
+    if st is not None and pv is not None and hasattr(st, "rot") and cfg is not None:
+        cov_now = np.asarray(E.body_cover(st, cfg)) >= cfg.bury_cover
+        cov_was = np.asarray(E.body_cover(pv, cfg)) >= cfg.bury_cover
+        acts_np = np.asarray(actions)
+        for j in np.flatnonzero(np.asarray(st.existed) & ~np.asarray(st.alive) & np.asarray(pv.existed) & ~np.asarray(pv.alive)):
+            p = [int(st.pos[j, 0]), int(st.pos[j, 1])]
+            death = mem.get(("death_of_life", int(j)))
+            parents = [death[0]] if death else []
+            if cov_now[j] and not cov_was[j] and float(st.rot[j]) < 1.0:
+                by = []
+                for i in range(n):
+                    a = int(acts_np[i]); tgt = None
+                    if E.PLACE_N <= a < E.PLACE_N + 8:
+                        d = np.asarray(E.MOVE_DELTAS)[a - E.PLACE_N + 1]; tgt = [int(st.pos[i, 0]) + int(d[0]), int(st.pos[i, 1]) + int(d[1])]
+                    elif a == E.RELEASE:
+                        tgt = [int(pv.pos[i, 0]), int(pv.pos[i, 1])]
+                    if tgt == p and bool(pv.alive[i]):
+                        by.append(i)
+                events.append({"id": f"{t}:world:body_covered:{j}", "t": t, "agent": -1, "type": "body_covered",
+                               "body": int(j), "by": by, "pos": p, "parents": parents, "because": ["the death"] if parents else []})
+            if float(pv.rot[j]) < 1.0 <= float(st.rot[j]):
+                burned = float(np.asarray(st.fire)[p[0], p[1]]) > 0 and not bool(st.below[j])
+                events.append({"id": f"{t}:world:{'body_burned' if burned else 'bones'}:{j}", "t": t, "agent": -1,
+                               "type": "body_burned" if burned else "bones", "body": int(j), "pos": p,
+                               "parents": parents, "because": ["the death"] if parents else []})
     # going underground and coming back up (cfg.underground)
     if hasattr(info, "delved"):
         for i in np.flatnonzero(np.asarray(info.delved)):

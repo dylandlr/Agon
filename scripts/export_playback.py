@@ -31,7 +31,7 @@ TEMPLATE = Path(__file__).with_name("playback_template.html")
 BODY_MODEL = Path(__file__).with_name("body_model.js")
 
 
-SLOW_FIELDS = ("plants", "flora", "clouds", "snow", "air_map", "bugs_map")
+SLOW_FIELDS = ("plants", "flora", "clouds", "snow", "air_map", "bugs_map", "tree_h")
 
 
 def thin_fields(data) -> None:
@@ -99,6 +99,7 @@ COND_NAMES = _cond.NAMES
 from lifesim import minerals as _min  # noqa: E402
 from lifesim import techtree as _tech  # noqa: E402
 from lifesim import fauna as _fa  # noqa: E402
+from lifesim import trees as _trees  # noqa: E402
 from lifesim import ecology as _eco  # noqa: E402
 from lifesim.policy import DECODE_NAMES, sample_outputs  # noqa: E402
 
@@ -263,6 +264,9 @@ def world_static(state, cfg):
             "bugs": _fa.BUGS,
             **({"caves": cave_static(state, cfg)} if cfg.underground else {}),
             "hives": [[int(r), int(c)] for r, c in zip(*np.nonzero(np.asarray(state.hive)))],
+            # trees: each forest cell's kind (lifesim/trees.py; "." none), hidden from the agents
+            "trees": _trees.table(),
+            "tree_kind": "".join("." if k < 0 else chr(97 + int(k)) for k in np.asarray(state.tree_kind).reshape(-1)),
             "mounds": [[int(r), int(c)] for r, c in zip(*np.nonzero(np.asarray(state.mound)))],
             "techtree": [{"id": b, "name": nm, "requires": req, "about": about} for b, nm, req, about, _ in _tech.NODES],
             "height_m": [round(float(v) * cfg.relief_m) for v in np.asarray(state.height).reshape(-1)],
@@ -274,6 +278,8 @@ def world_static(state, cfg):
                        "blow_luck": cfg.blow_luck, "glancing_prob": cfg.glancing_prob,
                        "practice_max": cfg.practice_max, "practice_half": cfg.practice_half,
                        "comfort_temp": cfg.comfort_temp, "air_min": AIR_MIN, "view_radius": cfg.view_radius,
+                       "fire_light": 2 if cfg.fire_heat_far > 0 else 1, "torch_light": cfg.torch_light,
+                       "cell_room": cfg.cell_room, "bury_cover": cfg.bury_cover, "rot_fresh": cfg.rot_fresh,
                        "tick_minutes": cfg.tick_minutes, "day_length": cfg.day_length, "stress_sources": list(E.STRESS_SOURCES),
                        "cell_km": cfg.cell_km, "relief_m": cfg.relief_m,
                        "ecology": bool(cfg.ecology), "fouling": bool(cfg.fouling), "flora_kinds": list(_eco.KINDS),
@@ -350,6 +356,10 @@ def build_frame(t, prev, state, a, info, evs, env_cfg, n_agents, minds=None):
     r_view = env_cfg.view_radius
     sf = np.asarray(info.stress_from)                 # stress gained this tick by source, x 1e4 (E.STRESS_SOURCES)
 
+    reach, dark_r = np.asarray(E.sight_radius(s, env_cfg)), np.asarray(E.dark_radius(s, env_cfg))
+    cover = np.asarray(E.body_cover(s, env_cfg)) if hasattr(s, "rot") else None
+    room = np.asarray(E.agent_room(s, env_cfg, bod["ideal_kg"])) if env_cfg.cell_room > 0 else None
+
     def agent_record(i):
         spoke = bool(msgs[i, 0] > 0)
         hearers = [j for j in range(n_agents) if j != i and s.alive[j] and
@@ -378,7 +388,12 @@ def build_frame(t, prev, state, a, info, evs, env_cfg, n_agents, minds=None):
                 "downed": bool(np.asarray(info.downed)[i]), "pain": round(float(E.felt_pain(s, env_cfg)[i]), 2), "heartache": round(float(s.heartache[i]), 2),
                 "carrying": {E.MAT_NAMES[m]: round(float(s.inv[i, m]), 1) for m in range(E.N_MAT) if s.inv[i, m] > 0.05},
                 "parts": [round(float(x), 2) for x in s.part_damage[i]],
-                "stats": {k: round(float(v[i]), 4) for k, v in brk.items()}}
+                "stats": {k: round(float(v[i]), 4) for k, v in brk.items()},
+                # field of view (the observation's rule): sight square; at night only within dark_r or fire-lit
+                "sight": int(reach[i]), "dark_r": int(dark_r[i]),
+                **({"room": round(float(room[i]), 2)} if room is not None else {}),
+                **({"rot": round(float(s.rot[i]), 2), "covered": bool(cover[i] >= env_cfg.bury_cover)}
+                   if cover is not None and not bool(s.alive[i]) and bool(s.existed[i]) else {})}
     nz = lambda grid, thr=0.3: [[int(r), int(c)] for r, c in np.argwhere(grid > thr)]
     # The social web, read from the agents' own memories (nothing here feeds back into the world):
     # kinship, bonds (touching and food left near each other) and blows struck each way.
@@ -424,6 +439,8 @@ def build_frame(t, prev, state, a, info, evs, env_cfg, n_agents, minds=None):
         **({"marks": [[int(r), int(c), *[int(v) for v in s.marks[r, c]], int(s.mark_kind[r, c])]
                       for r, c in zip(*np.nonzero(np.asarray(s.marks).any(-1)))]}
            if env_cfg.writing else {}),
+        # trees' height in 4 m steps (0-9), per cell (thinned: changes slowly)
+        "tree_h": "".join(str(min(9, int(round(float(v) / 4.0)))) for v in np.asarray(_trees.height(s.tree_kind, s.tree_age)).reshape(-1)),
         "plants": "".join(str(min(3, int(round(float(v) * (3.0 / env_cfg.plant_max if env_cfg.ecology else 1.0)))))
                           for v in np.asarray(E.forage_grid(s, env_cfg)).reshape(-1)),
         # with ecology: each cell's four kinds (greens, fruit, nuts, roots), how well each would gather

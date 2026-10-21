@@ -367,6 +367,7 @@ ol.events time { color: var(--accent); margin-right: 8px; }
       <label class="toggle"><input type="checkbox" id="web"> Social web</label>
       <label class="toggle"><input type="checkbox" id="fw-on"> Food web</label>
       <label class="toggle" title="Drop to 1&times; when someone dies, is attacked by a predator or is struck, or a child is born"><input type="checkbox" id="slow-danger" checked> Slow on danger</label>
+      <label class="toggle" title="What the selected person can see right now: outside the square is beyond their sight; inside, the dimmed cells are hidden from them (the dark, or underground beyond touch and torchlight)"><input type="checkbox" id="fov" checked> Field of view</label>
       <span class="note" id="slowed" aria-live="polite" hidden></span>
     </div>
     <p class="note" id="webnote" hidden></p>
@@ -512,7 +513,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   // The exporter keeps per-cell fields on every k-th frame and slowly changing lists as changes in
   // between (scripts/export_playback.py thin_fields); rebuild every frame here.
   for (let i = 1; i < F.length; i++) {
-    for (const key of ["plants", "flora", "clouds", "snow", "air_map", "bugs_map"]) if (F[i][key] === undefined && F[i - 1][key] !== undefined) F[i][key] = F[i - 1][key];
+    for (const key of ["plants", "flora", "clouds", "snow", "air_map", "bugs_map", "tree_h"]) if (F[i][key] === undefined && F[i - 1][key] !== undefined) F[i][key] = F[i - 1][key];
     for (const key of ["wood", "minerals", "honey", "grubs", "marks"]) {
       if (F[i][key] !== undefined || F[i - 1][key] === undefined) continue;
       const d = F[i][key + "~"];
@@ -899,6 +900,13 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       const fx = c * P + 8, fy = r * P + 15; g0.translate(fx, fy); g0.scale(FIG, FIG); g0.translate(-fx, -fy);   // scaled about the feet
       pixAgent(g0, a, info, L, c * P, r * P); g0.restore(); return; }
     cellDraw(g0, r, c, (g) => {
+      if (!a.alive && (a.rot ?? 0) >= 1) return;               // only bones left (drawn as bone)
+      if (!a.alive && a.covered) {                          // covered over: a low mound of earth and stone
+        if (g0 === ctx) hitBox(FIGS, g, map, 0.15, 0.5, 0.9, 0.8, { k, redo: REDO });
+        shadowAt(g, 0.52, 0.72, 0.36, 0.08); ell(g, 0.52, 0.66, 0.34, 0.12, "#8a7556");
+        for (const [x0, y0] of [[0.35, 0.63], [0.55, 0.6], [0.68, 0.67]]) ell(g, x0, y0, 0.05, 0.035, "#9a95a3", INK, 0.02);
+        return;
+      }
       if (!a.alive || a.asleep) {                            // lying down: the same pawn on its side
         shadowAt(g, 0.5, 0.64, 0.4, 0.1);
         if (a.alive) ell(g, 0.5, 0.74, 0.34, 0.07, null, id, 0.05);
@@ -906,7 +914,8 @@ const DATA = /*__PLAYBACK_DATA__*/null;
         g.save(); g.translate(0.62, 0.58); g.rotate(-Math.PI / 2); g.scale(0.9 * L.sy, 0.9 * L.sy);
         // the dead in grey, by colour, not a canvas filter (a filter costs a full-canvas pass per body:
         // in a year with many dead the painted map fell below one frame a second)
-        const grey = (c) => tone(mixHex(c, "#9a9a9a", 0.8), -0.15);
+        const stage = (a.rot ?? 0) < (DATA.consts?.rot_fresh ?? 0.1) ? 0 : a.rot < 0.5 ? 1 : 2;   // fresh, bloating, rotting
+        const grey = (c) => tone(mixHex(mixHex(c, "#9a9a9a", 0.8), ["#9a9a9a", "#6f8a5a", "#5a4630"][stage], 0.5), -0.15);
         pawn(g, a, a.alive ? L : { ...L, skin: grey(L.skin), hair: grey(L.hair), eye: grey(L.eye) }); g.restore();
         if (a.alive) { g.fillStyle = "#e8edff"; g.font = "bold 0.26px sans-serif"; g.fillText("z", 0.74, 0.22); g.font = "bold 0.18px sans-serif"; g.fillText("z", 0.88, 0.08); }
         else { line(g, [[0.15, 0.36], [0.27, 0.48]], INK, 0.035); line(g, [[0.27, 0.36], [0.15, 0.48]], INK, 0.035); }
@@ -1679,6 +1688,14 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
     b = { x0, y0, w: x1 - x0 + 1, h: y1 - y0 + 1 }; BOX.set(s, b); return b;
   }                                    // pixAgent draws only the see-through figure
+  const TINT = new WeakMap();
+  function tinted(s, col, al) {                     // a sprite washed with a colour where it is drawn (cached)
+    let m = TINT.get(s); if (!m) { m = new Map(); TINT.set(s, m); }
+    const key = col + al; let c = m.get(key); if (c) return c;
+    c = document.createElement("canvas"); c.width = s.width; c.height = s.height;
+    const q = c.getContext("2d"); q.drawImage(s, 0, 0); q.globalCompositeOperation = "source-atop"; q.globalAlpha = al;
+    q.fillStyle = col; q.fillRect(0, 0, c.width, c.height); m.set(key, c); return c;
+  }
   const XR = new WeakMap();
   function xraySprite(s, col) {
     let byCol = XR.get(s); if (!byCol) { byCol = new Map(); XR.set(s, byCol); }
@@ -1723,17 +1740,29 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       // on the ground, not over it: the body's underside on the ground line (where a standing
       // figure's feet are), a wide flat shadow, and grass and dirt over its lower edge
       const yb = y + 14.5;
+      if (dead && (a.rot ?? 0) >= 1) return;                            // only bones left (drawn as bone where it lay)
+      if (dead && a.covered) {                                           // covered over: a low mound of earth and stone
+        if (SHADOW_MODE === 1 || XRAY) return;
+        const mx = x + 1, my = yb - 6;
+        px(g, mx + 1, my + 1, INKP, 13, 5); px(g, mx + 2, my, INKP, 11, 1);
+        px(g, mx + 2, my + 1, "#7d6a50", 11, 4); px(g, mx + 3, my + 1, "#9a8466", 8, 1);
+        for (const [dx, dy] of [[3, 2], [7, 3], [10, 2], [5, 4]]) px(g, mx + dx, my + dy, "#8d8698", 2, 1);
+        if (g === ctx) hitBox(FIGS, g, map, mx, my, mx + 15, my + 6, { k });
+        return;
+      }
       if (XRAY) { blit(xraySprite(s, col), x + 8 - s.width / 4 - 1, yb - s.height / 2 - 1); return; }
       pixShadow(g, x + 8, y + 14, 18);
       if (SHADOW_MODE === 1) return;
-      blit(s, x + 8 - s.width / 4, yb - s.height / 2);
+      const stage = !dead ? 0 : (a.rot ?? 0) < (DATA.consts?.rot_fresh ?? 0.1) ? 0 : (a.rot < 0.5 ? 1 : 2);
+      blit(stage ? tinted(s, stage === 1 ? "#5f7a46" : "#4a3824", stage === 1 ? 0.35 : 0.55) : s, x + 8 - s.width / 4, yb - s.height / 2);
       if (g === ctx) hitBox(FIGS, g, map, x + 8 - s.width / 4, yb - s.height / 2, x + 8 + s.width / 4, yb, { k, spr: s });
       { const u = groundUnder(x, y); contactBand(g, u, x + 1, yb, 14, 0); grassInFront(g, u, x + 1, yb, 14, 0, 0, k); }
-      if (!dead && !reduced && a.asleep) { const o = Math.floor(flick / 2) % 3; px(g, x + 12, y + 1 - o, "#eef2ff", 3, 1); px(g, x + 13, y + 2 - o, "#eef2ff"); px(g, x + 12, y + 3 - o, "#eef2ff", 3, 1); }
-      if (!dead && a.downed && !a.asleep) {            // down: a pool of blood beside, a red cross above
+      if (stage) for (let q = 0; q < 2 + 2 * stage; q++)                 // flies over the rotting (they move tick to tick)
+        px(g, x + 2 + Math.floor(hash(k, q, POSE.i) * 13), y + 6 + Math.floor(hash(q, k, POSE.i + 7) * 6), "#141210", 1, 1);
+      if (!dead && a.asleep) { px(g, x + 12, y + 1, "#eef2ff", 3, 1); px(g, x + 13, y + 2, "#eef2ff"); px(g, x + 12, y + 3, "#eef2ff", 3, 1); }   // a still "z": asleep
+      if (!dead && a.downed && !a.asleep) {            // down: a pool of blood beside, a red cross above (still)
         px(g, x + 3, y + 13, "#7a1f22", 6, 1.5); px(g, x + 4, y + 12.5, "#a8302f", 3, 1);
-        const o = reduced ? 0 : Math.floor(flick / 2) % 2;
-        px(g, x + 6, y - 2 - o, INKP, 5, 5); px(g, x + 7, y - 1.5 - o, "#e04848", 3, 4); px(g, x + 6.5, y - 0.5 - o, "#e04848", 4, 2); }
+        px(g, x + 6, y - 2, INKP, 5, 5); px(g, x + 7, y - 1.5, "#e04848", 3, 4); px(g, x + 6.5, y - 0.5, "#e04848", 4, 2); }
       return;
     }
     const big = L.frame * (1 + 0.3 * L.fat) > 1.1, thin = L.frame < 0.92, child = L.sy < 0.85;
@@ -1773,7 +1802,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     if (face === 3) { const mk = "M|" + s.width + "|" + skey;
       let m = SPR.get(mk); if (!m) { m = mirror(s); SPR.set(mk, m); } s = m; }
     if (GRAB) { GRAB.s = s; return; }                // a portrait asked for this sprite
-    const bob = !reduced && !step && (k + Math.floor(flick / 3)) % 2 ? 0.5 : 0;      // breathing, ~0.7 Hz
+    const bob = 0;                                   // no idle motion: a figure moves only when the person acts
     if (XRAY) { blit(xraySprite(s, col), x + 8 - s.width / 4 - 1, y + 15 - s.height / 2 + bob - 1); return; }
     pixShadow(g, x + 8, y + 13, 11);
     if (SHADOW_MODE === 1) return;
@@ -1960,7 +1989,8 @@ const DATA = /*__PLAYBACK_DATA__*/null;
         rr = mv.pr + (r - mv.pr) * e; cc = mv.pc + (c - mv.pc) * e; step = Math.floor(fr * 4) % 4; }
     }
     if (LUNGE) { rr += LUNGE[0]; cc += LUNGE[1]; }                     // lunging at what it attacks
-    if (n === "bat" || n === "fish" || n === "snake") step = reduced ? 0 : (flick + k) % 4;
+    if (AOFF) { rr += AOFF[0]; cc += AOFF[1]; }                        // its slot among others in the cell
+    // no idle motion: a bat, fish or snake animates only while it moves (deliberate movement reads clearly)
     let s = smallSprite(n, col, step);
     if (face < 0) { const mk = "AM|" + n + "|" + step; let m = SPR.get(mk); if (!m) { m = mirror(s); SPR.set(mk, m); } s = m; }
     const moving = !!(mv && (mv.pr !== r || mv.pc !== c));
@@ -1981,8 +2011,8 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       g0.drawImage(s, x + 8 - w / 2, y + 14.5 - h + sink, w, h); g0.restore();
       g0.globalAlpha = 0.55; g0.fillStyle = PAL.water[1]; g0.fillRect(x + 8 - w / 2, y + 14.5 - h + sink + cut, w, h - cut);   // seen through water
       g0.restore();
-      const rip = (flick + k) % 4;                                            // the surface above it
-      if (!reduced && rip < 2) { px(g0, Math.round(x + 8 - w / 2 + rip), Math.round(y + 14.5 - h + sink), "#d8f4ee", Math.max(2, Math.round(w / 3)), 1); }
+      const rip = 0;                                                          // the surface above it (still)
+      if (rip >= 0) { px(g0, Math.round(x + 8 - w / 2 + rip), Math.round(y + 14.5 - h + sink), "#d8f4ee", Math.max(2, Math.round(w / 3)), 1); }
       return;
     }
     if (n !== "fish" && n !== "bat" && !st.perch) pixShadow(g0, x + 8, y + 13 - st.lift, Math.max(6, Math.round(w * 0.8)));
@@ -2172,10 +2202,12 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     if (r < 0 || r >= G || !hasTrees[r]) return null;
     treeUse.delete(r); treeUse.set(r, true);
     if (treeUse.size > 3 * VIEW_LEVELS[0] + 24) { const old = treeUse.keys().next().value; treeUse.delete(old); treeRows[old] = null; }
+    if (treeRows[r] && DATA.tree_kind && treeBuilt[r] !== undefined && treeBuilt[r] !== treeH().slice(r * G, (r + 1) * G)) {
+      treeRows[r].getContext("2d").clearRect(0, 0, treeRows[r].width, treeRows[r].height); buildTreeRow(r); }   // a stand grew
     if (!treeRows[r]) buildTreeRow(r);
     return treeRows[r];
   }
-  function buildTreeRow(r) {
+  function buildTreeRowPlain(r) {
   for (let c = 0; c < G; c++) {
     if (tAt(r, c) !== 1) continue;
     const pb = treeCtx(r);
@@ -2205,6 +2237,80 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     px(pb, tx + 1, ty + 1, "#c0d6c4");
     CROWN.set(r * G + c, [tx + 2, ty + 6, w - 4]);
   }
+  }
+  // Trees by kind and height (DATA.tree_kind: lifesim/trees.py, hidden from the agents; tree_h per frame in
+  // 4 m steps). Each kind its own shape and greens; a row is rebuilt only when a stand grows a step.
+  const TREE_KINDS = (DATA.trees || []).map((t) => t.name);
+  const treeH = () => (F[POSE.i] && F[POSE.i].tree_h) || (F[0] && F[0].tree_h) || "";
+  const treeBuilt = [];
+  function blob(pb, cx, cy, w, h, fill, light, dark) {     // a filled, inked oval of pixels
+    const a = w / 2, b = h / 2;
+    for (let y = -Math.floor(b); y <= Math.floor(b); y++) {
+      const hw = Math.round(a * Math.sqrt(Math.max(0, 1 - (y / b) ** 2)));
+      if (hw <= 0) continue;
+      px(pb, cx - hw, cy + y, INKP, 2 * hw + 1, 1);
+      if (hw > 1) px(pb, cx - hw + 1, cy + y, y > b * 0.35 ? dark : fill, 2 * hw - 1, 1);
+    }
+    px(pb, cx - Math.floor(a * 0.4), cy - Math.floor(b * 0.5), light, Math.max(1, Math.floor(a * 0.6)), Math.max(1, Math.floor(b * 0.3)));
+  }
+  function trunk(pb, x, ybot, len, col, w = 2) { px(pb, x - 1, ybot - len, INKP, w + 2, len); px(pb, x, ybot - len, col, w, len - 1); }
+  function buildTreeRow(r) {
+    const kinds = DATA.tree_kind, H = treeH();
+    if (!kinds || !TREE_KINDS.length) return buildTreeRowPlain(r);
+    treeBuilt[r] = H.slice(r * G, (r + 1) * G);
+    for (let c = 0; c < G; c++) {
+      if (tAt(r, c) !== 1) continue;
+      const pb = treeCtx(r), kind = TREE_KINDS[kinds.charCodeAt(r * G + c) - 97] || "oak";
+      const lvl = +(H[r * G + c] || 3), x = c * P, by = r * P + 14, h = (i) => hash(r, c, i + 900);
+      const cx = x + 8 + Math.floor(h(3) * 3) - 1, ht = Math.max(6, Math.min(44, 6 + Math.round(lvl * 4.2)));   // px tall
+      pb.fillStyle = "rgba(32, 48, 54, 0.22)"; pb.fillRect(cx - 5, by - 1, 11, 3);                   // shadow at its foot
+      if (kind === "spruce") {                                  // a dark cone in tiers
+        trunk(pb, cx, by, 3, "#5a3b28");
+        const tiers = Math.max(2, Math.round(ht / 6));
+        for (let q = 0; q < tiers; q++) {
+          const yb = by - 2 - q * Math.floor((ht - 2) / tiers), wq = Math.max(3, Math.round((tiers - q) / tiers * Math.min(14, 4 + ht / 3)));
+          for (let y = 0; y < 5; y++) { const hw = Math.max(1, Math.round(wq / 2 * (y + 1) / 5));
+            px(pb, cx - hw, yb - 5 + y, INKP, 2 * hw + 1, 1); if (hw > 1) px(pb, cx - hw + 1, yb - 5 + y, y < 2 ? "#3d6b58" : "#2a4d44", 2 * hw - 1, 1); }
+        }
+        px(pb, cx, by - ht - 1, INKP, 1, 2);
+        CROWN.set(r * G + c, [cx - 3, by - ht + 4, 6]);
+      } else if (kind === "pine") {                             // a tall bare trunk, a flat dark top
+        const cw = Math.min(14, 6 + Math.round(ht / 4)), chh = Math.max(4, Math.round(ht * 0.35));
+        trunk(pb, cx, by, ht - chh + 2, "#9a5a36");
+        blob(pb, cx, by - ht + chh / 2, cw, chh, "#3f6e52", "#6f9c78", "#2d5040");
+        CROWN.set(r * G + c, [cx - cw / 2 + 2, by - ht + 2, cw - 4]);
+      } else if (kind === "birch") {                            // a white barred trunk, a narrow light crown
+        const cw = Math.min(11, 5 + Math.round(ht / 5)), chh = Math.max(5, Math.round(ht * 0.65));
+        trunk(pb, cx, by, ht - chh + 4, "#e8e4d8");
+        for (let y = by - 2; y > by - ht + chh - 2; y -= 3) px(pb, cx, y, "#2a2626", 1 + (y % 2), 1);
+        blob(pb, cx, by - ht + chh / 2, cw, chh, "#8fb36a", "#c2d98e", "#6d9450");
+        CROWN.set(r * G + c, [cx - cw / 2 + 2, by - ht + 3, cw - 4]);
+      } else if (kind === "willow") {                           // a wide crown, strands hanging
+        const cw = Math.min(16, 7 + Math.round(ht / 3)), chh = Math.max(5, Math.round(ht * 0.55));
+        trunk(pb, cx, by, ht - chh + 3, "#6b5a40");
+        blob(pb, cx, by - ht + chh / 2, cw, chh, "#8fae6a", "#c4d68e", "#6f9050");
+        for (let q = -cw / 2 + 1; q < cw / 2; q += 2) px(pb, Math.round(cx + q), by - ht + chh - 1, "#7a9a58", 1, 2 + Math.floor(hash(r, c, q + 950) * 4));
+        CROWN.set(r * G + c, [cx - cw / 2 + 2, by - ht + 2, cw - 4]);
+      } else if (kind === "hazel") {                            // a bush of many stems
+        const cw = Math.min(14, 6 + Math.round(ht / 2)), chh = Math.max(5, Math.round(ht * 0.8));
+        for (const dx of [-2, 0, 2]) px(pb, cx + dx, by - 3, "#6b4a32", 1, 3);
+        blob(pb, cx, by - chh / 2 - 2, cw, chh, "#5f8f4f", "#9cc27a", "#44703c");
+        CROWN.set(r * G + c, [cx - cw / 2 + 2, by - chh, cw - 4]);
+      } else if (kind === "juniper") {                          // a small dark blue-green column
+        const cw = Math.max(5, Math.min(8, 3 + Math.round(ht / 4))), chh = Math.max(5, ht - 1);
+        blob(pb, cx, by - chh / 2 - 1, cw, chh, "#3b5a52", "#5f8078", "#2a4440");
+        CROWN.set(r * G + c, [cx - cw / 2 + 1, by - chh + 1, cw - 2]);
+      } else {                                                   // round crowns: oak, beech, wild apple, wild olive
+        const pal = { oak: ["#4f7d4a", "#86ad72", "#3a6038", "#6b4a32"], beech: ["#6a9a52", "#a6c97c", "#4f7c40", "#7d7468"],
+          "wild apple": ["#5e8f4f", "#98bf7a", "#46703e", "#6b4a32"], "wild olive": ["#7d9478", "#b3c2ab", "#62775f", "#8a8478"] }[kind]
+          || ["#4f7d4a", "#86ad72", "#3a6038", "#6b4a32"];
+        const cw = Math.min(16, 6 + Math.round(ht / 2.4)), chh = Math.max(5, Math.round(ht * 0.62));
+        trunk(pb, cx, by, ht - chh + 3, pal[3], kind === "wild olive" ? 3 : 2);
+        blob(pb, cx, by - ht + chh / 2, cw, chh, pal[0], pal[1], pal[2]);
+        if (kind === "wild apple" && lvl >= 2) for (let q = 0; q < 3; q++) px(pb, cx - 3 + Math.floor(hash(r, c, q + 960) * 7), by - ht + 2 + Math.floor(hash(c, r, q + 961) * (chh - 3)), "#c8402e");
+        CROWN.set(r * G + c, [cx - cw / 2 + 2, by - ht + 2, cw - 4]);
+      }
+    }
   }
   const pixGlyph = (sym, x, y) => { for (let i = 0; i < 9; i++) if ((GLYPH[sym] >> i) & 1) px(ctx, x + (i % 3), y + Math.floor(i / 3), "#1b2038"); };
   // the world's ambient frame (Mudborne): every tile animates together, once a second, in the order
@@ -2328,7 +2434,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   // attack on a person and a kill of an animal are matched to the nearest predator (a goring, to the
   // nearest large animal) within two cells.
   const ATK = new Map();
-  let LUNGE = null, TAME = false;   // TAME: the animal being drawn is at ease with someone (cfg.taming)
+  let LUNGE = null, TAME = false, AOFF = null;   // AOFF: the animal's slot in its cell (crowdOf)   // TAME: the animal being drawn is at ease with someone (cfg.taming)
   function attacksOf(i) {
     let out = ATK.get(i); if (out) return out;
     out = [];
@@ -2386,13 +2492,13 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     for (const [grp, dk] of [["small", 0], ["large", 4], ["pred", 9]]) {
       const raw = (F[POSE.i] && F[POSE.i][grp]) || [], mvs = animalMoves(POSE.i, grp);
       raw.forEach(([r, c, k, b, tm], j) => { if ((b || 0) === 0 && r >= VR0 - 2 && r < VR1 + 2 && c >= VC0 - 2 && c < VC1 + 2) {
-        const mv = mvs[j], lg = lungeFor(grp, j, r, c), tame = (tm ?? -1) >= 0;
-        if (!asScene) { LUNGE = lg; TAME = tame; pixAnimal(r, c, k ?? dk, ctx, mv); LUNGE = null; TAME = false; return; }
-        let rr = r;
+        const mv = mvs[j], lg = lungeFor(grp, j, r, c), tame = (tm ?? -1) >= 0, ao = (crowdOf(POSE.i).aoff[grp] || [])[j] || null;
+        if (!asScene) { LUNGE = lg; TAME = tame; AOFF = ao; pixAnimal(r, c, k ?? dk, ctx, mv); LUNGE = null; TAME = false; AOFF = null; return; }
+        let rr = r + (ao ? ao[0] : 0);
         if (mv && POSE.frac < 1 && !reduced && (mv.pr !== r || mv.pc !== c)) { const fr = POSE.frac, e = fr < 0.5 ? 2 * fr * fr : 1 - 2 * (1 - fr) * (1 - fr); rr = mv.pr + (r - mv.pr) * e; }
         const big = SIZE_OF(k ?? dk) >= 0.6;                                  // big enough to hide a person
-        scene.push([rr * P + 14.5, () => pixelScale(() => { LUNGE = lg; TAME = tame; pixAnimal(r, c, k ?? dk, ctx, mv); LUNGE = null; TAME = false; }),
-                    big ? { r: rr, on: (g) => pixAnimal(r, c, k ?? dk, g, mv) } : null]);
+        scene.push([rr * P + 14.5, () => pixelScale(() => { LUNGE = lg; TAME = tame; AOFF = ao; pixAnimal(r, c, k ?? dk, ctx, mv); LUNGE = null; TAME = false; AOFF = null; }),
+                    big ? { r: rr, on: (g) => { AOFF = ao; pixAnimal(r, c, k ?? dk, g, mv); AOFF = null; } } : null]);
       } });
     }
     if (asScene) {
@@ -2582,6 +2688,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     if (ART !== "pixel" && selected !== null && at[selected]) brackets(at[selected][0], at[selected][1]);
     f.events.map((id) => evById.get(id)).filter((e) => e && e.pos && e.below && /death|kill|predator/.test(e.type))
       .forEach((e) => { ctx.strokeStyle = e.type === "death" ? "#ff6b6b" : "#fff3c4"; ctx.lineWidth = 1; ctx.strokeRect(e.pos[1] * T + 0.5, e.pos[0] * T + 0.5, T - 1, T - 1); });
+    drawFov(f, true);
     drawLabels(f, i, frac, true);
   }
   function caveValue(f, r, c) {                       // the hover note on the cave map
@@ -3003,10 +3110,11 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       SHADOW_MODE = 2;
     }
     else {
-      const tameDraw = (r, c, k, j, tm) => { TAME = (tm ?? -1) >= 0; drawAnimal(r, c, k, j); TAME = false; };
-      (f.small || []).forEach(([r, c, k, , tm], j) => tameDraw(r, c, k ?? 0, j, tm));
-      (f.large || []).forEach(([r, c, k, , tm], j) => tameDraw(r, c, k ?? 4, j + 100, tm));
-      (f.pred || []).forEach(([r, c, k, , tm], j) => tameDraw(r, c, k ?? 9, j + 200, tm));
+      const ao = crowdOf(i).aoff, at_ = (grp, j) => (ao[grp] || [])[j] || [0, 0];
+      const tameDraw = (r, c, k, j, tm, o) => { TAME = (tm ?? -1) >= 0; drawAnimal(r + o[0], c + o[1], k, j); TAME = false; };
+      (f.small || []).forEach(([r, c, k, , tm], j) => tameDraw(r, c, k ?? 0, j, tm, at_("small", j)));
+      (f.large || []).forEach(([r, c, k, , tm], j) => tameDraw(r, c, k ?? 4, j + 100, tm, at_("large", j)));
+      (f.pred || []).forEach(([r, c, k, , tm], j) => tameDraw(r, c, k ?? 9, j + 200, tm, at_("pred", j)));
       f.fire.forEach(([r, c]) => drawFire(r, c, flick));
     }
     // agents (the inspector's own figure, in the current look), then what they say on top
@@ -3106,6 +3214,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     // highlight this tick's notable events
     f.events.map((id) => evById.get(id)).filter((e) => e && e.pos && !e.below && /death|kill|ignite|lightning|predator/.test(e.type))
       .forEach((e) => { ctx.strokeStyle = e.type === "death" ? "#ff6b6b" : "#fff3c4"; ctx.lineWidth = 1; ctx.strokeRect(e.pos[1] * T + 0.5, e.pos[0] * T + 0.5, T - 1, T - 1); });
+    drawFov(f0, false);
     drawLabels(f0, i, frac, false);
   }
 
@@ -3281,6 +3390,9 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       if (e.type === "shock_end") return `The ${e.kind} ended`;
       if (e.type === "made") return `Heat made ${e.product} at row ${e.pos[0]}, column ${e.pos[1]}`;
       if (e.type === "preyed") return `A ${e.predator} took a ${e.prey}`;
+      if (e.type === "body_covered") return `${mention(e.body)}'s body was covered over${e.by && e.by.length ? ` by ${e.by.map((k) => mention(k)).join(", ")}` : ""}`;
+      if (e.type === "body_burned") return `${mention(e.body)}'s body burned to bones`;
+      if (e.type === "bones") return `Only bones are left of ${mention(e.body)}`;
       return e.type === "weather" ? `Weather turned ${e.weather.replace("_", " ")}` : PHRASE[e.type] || e.type;
     }
     const who = (k) => mention(k);
@@ -3289,6 +3401,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     if (e.type === "predator_attack" && e.species) s = `${who(e.agent)} was attacked by a ${e.species}${e.venom ? " (venomous)" : ""}`;
     if (e.type === "hurt_by_prey") s = `${who(e.agent)} was hurt by the ${e.species} it struck`;
     if (e.type === "stung") s = `${who(e.agent)} was stung by bees`;
+    if (e.type === "move_failed" && e.crowded) s = `${who(e.agent)} could not step in: no room there`;
     if (e.type === "tamed") s = `A ${e.animal} came to be at ease with ${who(e.agent)}`;
     if (e.type === "eat" && e.what) s += ` ${e.what}`;
     if (e.type === "gather" && e.what) s += ` ${e.what}`;
@@ -3766,6 +3879,13 @@ const DATA = /*__PLAYBACK_DATA__*/null;
         return `${sayText(m.slice(2, 6))} ${kind >= 8 ? "drawn in ochre" : "cut"} ${on}`; })()],
       ["Waste", (f.foul || []).some(([rr, cc]) => rr === r && cc === c) ? `${(f.foul.find(([rr, cc]) => rr === r && cc === c) || [])[2]}/9: people have stayed here; drinking near it risks infection` : null],
       ["Meat", at(f.meat) ? "raw meat lying here" : null], ["Cooked meat", at(f.cooked) ? "cooked meat lying here" : null],
+      ["Trees", (() => {                                   // what the agents cannot know: the kind, its facts
+        const ch = DATA.tree_kind ? DATA.tree_kind[idx] : "."; if (!ch || ch === ".") return null;
+        const t = (DATA.trees || [])[ch.charCodeAt(0) - 97]; if (!t) return null;
+        const hm = f.tree_h ? 4 * +f.tree_h[idx] : null;
+        return { html: `${escT(t.name)} <i class="fine">${escT(t.latin)}</i>${hm !== null ? `, about ${hm} m (grows to ${t.max_h} m)` : ""}`
+          + ` <span class="fine">&middot; lives ~${t.life} years${t.fruit ? " &middot; fruit" : ""}${t.nuts ? " &middot; nuts" : ""} &middot; hidden from the agents: they see only height and leaf tone</span>` };
+      })()],
       ["Wood", at(f.wood) ? "dead wood" : null], ["Fire", at(f.fire) ? "burning" : null],
       ...(f.minerals || []).filter(([rr, cc]) => rr === r && cc === c).map(([, , k, v]) => {
         const m = (DATA.minerals || [])[k] || { name: `mineral ${k}`, about: "" };
@@ -4277,36 +4397,52 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     }
     return m;
   }
-  // ---------- crowds: people sharing a cell stand apart in it, in formation slots (one cell is
-  // ~cell_km across, room for many, but only so many figures read at this size): 1 in the middle, 2
-  // side by side, 3 a triangle, 4 a square, 5-6 two rows of three, 7-9 a 3 x 3 block. Past nine the
-  // rest stand behind the block (a count badge says how many are there). Lying people take a wider
-  // slot. Slots are kept per frame and blended over the tick, so a crowd re-forms smoothly.
-  const FORM = [[], [[0, 0]], [[0, -0.27], [0, 0.27]], [[-0.13, -0.27], [-0.13, 0.27], [0.17, 0]],
-    [[-0.15, -0.25], [-0.15, 0.25], [0.15, -0.25], [0.15, 0.25]],
-    [[-0.16, -0.32], [-0.16, 0], [-0.16, 0.32], [0.16, -0.16], [0.16, 0.16]],
-    [[-0.16, -0.32], [-0.16, 0], [-0.16, 0.32], [0.16, -0.32], [0.16, 0], [0.16, 0.32]]];
-  const BLOCK = []; for (const dr of [-0.22, 0, 0.22]) for (const dc of [-0.33, 0, 0.33]) BLOCK.push([dr, dc]);
-  const gridOf = (n) => { const m = Math.ceil(Math.sqrt(n)), rows = Math.ceil(n / m), out = [];
-    for (let j = 0; j < n; j++) { const rr = Math.floor(j / m), cc = j % m, inRow = Math.min(m, n - rr * m);
-      out.push([rows > 1 ? -0.34 + 0.68 * rr / (rows - 1) : 0, inRow > 1 ? -0.38 + 0.76 * cc / (inRow - 1) : 0]); }
-    return out; };
-  const formation = (n) => (n < FORM.length ? FORM[n] : gridOf(n));   // past six: rows across the cell
-  const SLOTS = new Map();                                  // frame -> [[dr, dc] per agent], and crowd sizes
+  // ---------- room in a cell (EnvConfig.cell_room, 4): each cell has a 2 x 2 of slots, one slot per unit of
+  // room, so what is drawn is what the world counts. A standing adult takes a slot; a child or a small
+  // animal half of one; someone lying down (asleep, downed, a body) or a big animal a whole row of two;
+  // fish and bats none (in water, in the air). Lying ones take the front row, the rest fill from the back.
+  // One alone stands in the middle. More than fits (an old recording, made before room) stand behind.
+  const ROW = [-0.2, 0.2], COL = [-0.24, 0.24];
+  const units = (room, lying) => (lying || room >= 1.5 ? 2 : room >= 0.55 ? 1 : room >= 0.05 ? 0.5 : 0);
+  const SLOTS = new Map();                                  // frame -> {off (agents), aoff (animals), size, groups}
   function crowdOf(i) {
     let s = SLOTS.get(i);
     if (s) return s;
-    const f = F[i], off = f.agents.map(() => [0, 0]), size = f.agents.map(() => 1), groups = new Map();
-    f.agents.forEach((a, k) => { if (a.existed === false) return;
-      const key = `${a.r},${a.c},${a.below ? 1 : 0}`; if (!groups.has(key)) groups.set(key, []); groups.get(key).push(k); });
-    groups.forEach((ks) => {
-      if (ks.length < 2) return;
-      const lying = (k) => { const a = f.agents[k]; return !a.alive || a.asleep || a.downed; };
-      ks.sort((p, q) => (lying(p) - lying(q)) || p - q);     // standing first (the back rows), lying in front
-      const slots = formation(ks.length);
-      ks.forEach((k, j) => { off[k] = slots[j].slice(); if (lying(k)) off[k][1] *= 0.6; size[k] = ks.length; });
+    const f = F[i], off = f.agents.map(() => [0, 0]), size = f.agents.map(() => 1), groups = new Map(), cells = new Map();
+    const aoff = { small: [], large: [], pred: [] };
+    const add = (r, c, b, item) => { const key = `${r},${c},${b ? 1 : 0}`; if (!cells.has(key)) cells.set(key, []); cells.get(key).push(item); };
+    f.agents.forEach((a, k) => {
+      if (a.existed === false || (!a.alive && a.rot >= 1)) return;          // bones: drawn as bone, no room
+      const lying = !a.alive || a.asleep || a.downed, room = a.room ?? (lying ? 2 : 1);
+      add(a.r, a.c, a.below, { k, u: a.covered ? 1 : units(room / (lying ? 2 : 1), lying), lying: lying && !a.covered });
+      const key = `${a.r},${a.c},${a.below ? 1 : 0}`; if (!groups.has(key)) groups.set(key, []); groups.get(key).push(k);
     });
-    s = { off, size, groups };
+    for (const grp of ["small", "large", "pred"]) (f[grp] || []).forEach(([r, c, sp, b], j) => {
+      const u = units(((DATA.fauna || [])[sp] || {}).room ?? 0.5, false);
+      aoff[grp][j] = [0, 0];
+      if (u > 0) add(r, c, b, { grp, j, u, lying: u >= 2 });
+    });
+    cells.forEach((items) => {
+      if (items.length < 2) return;                                         // one alone: the middle
+      const free = [[0, 0], [0, 1], [1, 0], [1, 1]].map(([rr, cc]) => ({ rr, cc, left: 1 }));
+      const place = (it, x) => { if (it.k !== undefined) { off[it.k] = x; size[it.k] = items.length; } else aoff[it.grp][it.j] = x; };
+      const rows = items.filter((it) => it.u >= 2), rest = items.filter((it) => it.u < 2).sort((p, q) => q.u - p.u);
+      let behind = 0;
+      rows.forEach((it) => {                                                // a whole row: the front one first
+        const row = [1, 0].find((rr) => free.filter((s2) => s2.rr === rr).every((s2) => s2.left === 1));
+        if (row === undefined) { place(it, [-0.42, -0.3 + 0.2 * (behind++ % 4)]); return; }
+        free.filter((s2) => s2.rr === row).forEach((s2) => { s2.left = 0; });
+        place(it, [ROW[row], 0]);
+      });
+      rest.forEach((it) => {
+        const s2 = free.find((q) => q.left >= it.u - 1e-6);
+        if (!s2) { place(it, [-0.42, -0.3 + 0.2 * (behind++ % 4)]); return; }
+        const half = it.u < 1 ? (s2.left === 1 ? -0.1 : 0.1) : 0;           // two halves share a slot
+        s2.left -= it.u;
+        place(it, [ROW[s2.rr], COL[s2.cc] + half]);
+      });
+    });
+    s = { off, aoff, size, groups };
     SLOTS.set(i, s); if (SLOTS.size > 400) SLOTS.delete(SLOTS.keys().next().value);
     return s;
   }
@@ -4398,6 +4534,33 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   const lblCtx = lblCv.getContext("2d");
   // Hovering must not move anything under the pointer: every label is placed as if no one were
   // hovered, and the hovered person's card is laid on top afterwards (hoverCard), touching nothing.
+  // The selected person's field of view, by the observation's own rule (env.observe): a square of
+  // their sight (shorter when sleepy, 1 asleep); at night within it only what is near (dark_r) or
+  // fire-lit; underground only what is beside them or within a burning branch's light.
+  function drawFov(f, below) {
+    const fov = $("fov"); if (!fov || !fov.checked || selected === null) return;
+    const a = f.agents[selected];
+    if (!a || a.existed === false || !a.alive || !!a.below !== below) return;
+    const C = DATA.consts || {}, R = a.sight ?? C.view_radius ?? 5, cheb = (r, c, p, q) => Math.max(Math.abs(r - p), Math.abs(c - q));
+    const fires = below ? [] : (f.fire || []), FL = C.fire_light ?? 2, TL = C.torch_light ?? 2;
+    const torches = below ? f.agents.filter((b) => b.alive && b.below && b.torch) : [];
+    const seen = (r, c) => {
+      const d = cheb(r, c, a.r, a.c);
+      if (below) return d <= 1 || torches.some((b) => cheb(r, c, b.r, b.c) <= TL);
+      if (!f.night) return true;
+      return d <= (a.dark_r ?? 2) || fires.some(([fr, fc]) => cheb(r, c, fr, fc) <= FL);
+    };
+    const r0 = a.r - R, c0 = a.c - R, side = 2 * R + 1;
+    ctx.save();
+    ctx.fillStyle = "rgba(8, 10, 18, 0.42)";                      // beyond their sight
+    ctx.beginPath(); ctx.rect(VC0 * T, VR0 * T, (VC1 - VC0) * T, (VR1 - VR0) * T); ctx.rect(c0 * T, r0 * T, side * T, side * T);
+    ctx.fill("evenodd");
+    ctx.fillStyle = "rgba(8, 10, 18, 0.3)";                       // within reach, but hidden from them now
+    for (let r = r0; r <= a.r + R; r++) for (let c = c0; c <= a.c + R; c++) if (!seen(r, c)) ctx.fillRect(c * T, r * T, T, T);
+    ctx.strokeStyle = "rgba(255, 236, 170, 0.75)"; ctx.lineWidth = 1.5 / RES; ctx.setLineDash([4 / RES, 3 / RES]);
+    ctx.strokeRect(c0 * T, r0 * T, side * T, side * T);
+    ctx.restore();
+  }
   function drawLabels(f, i, frac, below) {
     const HOV = hovered; hovered = null;
     try { drawLabelsPlaced(f, i, frac, below); } finally { hovered = HOV; }

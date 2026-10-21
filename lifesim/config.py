@@ -559,6 +559,23 @@ class EnvConfig:
     prey_preference: float = 3.0       # a predator choosing whom to chase counts a person this many cells farther
     stalk_large: bool = False          # predators also stalk large prey (8 slots against 6 hunters: herds collapse)
     hunt_kill_scale: float = 0.3       # with animal_hunting: x predator kill chances per meeting (more meetings)
+    # Room: each cell holds this much body (a standing adult of the reference build is 1, scaled by
+    # lean mass^(2/3); lying down twice that; animals by species, fauna.ROOM). A step into a cell without
+    # room fails, so a band must spread over neighbouring cells and a crowd is a shape, not a pile.
+    # Seen: how full each cell in view is. 0: no limit.
+    cell_room: float = 4.0
+    # The dead: what one carries falls where one dies, and the body decomposes (faster when warm, all
+    # but stopped when frozen), giving off rot while it lasts: flies, foul ground and water, and
+    # sickness to those beside it. Earth or stone heaped on it (bury_cover units of loose stone, clay,
+    # limestone, basalt, gypsum or quicklime on its cell) or fire ends that. No act buries the dead.
+    decay_days: float = 20.0           # days at 20 C from death to bones (half as long per 10 C warmer)
+    rot_fresh: float = 0.1             # decay below this: fresh, gives off nothing yet (2 days at 20 C)
+    rot_ramp: float = 0.15             # then rising to full rot over this much more
+    rot_frozen: float = 0.05           # x decay at or below 0 C
+    bury_cover: float = 3.0            # loose earth or stone on a body's cell that covers it
+    corpse_infection: float = 0.004    # chance a tick of catching sickness from a fully rotting body beside one
+    corpse_foul: float = 5.0           # foul a rotting body adds a day (one person's refuse is 1)
+    body_bones: float = 2.0            # bone left where a body has rotted or burned away
     # Taming, emergent: no act tames. Each animal is more or less at ease with each person (a bond,
     # 0..1), built when it eats food that person dropped and, slowly, from that person's harmless
     # company; a blow from them (and, less, from anyone) breaks it; it fades apart. At ease
@@ -785,7 +802,7 @@ _PER_TICK_AMOUNT = (       # added or lost per tick: x k
     "heartache_stress", "tame_feed", "tame_company")
 _PER_TICK_CHANCE = (       # a chance each tick: 1 - (1 - p) ** k
     "contact_infection", "mosquito_infection", "spread_prob", "lightning_prob", "predator_prey_kill_prob",
-    "predator_large_kill_prob", "small_prey_respawn", "large_prey_respawn", "predator_respawn",
+    "predator_large_kill_prob", "corpse_infection", "small_prey_respawn", "large_prey_respawn", "predator_respawn",
     "predator_attack_prob", "prey_bolt_prob", "den_prob", "front_prob", "wind_change_prob", "conception_prob",
     "meat_spoil_ground", "meat_spoil_inventory", "cooked_spoil_ground", "cooked_spoil_inventory", "char_rate",
     "thermal_rate", "fall_prob")

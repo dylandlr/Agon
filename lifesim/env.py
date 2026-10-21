@@ -22,6 +22,7 @@ from . import minerals as mn
 from . import fauna as fa
 from . import genotype as gt
 from . import ecology as eco
+from . import trees as TREES
 from .config import EnvConfig
 
 # ---------------------------------------------------------------- terrain
@@ -91,7 +92,7 @@ MIN_ROT = jnp.array(mn.ROT)                                      # (M,) share lo
 MIN_SHARP = jnp.array(mn.SHARPNESS)
 N_MINERAL_CHANNELS = 5            # per cell: minerals present, and their colour (r, g, b) and lustre
 N_FAUNA_CHANNELS = 8              # per cell: animals' size, fangs, colour; mosquitoes, flies, hive, mound; at ease with me
-N_FLORA_CHANNELS = 6              # per cell: how well greens, fruit, nuts, roots would gather here; waste; an inscription
+N_FLORA_CHANNELS = 8              # per cell: how well greens, fruit, nuts, roots would gather here; waste; an inscription; trees' height, leaf tone
 assert PLACE_N == SELECT_0 + N_MAT, "one select action per material"
 _DIRS = ["n", "ne", "e", "se", "s", "sw", "w", "nw"]
 ACTION_NAMES = (["rest"] + [f"move_{d}" for d in _DIRS] + ["grasp", "eat", "drink"]
@@ -305,6 +306,7 @@ class State(NamedTuple):
     held_by: jnp.ndarray        # (N,) int32 who got hold of one last tick (-1: free; EnvConfig.techniques)
     hold_grip: jnp.ndarray      # (N,) that hold's strength: the chance it pins one this tick
     off_balance: jnp.ndarray    # (N,) int32 ticks left staggered or on the ground: cannot step or strike
+    rot: jnp.ndarray            # (N,) how far a dead body has decomposed (0 fresh .. 1 bones; EnvConfig.decay_days)
     birth_age: jnp.ndarray      # (N,) int32 biological age in ticks when the run began
     genotype: gt.Genotype
     appearance: jnp.ndarray     # (N, 3) heritable look; lets kin resemble each other
@@ -321,6 +323,8 @@ class State(NamedTuple):
     # plant ecology and camp fouling (cfg.ecology, cfg.fouling; zeros otherwise)
     flora: jnp.ndarray          # (G, G, 4) standing crop of greens, fruit, nuts, roots, in food units
     flora_patch: jnp.ndarray    # (G, G, 4) how rich each patch is in each kind (fixed for the world)
+    tree_kind: jnp.ndarray      # (G, G) int32 the kind of tree in a forest cell (lifesim/trees.py; -1 none): unseen
+    tree_age: jnp.ndarray       # (G, G) its age in (calendar) years: unseen; its height and leaves are seen
     foul: jnp.ndarray           # (G, G) waste where people have stayed, person-days per km^2
     urge: jnp.ndarray           # (N,) 0..1 need to relieve oneself (cfg.excretion)
     marks: jnp.ndarray          # (G, G, MSG_LEN) int32: what is written on each cell (all 0: nothing)
@@ -415,6 +419,7 @@ class StepInfo(NamedTuple):
     grabbed: jnp.ndarray               # (N,) bool: someone got hold of it this tick
     pinned: jnp.ndarray                # (N,) bool: a hold from last tick kept it from stepping
     same_sex_mated: jnp.ndarray        # (N,) bool: intimacy with a partner of its own sex (no conception)
+    crowded: jnp.ndarray               # (N,) bool: a step failed for want of room in the cell (EnvConfig.cell_room)
     tamed: jnp.ndarray                 # (N,) int32: species of an animal that came to be at ease with it this tick, or -1
     soiled: jnp.ndarray                # (N,) bool: could not hold it any longer
 
@@ -811,7 +816,7 @@ def species_params(cfg: EnvConfig) -> dict:
          "atk_p": col("attack", 0), "atk_dmg": col("attack", 1), "atk_inj": col("attack", 2),
          "atk_rest": col("attack", 3), "pack": col("pack"), "ambush": col("ambush"), "provoked": col("provoked"),
          "hibernates": col("hibernates"), "venom": col("venom"), "takes_large": col("takes_large"),
-         "den": col("den"), "tameable": col("tameable"), "hide": col("hide"), "bone": col("bone"), "feather": col("feather"),
+         "den": col("den"), "tameable": col("tameable"), "room": col("room"), "hide": col("hide"), "bone": col("bone"), "feather": col("feather"),
          "size": col("look", 0), "fangs": col("look", 1), "colour": col("look", 2),
          "habitat": jnp.array(fa.HABITAT, bool),
          "grazer": jnp.array([s["name"] in GRAZERS for s in fa.SPECIES])}
@@ -967,6 +972,23 @@ def climate_offset(t, drift, cfg: EnvConfig):
     return cfg.climate_amp * jnp.sin(2 * jnp.pi * t / cycle) + drift
 
 
+def mean_temperature(terrain, height, cfg: EnvConfig):
+    """(G, G) each cell's mean temperature over the year (fair weather, the daily mean hour)."""
+    g = terrain.shape[0]
+    rows = jnp.broadcast_to(jnp.arange(g, dtype=jnp.float32)[:, None], (g, g)).reshape(-1)
+    hour = (cfg.warmest_hour + 6.0) % 24.0                       # where the daily swing averages out
+    days = jnp.array((0,) + tuple(cfg.season_starts)) + 1
+    temps = [ambient_temperature(jnp.int32(int(d) * cfg.day_length + int(hour / 24.0 * cfg.day_length)), CLEAR,
+                                 terrain.reshape(-1), cfg, height.reshape(-1), rows) for d in days]
+    return (sum(temps) / len(temps)).reshape(g, g)
+
+
+def wetness(terrain):
+    """(G, G) 0..1: share of a cell's neighbourhood (3 x 3) that is water or marsh."""
+    wet = ((terrain == WATER) | (terrain == MARSH)).astype(jnp.float32)
+    return jax.lax.reduce_window(wet, 0.0, jax.lax.add, (3, 3), (1, 1), "SAME") / 9.0
+
+
 def ambient_temperature(t, weather, terrain_at, cfg: EnvConfig, height_at=0.0, row_at=None, climate=0.0):
     """Degrees C at given cells. Seasons, day/night, weather, altitude, latitude, biome, climate,
     forest and cave buffering."""
@@ -1096,9 +1118,11 @@ def reset(key: jax.Array, cfg: EnvConfig, genotype: gt.Genotype | None = None,
         appearance = jax.random.uniform(ks[9], (n, N_APPEARANCE))
     visited = jnp.zeros((n, g, g), bool).at[jnp.arange(n), pos[:, 0], pos[:, 1]].set(True)
     founders = jnp.arange(n) < (cfg.n_founders if cfg.n_founders > 0 else n)
+    tree_kind, tree_age = TREES.plant(jax.random.fold_in(key, 131), terrain == FOREST,
+                                   mean_temperature(terrain, height, cfg), wetness(terrain))
     return State(
         key=ks[8], t=jnp.int32(0), terrain=terrain, height=height, cliff=generate_cliffs(height), plants=plants,
-        flora=flora, flora_patch=flora_patch, foul=jnp.zeros((g, g)), urge=jnp.zeros(n),
+        flora=flora, flora_patch=flora_patch, tree_kind=tree_kind, tree_age=tree_age, foul=jnp.zeros((g, g)), urge=jnp.zeros(n),
         marks=jnp.zeros((g, g, MSG_LEN), jnp.int32), mark_time=jnp.full((g, g), -1, jnp.int32),
         mark_kind=jnp.zeros((g, g), jnp.int32),
         meat=jnp.zeros((g, g)), cooked=jnp.zeros((g, g)),
@@ -1127,6 +1151,7 @@ def reset(key: jax.Array, cfg: EnvConfig, genotype: gt.Genotype | None = None,
         impression=jnp.full((n, n), 2.5 * cfg.wellbeing_scale),   # founders know each other, all looking well
         scars=jnp.zeros(n), lasting_injury=jnp.zeros(n), pain=jnp.zeros(n), heartache=jnp.zeros(n), part_damage=jnp.zeros((n, N_PARTS)),
         held_by=jnp.full(n, -1, jnp.int32), hold_grip=jnp.zeros(n), off_balance=jnp.zeros(n, jnp.int32),
+        rot=jnp.zeros(n),
         sex=sex, existed=founders, gestation=jnp.zeros(n, jnp.int32), courting=jnp.zeros(n, jnp.int32),
         father=jnp.full(n, -1, jnp.int32), mother=jnp.full(n, -1, jnp.int32),
         relatedness=jnp.eye(n), fetus_r=jnp.zeros((n, n)), father_geno=geno, father_look=appearance,
@@ -1534,6 +1559,8 @@ def observe(state: State, cfg: EnvConfig) -> jnp.ndarray:
         return jnp.where(inb, grid[rc, cc], 0.0)
 
     agents_grid = _occupancy(state.pos, state.alive & ~state.below, g)     # those above (below: own window)
+    if cfg.cell_room > 0:                             # how full each cell is (room for one more step in?)
+        agents_grid = room_used(state, cfg, body(state, cfg)["ideal_kg"])[:g] / cfg.cell_room
     bod = body(state, cfg)
     showing = (state.gestation > 0.5 * cfg.gestation_years * cfg.ticks_per_bio_year).astype(jnp.float32)
     physique = jnp.stack([bod["height_cm"] / 200.0, state.weight / 100.0,
@@ -1555,7 +1582,8 @@ def observe(state: State, cfg: EnvConfig) -> jnp.ndarray:
              take(jnp.minimum(state.stones, 1.0))[..., None],
              take((state.fire > 0).astype(jnp.float32))[..., None],
              take(heat / cfg.fire_heat + (spring_warmth(state, cfg) / cfg.fire_heat if cfg.underground else 0.0))[..., None],
-             take(_occupancy(state.pos, state.existed & ~state.alive & ~state.below, g))[..., None],   # bodies of the dead
+             take(jnp.zeros((g, g)).at[state.pos[:, 0], state.pos[:, 1]].max(
+                 jnp.where(state.below, 0.0, body_look(state, cfg))))[..., None],   # bodies of the dead, by how they look
              take(state.cliff)[..., None],                                    # cliff height (terrain shape)
              jnp.where(inb, state.height[rc, cc] - state.height[state.pos[:, 0], state.pos[:, 1]][:, None, None],
                        0.0)[..., None],                                       # ground height relative to own
@@ -1575,7 +1603,7 @@ def observe(state: State, cfg: EnvConfig) -> jnp.ndarray:
     night_now = is_night(state.t, cfg)
     season_now = season_of(state.t, cfg)
     bugs = jnp.stack([mosquito_density(state, cfg, season_now, night_now, heat),
-                      fly_density(state.meat, _occupancy(state.pos, state.existed & ~state.alive & ~state.below, g).astype(jnp.float32), heat),
+                      fly_density(state.meat, rotting_grid(state, cfg), heat),
                       jnp.minimum(state.honey, 1.0) * state.hive, jnp.minimum(state.grubs, 1.0) * state.mound], -1)
     # How at ease with oneself the animals here are (cfg.taming): seen in how they behave around one
     # (they do not shy, they come up), on one's own layer
@@ -1590,7 +1618,8 @@ def observe(state: State, cfg: EnvConfig) -> jnp.ndarray:
     # Plants by kind (how well each would gather here) and waste, seen and smelled
     flora_look = jnp.concatenate([eco.quality(state.flora, cfg),
                                   (1.0 - jnp.exp(-state.foul / cfg.foul_ref))[..., None],
-                                  jnp.any(state.marks > 0, axis=-1).astype(jnp.float32)[..., None]], -1)
+                                  jnp.any(state.marks > 0, axis=-1).astype(jnp.float32)[..., None],
+                                  TREES.looks(state.tree_kind, state.tree_age)], -1)   # a stand's height and leaves, not its kind
     chans.append(jnp.where(inb[..., None], flora_look[rc, cc], 0.0))
     # Social features: each observer sees, in the cell of every other visible agent,
     # its own memory of that agent, the agent's appearance and last token.
@@ -1622,7 +1651,7 @@ def observe(state: State, cfg: EnvConfig) -> jnp.ndarray:
         # within a burning branch's light. Plants, animals, weather and fire above do not show.
         zero = jnp.zeros((n, v, v, 1))
         occ_deep = _occupancy(state.pos, state.alive & state.below, g)
-        dead_deep = _occupancy(state.pos, state.existed & ~state.alive & state.below, g)
+        dead_deep = jnp.zeros((g, g)).at[state.pos[:, 0], state.pos[:, 1]].max(jnp.where(state.below, body_look(state, cfg), 0.0))
         amt_d = state.cave_floor[..., MIN0:].sum(-1)
         w_d = state.cave_floor[..., MIN0:] / jnp.maximum(amt_d, 1e-6)[..., None]
         looks_d = jnp.concatenate([jnp.minimum(amt_d, 3.0)[..., None] / 3.0, w_d @ MIN_COLOR,
@@ -2060,6 +2089,72 @@ def mosquito_density(state, cfg: EnvConfig, season, night, heat):
     return jnp.where(wet & (heat <= 0), jnp.minimum(warm * rain * jnp.where(night, 1.0, 0.5), 1.0), 0.0)
 
 
+# ---------------------------------------------------------------- the dead
+COVER_MINERALS = ("clay", "limestone", "basalt", "gypsum", "quicklime")      # (with loose stone) what buries a body
+
+
+def body_cover(state, cfg: EnvConfig, stones=None, minerals=None, cave_floor=None):
+    """(N,) how much earth and stone lies on each agent's cell, on its own layer: what covers a body.
+    Nothing tells anyone to bury: a body is covered when enough of it has been put there."""
+    st = state.stones if stones is None else stones
+    mi = state.minerals if minerals is None else minerals
+    r, c = state.pos[:, 0], state.pos[:, 1]
+    idx = jnp.array([mn.IDX[m] for m in COVER_MINERALS])
+    above = st[r, c] + mi[r, c][:, idx].sum(-1)
+    if cfg.underground:
+        cf = state.cave_floor if cave_floor is None else cave_floor
+        below = cf[r, c, STONE] + cf[r, c][:, MIN0 + idx].sum(-1)
+        return jnp.where(state.below, below, above)
+    return above
+
+
+def corpse_hazard(state, cfg: EnvConfig, **kw):
+    """(N,) 0..1: how much each dead body is giving off: nothing while fresh, rising as it bloats, full
+    while it rots, nothing once only bones remain, nothing when covered (cfg.bury_cover) or never a body."""
+    body = state.existed & ~state.alive
+    rising = jnp.clip((state.rot - cfg.rot_fresh) / cfg.rot_ramp, 0.0, 1.0)
+    covered = body_cover(state, cfg, **kw) >= cfg.bury_cover
+    return jnp.where(body & (state.rot < 1.0) & ~covered, rising, 0.0)
+
+
+def body_look(state, cfg: EnvConfig):
+    """(N,) how a body looks to the living: 1 fresh, fading to 0.5 as it rots, 0 as bones or covered."""
+    body = state.existed & ~state.alive
+    covered = body_cover(state, cfg) >= cfg.bury_cover
+    return jnp.where(body & (state.rot < 1.0) & ~covered, 1.0 - 0.5 * jnp.clip(state.rot, 0.0, 1.0), 0.0)
+
+
+def agent_room(state, cfg: EnvConfig, ideal_kg):
+    """(N,) the room each agent takes in its cell (EnvConfig.cell_room): a standing adult of the
+    reference build 1, scaled by lean mass^(2/3) (a child less, a big frame more); lying down (asleep,
+    downed or a body) twice that; a covered body (a grave) as much as one standing; bones and empty
+    slots none."""
+    ref_kg = cfg.ideal_bmi * (cfg.base_height_cm / 100.0) ** 2
+    size = (ideal_kg / ref_kg) ** (2.0 / 3.0)
+    lying = state.asleep | downed_of(state, cfg)
+    is_body = state.existed & ~state.alive & (state.rot < 1.0)
+    covered = is_body & (body_cover(state, cfg) >= cfg.bury_cover)
+    return jnp.where(state.alive, size * jnp.where(lying, 2.0, 1.0),
+                     jnp.where(covered, size, jnp.where(is_body, 2.0 * size, 0.0)))
+
+
+def room_used(state, cfg: EnvConfig, ideal_kg):
+    """(2G, G) room taken in each cell, by layer (row r + G below): people and bodies, and animals."""
+    g = state.terrain.shape[0]
+    sp_room = jnp.array(fa.column("room"), jnp.float32)
+    row = lambda p, b: p[:, 0] + g * b.astype(jnp.int32)
+    used = jnp.zeros((2 * g, g)).at[row(state.pos, state.below), state.pos[:, 1]].add(agent_room(state, cfg, ideal_kg))
+    for an in (state.small, state.large, state.predators):
+        used = used.at[row(an.pos, an.below), an.pos[:, 1]].add(jnp.where(an.alive, sp_room[an.species], 0.0))
+    return used
+
+
+def rotting_grid(state, cfg: EnvConfig):
+    """(G, G) 0..1: the rot given off above ground, by cell (corpse_hazard)."""
+    g = state.terrain.shape[0]
+    return jnp.zeros((g, g)).at[state.pos[:, 0], state.pos[:, 1]].max(jnp.where(state.below, 0.0, corpse_hazard(state, cfg)))
+
+
 def fly_density(meat, bodies, heat):
     """(G, G) 0..1: flies on raw meat and the bodies of the dead; smoke drives them off."""
     return jnp.where(heat > 0, 0.0, jnp.minimum(meat / 2.0 + bodies, 1.0))
@@ -2178,6 +2273,7 @@ def _give_birth(ns: State, birthing, key, cfg: EnvConfig):
             weight=put(s.weight, ideal), scars=put(s.scars, 0.0), lasting_injury=put(s.lasting_injury, 0.0), pain=put(s.pain, 0.0), heartache=put(s.heartache, 0.0),
             part_damage=put(s.part_damage, jnp.zeros(N_PARTS)),
             held_by=put(s.held_by, -1), hold_grip=put(s.hold_grip, 0.0), off_balance=put(s.off_balance, 0),
+            rot=put(s.rot, 0.0),
             appearance=put(s.appearance, look), last_msg=put(s.last_msg, jnp.zeros(MSG_LEN, jnp.int32)),
             mutations=put(s.mutations, jumps[0]),
             visited=put(s.visited, jnp.zeros(s.visited.shape[1:], bool).at[s.pos[i, 0], s.pos[i, 1]].set(True)),
@@ -2338,6 +2434,30 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     else:
         torchlit = jnp.zeros((g, g), bool)
         in_dark = jnp.zeros(n, bool)
+    if cfg.cell_room > 0:
+        # Room (cfg.cell_room): a step into a cell without room for one fails. Those already there
+        # (standing, lying, the dead, animals) keep their room; those stepping in take what is left,
+        # in a random order each tick. (Animals are not stopped; a carried infant goes with its carrier.)
+        want = is_move & ~move_fail & alive0
+        if cfg.reproduction and cfg.carry_infants:
+            want = want & ~held_infant
+        mine = agent_room(state, cfg, bod["ideal_kg"])
+        tgt_mv = jnp.clip(state.pos + MOVE_DELTAS[step_dir], 0, g - 1)
+        stay_room = room_used(state, cfg, bod["ideal_kg"]) \
+            .at[state.pos[:, 0] + g * below0.astype(jnp.int32), state.pos[:, 1]].add(-jnp.where(want, mine, 0.0))
+        cell = tgt_mv[:, 0] * g + tgt_mv[:, 1] + g * g * below0.astype(jnp.int32)
+        prio = jax.random.permutation(jax.random.fold_in(keys[4], 31), n)
+        order = jnp.argsort(jnp.where(want, cell, 2 * g * g) * n + prio)
+        c_s, f_s = cell[order], jnp.where(want, mine, 0.0)[order]
+        csum = jnp.cumsum(f_s)
+        start = jax.lax.cummax(jnp.where(c_s != jnp.roll(c_s, 1), jnp.arange(n), 0).at[0].set(0), axis=0)
+        upto = csum - (csum[start] - f_s[start])                    # room taken by those before, and oneself
+        fits_s = stay_room.reshape(-1)[jnp.minimum(c_s, 2 * g * g - 1)] + upto <= cfg.cell_room + 1e-5
+        fits = jnp.zeros(n, bool).at[order].set(fits_s)
+        crowded = want & ~fits
+        move_fail = move_fail | crowded
+    else:
+        crowded = jnp.zeros(n, bool)
     moving = is_move & ~move_fail
     new_pos = jnp.where(moving[:, None], state.pos + MOVE_DELTAS[step_dir], state.pos)
     terr_new = jnp.where(below0, CAVE, state.terrain[new_pos[:, 0], new_pos[:, 1]])   # below: cave floor
@@ -2809,7 +2929,7 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     eaten = jnp.where(eating, jnp.minimum(inv[idx, hand0], 1.0), 0.0)
     inv = inv.at[idx, hand0].add(-eaten)
     satiety = state.satiety + eaten * food_value[hand0]
-    flies = fly_density(meat, _occupancy(state.pos, state.existed & ~state.alive & ~state.below, g).astype(jnp.float32), heat0)
+    flies = fly_density(meat, rotting_grid(state, cfg), heat0)
     mosq = mosquito_density(state, cfg, season, night, heat0)
     eat_risk = jnp.where(eaten > 0, pathogen[hand0], 0.0) * fx.get("food_water_infection", 1.0) \
         * (1.0 + cfg.fly_infection_mult * flies[state.pos[:, 0], state.pos[:, 1]] * ~below0)   # flies on the meat
@@ -2928,9 +3048,14 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     near = (_cheb(lpa[:, None, :], lpa[None, :, :]) <= 1) & ~jnp.eye(n, dtype=bool)
     sick_neighbors = jnp.sum(near & (infected_now & alive0)[None, :], axis=1)
     bitten = mosq[pos_after[:, 0], pos_after[:, 1]] * cfg.mosquito_infection * ~below_after   # fever from bites
+    # the rotting dead: each uncovered body beside one (on one's layer) gives off sickness as it rots
+    rot_out = corpse_hazard(state, cfg)                                              # (N,) per body
+    beside_body = (_cheb(lpa[:, None, :], layered_pos(state.pos, state.below)[None, :, :]) <= 1) & ~jnp.eye(n, dtype=bool)
+    rot_near = jnp.sum(jnp.where(beside_body, rot_out[None, :], 0.0), axis=1)
     p_inf = 1 - (1 - eat_risk) \
         * (1 - jnp.where(drinking, water_risk, 0.0)) \
-        * (1 - cfg.contact_infection) ** sick_neighbors * (1 - bitten)
+        * (1 - cfg.contact_infection) ** sick_neighbors * (1 - bitten) \
+        * (1 - cfg.corpse_infection) ** rot_near
     newly_infected = alive0 & ~infected_now & \
         (jax.random.uniform(keys[12], (n,)) < jnp.clip(p_inf * susceptibility, 0.0, 1.0))
     infection = jnp.where(newly_infected, cfg.disease_duration,
@@ -3354,14 +3479,23 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     if cfg.ecology:
         weather_mult = jnp.where(weather == DROUGHT, cfg.drought_regrow_mult, 1.0) \
             * jnp.where(raining, cfg.rain_regrow_mult, 1.0) * (1.0 - snow)
-        flora = eco.grow(flora, state.terrain, state.flora_patch, season, weather_mult, fire > 0, cfg)
+        flora = eco.grow(flora, state.terrain, state.flora_patch, season, weather_mult, fire > 0, cfg,
+                         bear=TREES.crop(state.tree_kind, state.tree_age))
         loose = loose * (1.0 - cfg.loose_food_spoil) ** (cfg.tick_minutes / 1440.0)
         plants = loose + flora.sum(-1)
     else:
         flora = state.flora
         plants = jnp.minimum(plants + base_rate * regrow * (fire <= 0), cfg.plant_max)
-    wood = jnp.minimum(wood + jnp.where((state.terrain == FOREST) & (fire <= 0), cfg.wood_regrow, 0.0),
-                       cfg.wood_max)
+    # Trees age; an old stand falls (its wood on the ground) and seedlings take its place; fire kills
+    # it back. Dead wood falls by the kind and size of the trees (tr.SPECIES deadfall).
+    tree_age, felled = TREES.age_step(state.tree_kind, state.tree_age, cfg.tick_minutes / 1440.0 / cfg.days_per_year, fire > 0)
+    size = TREES.grown(state.tree_kind, state.tree_age)
+    drop_rate = TREES.col("deadfall")[jnp.clip(state.tree_kind, 0)] * (0.3 + 0.7 * size)
+    wood_cap = cfg.wood_max * (0.5 + 0.5 * size)
+    wood = jnp.where(felled, wood + cfg.wood_max * size, wood)
+    wood = jnp.where(state.terrain == FOREST,
+                     jnp.minimum(wood + jnp.where(fire <= 0, cfg.wood_regrow * drop_rate, 0.0), jnp.maximum(wood_cap, wood)),
+                     wood)
     if cfg.byproducts:          # leaves fall under trees (most in autumn) and rot; fowl moult feathers
         fall = cfg.leaf_fall * _k(cfg) * jnp.where(season == 2, cfg.autumn_leaf_mult, 1.0)
         minerals = minerals * (1.0 - MIN_ROT * _k(cfg))
@@ -3661,6 +3795,35 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         return jnp.where(alive0, new, old)
 
     t = state.t + 1
+    # ---------------------------------------------------------- the dead
+    # What one carries falls where one dies; then the body decomposes, faster in warmth (twice as
+    # fast for every 10 degrees, all but stopped when frozen), giving off rot (flies, foul water,
+    # sickness to those beside it: corpse_hazard) until only bones are left. Fire burns it to bones.
+    # Covered with earth or stone, it gives off nothing. Nothing in the world says to bury the dead.
+    is_body = state.existed & ~alive
+    r_, c_ = state.pos[:, 0], state.pos[:, 1]
+    drop = jnp.where(dead_now[:, None], inv, 0.0)                                    # (N, N_MAT)
+    above, below_d = drop * ~state.below[:, None], drop * state.below[:, None]
+    plants = plants.at[r_, c_].add(above[:, PLANT])
+    meat = meat.at[r_, c_].add(above[:, RAW_MEAT]); cooked = cooked.at[r_, c_].add(above[:, COOKED_MEAT])
+    wood = wood.at[r_, c_].add(above[:, WOOD]); stones = stones.at[r_, c_].add(above[:, STONE])
+    honey = honey.at[r_, c_].add(above[:, HONEY]); grubs = grubs.at[r_, c_].add(above[:, GRUBS])
+    minerals = minerals.at[r_, c_].add(above[:, MIN0:])
+    if cfg.underground:
+        cave_floor = cave_floor.at[r_, c_].add(below_d)
+    inv = jnp.where(dead_now[:, None], 0.0, inv)
+    warm = 2.0 ** ((amb - 20.0) / 10.0) * jnp.where(amb <= 0.0, cfg.rot_frozen, 1.0)
+    rot = jnp.where(is_body, state.rot + warm * cfg.tick_minutes / (1440.0 * cfg.decay_days), 0.0)
+    burned = is_body & ~state.below & (fire[r_, c_] > 0)
+    rot = jnp.where(burned, jnp.maximum(rot, 1.0), rot)
+    to_bones = is_body & (state.rot < 1.0) & (rot >= 1.0)                            # once
+    minerals = minerals.at[r_, c_, BONE - MIN0].add(jnp.where(to_bones & ~state.below, cfg.body_bones, 0.0))
+    if cfg.underground:
+        cave_floor = cave_floor.at[r_, c_, BONE].add(jnp.where(to_bones & state.below, cfg.body_bones, 0.0))
+    rot = jnp.minimum(rot, 1.0)
+    if cfg.fouling:                                   # a rotting is_body fouls the ground and water by it
+        foul = foul + jnp.zeros((g, g)).at[r_, c_].add(
+            jnp.where(state.below, 0.0, corpse_hazard(state, cfg)) * cfg.corpse_foul * cfg.tick_minutes / 1440.0) / eco.cell_km2(cfg)
     next_state = State(
         key=key, t=t, terrain=state.terrain, height=state.height, cliff=state.cliff, plants=plants, meat=meat,
         cooked=cooked, wood=wood,
@@ -3685,7 +3848,7 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         scars=scars, lasting_injury=lasting_injury, pain=keep(pain, state.pain), heartache=keep(heartache, state.heartache),
         part_damage=jnp.where(alive0[:, None], part_damage, state.part_damage),
         held_by=jnp.where(alive0, tech["held_by"], -1), hold_grip=jnp.where(alive0, tech["hold_grip"], 0.0),
-        off_balance=jnp.where(alive0, tech["off_balance"], 0),
+        off_balance=jnp.where(alive0, tech["off_balance"], 0), rot=rot,
         sex=state.sex, existed=state.existed, gestation=gestation, courting=courting, father=father, mother=state.mother,
         relatedness=state.relatedness, fetus_r=fetus_r, father_geno=father_geno, father_look=father_look,
         appearance=state.appearance, memory=memory, last_msg=heard_msg,
@@ -3693,7 +3856,8 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         cave_floor=cave_floor,
         below=jnp.where(alive0, below_after, state.below),
         small=small, large=large, predators=predators,
-        flora=flora, flora_patch=state.flora_patch, foul=foul, urge=keep(urge, state.urge),
+        flora=flora, flora_patch=state.flora_patch, tree_kind=state.tree_kind, tree_age=tree_age,
+        foul=foul, urge=keep(urge, state.urge),
         **_marks_with_surface(marks, mark_time, mark_kind, wood, stones, cfg),
     )
     if cfg.reproduction:
@@ -3737,5 +3901,5 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         gathered_kind=took_kind if cfg.ecology else jnp.full(n, -1, jnp.int32),
         aim=jnp.where(hit_agent | hit_pred | hit_large | hit_small, aim, -1), blow_landed=blow_landed & hit_agent,
         how=jnp.where(is_strike, how, -1), shoved=tech["shoved"], thrown=tech["thrown"], grabbed=tech["grabbed"],
-        pinned=pinned, same_sex_mated=same_sex_mated, tamed=tamed.astype(jnp.int32))
+        pinned=pinned, same_sex_mated=same_sex_mated, tamed=tamed.astype(jnp.int32), crowded=crowded)
     return next_state, reward, done, info
