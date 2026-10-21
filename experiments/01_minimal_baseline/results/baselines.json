@@ -1,0 +1,63 @@
+{
+ "code_version": "32b65fbbdc97",
+ "worlds": 32,
+ "seed": 12345,
+ "baselines": {
+  "random": {
+   "policy": "random",
+   "worlds": 32,
+   "seconds": 61.1,
+   "mean_age_at_death": 206.0,
+   "share_alive_at_episode_end": 0.0,
+   "share_of_worlds_reaching_year_end": 0.0,
+   "survival_score_per_world_day": 1.2478,
+   "global_reward_per_world_day": -2.4989,
+   "deaths": {
+    "starvation": 1,
+    "thirst": 143,
+    "exhaustion": 18,
+    "cold": 12,
+    "disease": 2,
+    "predation": 18,
+    "violence": 40,
+    "injury": 9,
+    "fall": 13
+   },
+   "per_1000_agent_ticks": {
+    "strikes_on_agents": 17.046,
+    "gifts": 0.095,
+    "deterred": 0.796
+   },
+   "in_company_share": 0.725,
+   "large_prey_kills": 0
+  },
+  "scripted": {
+   "policy": "scripted",
+   "worlds": 32,
+   "seconds": 66.4,
+   "mean_age_at_death": 831.3,
+   "share_alive_at_episode_end": 0.184,
+   "share_of_worlds_reaching_year_end": 0.406,
+   "survival_score_per_world_day": 2.5168,
+   "global_reward_per_world_day": 0.4807,
+   "deaths": {
+    "thirst": 96,
+    "exhaustion": 1,
+    "cold": 18,
+    "disease": 1,
+    "predation": 14,
+    "injury": 43,
+    "burns": 4,
+    "fall": 28,
+    "age": 4
+   },
+   "per_1000_agent_ticks": {
+    "strikes_on_agents": 0.0,
+    "gifts": 0.0,
+    "deterred": 1.288
+   },
+   "in_company_share": 0.942,
+   "large_prey_kills": 0
+  }
+ }
+}
