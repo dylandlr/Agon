@@ -291,7 +291,7 @@ left burning is the only other way.
 ## Language and knowledge transfer
 
 Agents speak on a channel separate from their actions. Every tick each agent
-chooses an action and, besides it, the part a strike would aim at, a message (4 symbols from a
+chooses an action and, besides it, how a strike is delivered (part aimed at, limb and mode: one of 60), a message (4 symbols from a
 32-symbol vocabulary, symbol 0 first = silence) and the 4 symbols WRITE would put down. No symbol
 has a built-in meaning; speaking costs 0.0005 energy so noise is not free. Each listener hears
 the nearest speakers in view: their symbols, where they stand, and its own memory of them.
@@ -841,7 +841,9 @@ the two, 3 seeds each; births.json records which brain each child got.
 - `blank`: primitive actions only (move, grasp, eat, drink, strike, touch, ...).
 - `caveman` (the "society" preset): plus four given survival skills, chosen like any action:
   `seek_water` (walk to water the agent remembers, then drink), `seek_food` (walk to remembered
-  plants, gather, eat; never raw meat), `flee` (step away from the nearest predator in sight) and
+  plants, gather, eat; never raw meat; it skips and leaves patches poorer than half the average
+  one it knows, `patch_leave`, after Charnov's marginal value theorem, so a band does not graze
+  one cell to the bone while a better one is known), `flee` (step away from the nearest predator in sight) and
   `seek_shelter` (walk to a forest or cave it has seen, then rest there: cover from cold and heat).
   Each tick a skill picks one step from the agent's own cognitive map and sight, never the true
   map, routing around water and away from steep ground; with nothing known it explores unseen
@@ -1188,6 +1190,21 @@ both off in the base config):
   78% for 0.07 and lames it. A blow's force: strength x (lean mass / an average adult's)^(2/3)
   (muscle force follows cross-section) x practice (up to +25%, half of it after 200 strikes in a
   life) x luck (lognormal, sd 0.25, and a 10% chance of a glancing blow at half force).
+- **Techniques** (`techniques`, on; push and hold need `body_parts`): a strike is one joint choice of
+  part x limb (hand, foot, head, body) x mode (strike, push, hold), 60 in all (`env.how_of`). There
+  are no named moves, only physics: a kick has 1.5x a punch's force (driven by the legs, so leg
+  damage weakens it), lands 0.8x as often (0.56x at a head or neck) and staggers the kicker 10% of
+  the time; a headbutt has 1.2x force and the striker's own head takes 30% of it; a shoulder or hip
+  uses the whole mass (x mass^(1/3) more) at 0.7x force but 1.15x accuracy. A push deals 0.2x and a
+  hold 0.1x of the damage. Pushes and holds are contests of leverage x strength x mass^(2/3) x
+  sound legs (someone down or staggered resists at 0.3x). A shove moves one a cell (into rough or
+  steep ground: a likely fall) and staggers one for a tick (no step, no blow, every blow lands); a
+  hold pins one next tick with the contest's chance and opens one to blows in that proportion; a
+  push on someone one held is a throw (1.5x the chance, 0.15 x force to the torso, two ticks on the
+  ground). Sequences are found, not given: hold the legs then push is a takedown, shove then strike
+  hits the staggered, hold then strike the pinned. The recorder names what happened after the fact
+  (punch, kick to the head, stomp, shove, body check, chokehold, leg hook, throw, trip throw, ...).
+  Each agent feels whether it is held or off balance (two observation features).
 - **Grazing** (`EnvConfig.grazing`): rabbits, fowl, tortoises, deer, aurochs, boar, horses and
   mammoths eat the plants where they stand (shared when a cell is crowded; a large grazer eats about
   seven times what a small one does) and drift toward the richest ground beside them; one that finds

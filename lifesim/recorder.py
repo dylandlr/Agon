@@ -27,6 +27,28 @@ from .config import EnvConfig
 PolicyFn = Callable
 
 
+def technique_name(part, limb, mode, thrown=False, shoved=False, grabbed=False, victim_down=False):
+    """A name for what a strike did, given after the fact (agents only choose limb, mode and part:
+    env.LIMBS, env.MODES). Names follow the physics, so new sequences show up as new names."""
+    L, M = E.LIMBS[limb], E.MODES[mode]
+    if M == "strike":
+        if victim_down:
+            return {"hand": "ground strike", "foot": "stomp", "head": "headbutt on the downed", "body": "body drop"}[L]
+        base = {"hand": "punch", "foot": "kick", "head": "headbutt", "body": "shoulder charge"}[L]
+        return f"{base} to the {part}" if part in ("head", "neck", "legs") else base
+    if M == "push":
+        if thrown:
+            return "trip throw" if part == "legs" else "throw"
+        base = {"hand": "shove", "foot": "push kick", "head": "butt", "body": "body check"}[L]
+        return base + (" (moved them)" if shoved else "")
+    if L == "head":
+        return "useless hold (a head cannot grip)"
+    name = {("hand", "neck"): "chokehold", ("hand", "head"): "head grab", ("hand", "arms"): "arm grab",
+            ("hand", "legs"): "leg grab", ("foot", "legs"): "leg hook"}.get((L, part),
+            {"hand": "grab", "foot": "foot hold", "body": "clinch"}[L])
+    return name + ("" if grabbed else " (broken)")
+
+
 @dataclass
 class Recording:
     cfg: EnvConfig
@@ -245,6 +267,16 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
             aimed = {}
             if hasattr(info, "aim") and int(np.asarray(info.aim)[i]) >= 0:     # where it aimed; whether it landed
                 aimed = {"part": E.PARTS[int(np.asarray(info.aim)[i])], "landed": bool(np.asarray(info.blow_landed)[i])}
+            if hasattr(info, "how") and int(np.asarray(info.how)[i]) >= 0:     # how: limb, mode, and its name
+                _, lb, md = E.how_parts(int(np.asarray(info.how)[i]))
+                vs = [v for v in victims if 0 <= v < len(np.asarray(info.thrown))]
+                aimed.update(limb=E.LIMBS[lb], mode=E.MODES[md], technique=technique_name(
+                    E.PARTS[E.how_parts(int(np.asarray(info.how)[i]))[0]], lb, md,
+                    thrown=any(bool(np.asarray(info.thrown)[v]) for v in vs),
+                    shoved=any(bool(np.asarray(info.shoved)[v]) for v in vs),
+                    grabbed=any(bool(np.asarray(info.grabbed)[v]) for v in vs),
+                    victim_down=any(bool(np.asarray(prev.off_balance)[v] > 0) or bool(np.asarray(info.downed)[v]) for v in vs)
+                    if hasattr(prev, "off_balance") else False))
             ev = emit(i, "strike_agent", answers, victims=victims, **tool(i), **aimed)
             same_tick[(i, "strike_agent")] = ev["id"]
         elif code == E.OUT_RELEASE:

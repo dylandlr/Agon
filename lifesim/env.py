@@ -153,11 +153,35 @@ OUT_LOGITS = OUT_TOKENS * VOCAB
 PARTS = ("head", "neck", "torso", "arms", "legs")
 N_PARTS = len(PARTS)
 PART_HEAD, PART_NECK, PART_TORSO, PART_ARMS, PART_LEGS = range(N_PARTS)
-# Per tick a brain gives: an action; the part a strike aims at; MSG_LEN symbols said and MSG_LEN
-# written. Packed as ints: out = [said..., written..., aim] (OUT_SLOTS), logits as
-# [action (N_ACTIONS) | aim (N_PARTS) | symbols (OUT_TOKENS x VOCAB)].
+# How a strike is delivered (EnvConfig.techniques): with what (the limb) and to what end (the mode).
+# No named moves: a punch is hand+strike, a kick foot+strike, a shove hand+push, a grab hand+hold;
+# what they do comes from the physics in step(), and sequences (grab then push: a throw; trip then
+# strike) are found, not given. The recorder names them after the fact (technique_name).
+LIMBS = ("hand", "foot", "head", "body")
+N_LIMBS = len(LIMBS)
+LIMB_HAND, LIMB_FOOT, LIMB_HEAD, LIMB_BODY = range(N_LIMBS)
+MODES = ("strike", "push", "hold")
+N_MODES = len(MODES)
+MODE_STRIKE, MODE_PUSH, MODE_HOLD = range(N_MODES)
+N_HOW = N_PARTS * N_LIMBS * N_MODES     # one joint choice: part + N_PARTS * (limb + N_LIMBS * mode)
+
+
+def how_of(part, limb=0, mode=0):
+    """The joint index of (part aimed at, limb, mode); a hand strike at part k is k."""
+    return part + N_PARTS * (limb + N_LIMBS * mode)
+
+
+def how_parts(how):
+    """Joint index -> (part, limb, mode)."""
+    return how % N_PARTS, (how // N_PARTS) % N_LIMBS, how // (N_PARTS * N_LIMBS)
+
+
+# Per tick a brain gives: an action; how a strike is delivered (the part aimed at, limb and mode,
+# one joint choice of N_HOW); MSG_LEN symbols said and MSG_LEN written. Packed as ints:
+# out = [said..., written..., how] (OUT_SLOTS), logits as
+# [action (N_ACTIONS) | how (N_HOW) | symbols (OUT_TOKENS x VOCAB)].
 OUT_SLOTS = OUT_TOKENS + 1
-EXTRA_LOGITS = N_PARTS + OUT_LOGITS
+EXTRA_LOGITS = N_HOW + OUT_LOGITS
 LEXICON = ["", "water", "food", "meat", "fire", "wood", "stone", "shelter", "predator", "prey", "waste",
            "north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest",
            "here", "near", "far", "come", "go away", "give", "help", "follow", "yes", "no", "me", "you", "many"]
@@ -184,7 +208,7 @@ CH_SNOW = N_TERRAIN + 16
 CH_MINERALS = N_TERRAIN + 17      # N_MINERAL_CHANNELS channels, then fauna, then the social features
 CH_FAUNA = CH_MINERALS + N_MINERAL_CHANNELS
 CH_FLORA = CH_FAUNA + N_FAUNA_CHANNELS
-OWN_FEATURES = 25 + N_PARTS + cond.K   # own body (felt pain, heartache, then damage to each part) and conditions
+OWN_FEATURES = 25 + N_PARTS + 2 + cond.K   # own body (felt pain, heartache, damage to each part, held, off balance) and conditions
 SHARED_START = OWN_FEATURES + N_MAT + N_MAT + 1    # after inventory, hand and torch: time and weather
 N_BODY_FEATURES = OWN_FEATURES + N_MAT + N_MAT + 1 + 5 + N_WEATHER + HEARD_FEATURES + READ_FEATURES
 
@@ -277,6 +301,9 @@ class State(NamedTuple):
     pain: jnp.ndarray           # (N,) fresh pain from recent wounds, fading (pain_of adds the ache of injury)
     heartache: jnp.ndarray      # (N,) emotional pain: others' hurt seen (x empathy) and grief; fades over days
     part_damage: jnp.ndarray    # (N, N_PARTS) damage to head, neck, torso, arms, legs, 0..1 (EnvConfig.body_parts)
+    held_by: jnp.ndarray        # (N,) int32 who got hold of one last tick (-1: free; EnvConfig.techniques)
+    hold_grip: jnp.ndarray      # (N,) that hold's strength: the chance it pins one this tick
+    off_balance: jnp.ndarray    # (N,) int32 ticks left staggered or on the ground: cannot step or strike
     birth_age: jnp.ndarray      # (N,) int32 biological age in ticks when the run began
     genotype: gt.Genotype
     appearance: jnp.ndarray     # (N, 3) heritable look; lets kin resemble each other
@@ -381,6 +408,11 @@ class StepInfo(NamedTuple):
     gathered_kind: jnp.ndarray         # (N,) int: plant food gathered: ecology.KINDS index, 4 loose, -1 none
     aim: jnp.ndarray                   # (N,) int: the part its blow was aimed at (env.PARTS), -1 if none (or it missed an animal)
     blow_landed: jnp.ndarray           # (N,) bool: its blow at someone landed
+    how: jnp.ndarray                   # (N,) int: its strike's joint choice (how_parts: part, limb, mode), -1 if none
+    shoved: jnp.ndarray                # (N,) bool: pushed off its cell this tick (EnvConfig.techniques)
+    thrown: jnp.ndarray                # (N,) bool: thrown to the ground by someone holding it
+    grabbed: jnp.ndarray               # (N,) bool: someone got hold of it this tick
+    pinned: jnp.ndarray                # (N,) bool: a hold from last tick kept it from stepping
     soiled: jnp.ndarray                # (N,) bool: could not hold it any longer
 
 
@@ -1090,6 +1122,7 @@ def reset(key: jax.Array, cfg: EnvConfig, genotype: gt.Genotype | None = None,
         life_moves=jnp.zeros(n, jnp.int32), life_strikes=jnp.zeros(n, jnp.int32), hardship=jnp.zeros(n, jnp.int32),
         impression=jnp.full((n, n), 2.5 * cfg.wellbeing_scale),   # founders know each other, all looking well
         scars=jnp.zeros(n), lasting_injury=jnp.zeros(n), pain=jnp.zeros(n), heartache=jnp.zeros(n), part_damage=jnp.zeros((n, N_PARTS)),
+        held_by=jnp.full(n, -1, jnp.int32), hold_grip=jnp.zeros(n), off_balance=jnp.zeros(n, jnp.int32),
         sex=sex, existed=founders, gestation=jnp.zeros(n, jnp.int32), courting=jnp.zeros(n, jnp.int32),
         father=jnp.full(n, -1, jnp.int32), mother=jnp.full(n, -1, jnp.int32),
         relatedness=jnp.eye(n), fetus_r=jnp.zeros((n, n)), father_geno=geno, father_look=appearance,
@@ -1303,6 +1336,67 @@ def downed_of(state: State, cfg: EnvConfig) -> jnp.ndarray:
     return state.alive & ((state.health < cfg.downed_health) | (state.injury >= cfg.downed_injury) | shock | knocked_out)
 
 
+def _techniques(state, cfg, bod, strength, mass_force, limb, mode, sdir, landed, blow, alive0, below0, down0,
+                is_strike, new_pos, part_by_blow, violence, fall_damage, injury, key):
+    """What pushes and holds do (EnvConfig.techniques), given who reached whom this tick: landed
+    (striker, victim), the blow each dealt, each striker's limb and mode and direction. Returns the
+    updated part damage, violence, positions, fall damage and injury, and the next hold and balance."""
+    n, g = cfg.n_agents, cfg.grid_size
+    k = jax.random.split(key, 5)
+    idx = jnp.arange(n)
+    power = strength * mass_force * bod["legs"]                       # footing matters in a push
+    resist = power * jnp.where(down0 | (state.off_balance > 0), cfg.unsteady_resist, 1.0)
+
+    def contest(lev):                                                 # (striker,) -> (striker, victim)
+        a_ = (lev * power)[:, None]
+        return a_ / (a_ + resist[None, :] + 1e-8)
+    held_last = state.held_by[None, :] == idx[:, None]               # striker held victim last tick
+    # Pushes: a shove moves the victim a cell the way it was pushed; on someone held, a throw
+    pushing = landed & (mode == MODE_PUSH)[:, None]
+    p_push = jnp.minimum(contest(jnp.asarray(cfg.limb_push)[limb]) * jnp.where(held_last, cfg.throw_leverage, 1.0), 0.95)
+    shove = pushing & (jax.random.uniform(k[0], (n, n)) < p_push)
+    thrown_m = shove & held_last
+    delta = jnp.clip(jnp.round(shove.astype(jnp.float32).T @ MOVE_DELTAS[sdir].astype(jnp.float32)), -1, 1).astype(jnp.int32)
+    shoved = jnp.any(shove, axis=0) & alive0
+    dest_raw = new_pos + delta
+    dest = jnp.clip(dest_raw, 0, g - 1)
+    room = _in_bounds(dest_raw, g) & jnp.where(below0, (state.under & ~state.under_water)[dest[:, 0], dest[:, 1]], True)
+    displaced = shoved & room & jnp.any(delta != 0, axis=-1)
+    new_pos = jnp.where(displaced[:, None], dest, new_pos)
+    # ... onto rough or steep ground: a fall
+    hz = jnp.where(below0, 0.0, jnp.where(state.terrain[dest[:, 0], dest[:, 1]] == ROCK, 0.2, 0.0)
+                   + state.cliff[dest[:, 0], dest[:, 1]])
+    falls = displaced & (jax.random.uniform(k[1], (n,)) < jnp.minimum(cfg.shove_fall_mult * hz, 1.0))
+    extra_fall = jnp.where(falls, hz * cfg.fall_severity * jax.random.exponential(k[2], (n,)), 0.0)
+    fall_damage = fall_damage + extra_fall
+    injury = injury + cfg.fall_injury_ratio * extra_fall
+    # A throw: to the ground, on one's back
+    throw = cfg.throw_damage * (thrown_m.astype(jnp.float32) * (strength * mass_force)[:, None]).sum(0)
+    thrown = jnp.any(thrown_m, axis=0) & alive0
+    violence = violence + throw
+    part_by_blow = part_by_blow.at[:, PART_TORSO].add(throw * cfg.part_fragility[PART_TORSO])
+    # A headbutt jars one's own head too
+    butt = jnp.where(limb == LIMB_HEAD, cfg.headbutt_recoil * blow.sum(1), 0.0)
+    part_by_blow = part_by_blow.at[:, PART_HEAD].add(butt)
+    # Holds: the strongest hold that took is the one that pins next tick
+    holding = landed & (mode == MODE_HOLD)[:, None]
+    p_hold = contest(jnp.asarray(cfg.limb_grip)[limb])
+    got = holding & (jax.random.uniform(k[3], (n, n)) < p_hold)
+    grip = jnp.where(got, p_hold, 0.0)
+    grabbed = jnp.any(got, axis=0) & alive0
+    held_by = jnp.where(grabbed, jnp.argmax(grip, axis=0), -1).astype(jnp.int32)
+    hold_grip = jnp.where(grabbed, grip.max(0), 0.0)
+    # Balance: a shove staggers, a throw floors, a kick may cost the kicker its footing
+    kick_slip = is_strike & (limb == LIMB_FOOT) & (jax.random.uniform(k[4], (n,))
+                                                   < cfg.kick_balance * (1 + state.part_damage[:, PART_LEGS]))
+    knock = jnp.maximum(jnp.where(shoved, cfg.shove_ticks, 0), jnp.where(thrown, cfg.throw_ticks, 0))
+    knock = jnp.maximum(knock, jnp.where(kick_slip, 1, 0))
+    off_balance = jnp.maximum(state.off_balance - 1, knock).astype(jnp.int32)
+    tech = dict(held_by=held_by, hold_grip=hold_grip, off_balance=off_balance,
+                shoved=displaced, thrown=thrown, grabbed=grabbed)
+    return part_by_blow, violence, new_pos, fall_damage, injury, tech
+
+
 # ---------------------------------------------------------------- given skills
 def route_field(targets, terrain, cliff, cfg: EnvConfig):
     """(N, G, G) steps from each cell to the nearest target cell, per agent, walking around water
@@ -1345,6 +1439,15 @@ def resolve_skills(state: State, a, mask, cfg: EnvConfig):
         near_water = jnp.maximum(near_water, pad[:, 1 + dr:1 + dr + g, 1 + dc:1 + dc + g])
     water_spots = near_water > 0.5
     food_spots = (mm[..., 1] > 0.2) & known
+    # Patch choice (Charnov's marginal value theorem): leave, and skip, patches poorer than a share
+    # (cfg.patch_leave) of the average one knows, so a thinned patch is left for a better one
+    if cfg.patch_leave > 0:
+        avg = (mm[..., 1] * food_spots).sum((1, 2)) / jnp.maximum(food_spots.sum((1, 2)), 1)
+        bar = cfg.patch_leave * avg                                              # (N,) share of a full patch
+        richer = food_spots & (mm[..., 1] > bar[:, None, None])
+        food_spots = jnp.where(jnp.any(richer, axis=(1, 2))[:, None, None], richer, food_spots)
+    else:
+        bar = jnp.zeros(n)
     unseen = ~known
     seek_water, seek_food, flee, shelter = a == SEEK_WATER, a == SEEK_FOOD, a == FLEE, a == SEEK_SHELTER
     # shelter: forest or cave cells it has seen (terrain is seen, so a remembered cell's terrain is known)
@@ -1363,7 +1466,8 @@ def resolve_skills(state: State, a, mask, cfg: EnvConfig):
     edible_in_hand = ((state.hand == PLANT) | (state.hand == COOKED_MEAT)) & (held > 0.05)
     carried = jnp.where(state.inv[:, COOKED_MEAT] > 0.05, COOKED_MEAT, PLANT)
     carrying_food = (state.inv[:, COOKED_MEAT] > 0.05) | (state.inv[:, PLANT] > 0.05)
-    plants_here = forage_grid(state, cfg)[r, c] > (0.1 * cfg.plant_max if cfg.ecology else 0.1)
+    plants_here = forage_grid(state, cfg)[r, c] > jnp.maximum(0.1 * cfg.plant_max if cfg.ecology else 0.1,
+                                                              bar * cfg.plant_max)
     food_act = jnp.where(edible_in_hand, EAT,
                jnp.where(carrying_food, SELECT_0 + carried,
                jnp.where(plants_here & (state.hand == PLANT) & mask[:, GRASP], GRASP,
@@ -1547,6 +1651,8 @@ def observe(state: State, cfg: EnvConfig) -> jnp.ndarray:
         state.below.astype(jnp.float32), state.urge, felt_pain(state, cfg),
         jnp.minimum(state.heartache, 1.0)], axis=-1)                                     # (N, 25)
     own = jnp.concatenate([own, state.part_damage], axis=-1)                           # + each part's damage
+    own = jnp.concatenate([own, (state.held_by >= 0).astype(jnp.float32)[:, None],     # + held, off balance
+                           (state.off_balance > 0).astype(jnp.float32)[:, None]], axis=-1)
     own = jnp.concatenate([own, state.conditions], axis=-1)                          # + its conditions
     feats = jnp.concatenate([own, state.inv / cfg.inventory_cap,
                              jax.nn.one_hot(state.hand, N_MAT),
@@ -1956,6 +2062,7 @@ def _give_birth(ns: State, birthing, key, cfg: EnvConfig):
             pain_aversion=put(s.pain_aversion, child_geno.pain_aversion[0]), genotype=geno,
             weight=put(s.weight, ideal), scars=put(s.scars, 0.0), lasting_injury=put(s.lasting_injury, 0.0), pain=put(s.pain, 0.0), heartache=put(s.heartache, 0.0),
             part_damage=put(s.part_damage, jnp.zeros(N_PARTS)),
+            held_by=put(s.held_by, -1), hold_grip=put(s.hold_grip, 0.0), off_balance=put(s.off_balance, 0),
             appearance=put(s.appearance, look), last_msg=put(s.last_msg, jnp.zeros(MSG_LEN, jnp.int32)),
             mutations=put(s.mutations, jumps[0]),
             visited=put(s.visited, jnp.zeros(s.visited.shape[1:], bool).at[s.pos[i, 0], s.pos[i, 1]].set(True)),
@@ -1999,9 +2106,13 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     idx = jnp.arange(n)
     season = season_of(state.t, cfg)
     night = is_night(state.t, cfg)
-    # The body part each strike aims at (last of the packed outputs; torso when none is given)
-    aim = jnp.clip(messages[:, OUT_TOKENS].astype(jnp.int32), 0, N_PARTS - 1) \
+    # How each strike is delivered (last of the packed outputs): the part aimed at, the limb, the
+    # mode (a hand strike at the torso when none is given; hand strikes only without cfg.techniques)
+    how = jnp.clip(messages[:, OUT_TOKENS].astype(jnp.int32), 0, N_HOW - 1) \
         if messages is not None and messages.shape[1] >= OUT_SLOTS else jnp.full(n, PART_TORSO, jnp.int32)
+    aim, limb, mode = how_parts(how)
+    if not cfg.techniques:
+        how, limb, mode = aim, jnp.zeros(n, jnp.int32), jnp.zeros(n, jnp.int32)
 
     # ---------------------------------------------------------- weather
     timer = state.weather_timer - 1
@@ -2044,6 +2155,9 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     # Exhaustion: past sleep_forced one falls asleep whatever one chose
     collapse = alive0 & (state.sleepiness >= cfg.sleep_forced)
     a = jnp.where(collapse, SLEEP, a)
+    # Staggered or thrown to the ground (cfg.techniques): no step and no blow this tick
+    staggered = alive0 & (state.off_balance > 0)
+    a = jnp.where(staggered & (((a >= MOVE_N) & (a <= MOVE_NW)) | ((a >= STRIKE_N) & (a < STRIKE_N + 8))), REST, a)
     sleeping = a == SLEEP
     is_move = (a >= MOVE_N) & (a <= MOVE_NW)
     is_strike = (a >= STRIKE_N) & (a < STRIKE_N + 8)
@@ -2078,6 +2192,15 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     fx = condition_effects(state.conditions)                       # this tick's conditions
     move_fail = jax.random.uniform(keys[4], (n,)) < state.injury * cfg.injury_move_fail * fx.get("stumble", 1.0)
     step_dir = jnp.where(is_move, a, 0)
+    # Held (cfg.techniques): a hold from last tick pins one with its grip, if the holder is still
+    # beside one, on one's layer, up and on its feet
+    holder = jnp.clip(state.held_by, 0)
+    hold_on = (state.held_by >= 0) & alive0 & alive0[holder] & ~downed_of(state, cfg)[holder] \
+        & (state.off_balance[holder] == 0) & (below0 == below0[holder]) \
+        & (jnp.max(jnp.abs(state.pos - state.pos[holder]), axis=-1) <= 1)
+    grip_now = jnp.where(hold_on, state.hold_grip, 0.0)
+    pinned = hold_on & (jax.random.uniform(jax.random.fold_in(keys[4], 23), (n,)) < state.hold_grip)
+    move_fail = move_fail | (is_move & pinned)
     # Light below: burning branches light the cells within torch_light of whoever carries one
     if cfg.underground:
         bearers = alive0 & below0 & (state.torch > 0)
@@ -2152,25 +2275,42 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
             hit_small = hit_small & ~miss
     dmg = cfg.strike_damage * strength_now * (1 - 0.5 * state.injury) * fx.get("blow", 1.0) \
         * (1 + cfg.tool_bonus * tool + cfg.edge_bonus * edge)
+    ref_kg = cfg.ideal_bmi * (cfg.base_height_cm / 100.0) ** 2
+    mass_force = (bod["ideal_kg"] / ref_kg) ** (2.0 / 3.0) if cfg.blow_by_mass else jnp.ones(n)
     if cfg.blow_by_mass:
         # Force follows muscle cross-section (lean mass^(2/3)), technique grows with practice, and no
         # two blows are alike: some glance off
-        ref_kg = cfg.ideal_bmi * (cfg.base_height_cm / 100.0) ** 2
         practice = 1.0 + cfg.practice_max * (1.0 - 0.5 ** (state.life_strikes / cfg.practice_half))
         k_luck = jax.random.split(jax.random.fold_in(k_fire[5], 17))
         luck = jnp.exp(cfg.blow_luck * jax.random.normal(k_luck[0], (n,)) - 0.5 * cfg.blow_luck ** 2) \
             * jnp.where(jax.random.uniform(k_luck[1], (n,)) < cfg.glancing_prob, 0.5, 1.0)
-        dmg = dmg * (bod["ideal_kg"] / ref_kg) ** (2.0 / 3.0) * practice * luck
+        dmg = dmg * mass_force * practice * luck
+    if cfg.techniques:
+        # The limb: a kick drives the legs' larger muscles (about 1.5x a punch's force; less accurate,
+        # worse at a head or neck, and it can cost one's balance), a headbutt the neck and trunk
+        # behind the skull (it jars one's own head too), a shoulder or hip the whole body's mass
+        # (mass^1, not mass^(2/3); easy to land, weak per blow). Kicks need sound legs, not arms.
+        # The mode: a strike deals the blow; a push or a hold spends the effort moving or holding.
+        limb_f = jnp.asarray(cfg.limb_force)[limb]
+        limb_f = limb_f * jnp.where(limb == LIMB_FOOT, bod["legs"] / jnp.maximum(bod["arms"], 1e-3), 1.0) \
+            * jnp.where((limb == LIMB_BODY) & cfg.blow_by_mass, (bod["ideal_kg"] / ref_kg) ** (1.0 / 3.0), 1.0)
+        dmg = dmg * limb_f * jnp.asarray(cfg.mode_damage)[mode]
     # Aim (cfg.body_parts): the part a blow is aimed at decides whether it lands and how much of it
     # tells. A head or neck is hard to hit and deadly; a torso easy; a limb easy and less harmful,
     # but on an animal a blow to a leg lames it. Someone downed is hit wherever one aims.
     if cfg.body_parts:
         p_land = jnp.asarray(cfg.part_hit)[aim]
+        if cfg.techniques:
+            high = (aim == PART_HEAD) | (aim == PART_NECK)
+            p_land = jnp.minimum(p_land * jnp.asarray(cfg.limb_accuracy)[limb]
+                                 * jnp.where((limb == LIMB_FOOT) & high, cfg.kick_high_accuracy, 1.0), 1.0)
         lethal = jnp.asarray(cfg.part_lethality)[aim]
         roll = jax.random.uniform(jax.random.fold_in(k_fire[5], 11), (n,))
         lands_animal = roll < p_land
-        lands_agent = roll < jnp.where(jnp.zeros((2 * g, g), bool).at[lrow(state.pos, below0), state.pos[:, 1]].max(
-            downed_of(state, cfg) & alive0)[trl, tc], 1.0, p_land)
+        # The downed and the staggered cannot ward off; one held is open in proportion to the grip
+        exposed = jnp.where((downed_of(state, cfg) | (state.off_balance > 0)) & alive0, 1.0, grip_now)
+        exposure = jnp.zeros((2 * g, g)).at[lrow(state.pos, below0), state.pos[:, 1]].max(jnp.where(alive0, exposed, 0.0))
+        lands_agent = roll < p_land + (1.0 - p_land) * exposure[trl, tc]
         hit_pred, hit_large, hit_small = hit_pred & lands_animal, hit_large & lands_animal, hit_small & lands_animal
         lame_blow = (aim == PART_ARMS) | (aim == PART_LEGS)
     else:
@@ -2280,6 +2420,10 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         part_by_blow = blow.T @ (jax.nn.one_hot(aim, N_PARTS) * jnp.asarray(cfg.part_fragility)[None, :])   # (victim, part)
         struck_by_agent = jnp.any(attempt, axis=0)           # struck at, landed or not: one knows one was attacked
         blow_landed = jnp.any(landed, axis=1)
+        if cfg.techniques:
+            part_by_blow, violence, new_pos, fall_damage, injury, tech = _techniques(
+                state, cfg, bod, strength_now, mass_force, limb, mode, sdir, landed, blow, alive0, below0, down0,
+                is_strike, new_pos, part_by_blow, violence, fall_damage, injury, jax.random.fold_in(k_fire[5], 29))
     else:
         agent_dmg_grid = dmg_grid(hit_agent) * cfg.agent_strike_scale        # a blow lands on one's own layer
         violence = jnp.where(alive0, agent_dmg_grid[lrow(state.pos, below0), state.pos[:, 1]], 0.0)
@@ -2290,6 +2434,10 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         violence = violence + jnp.where(coup, state.health, 0.0)
         part_by_blow = jnp.zeros((n, N_PARTS))
         blow_landed = hit_agent
+    if not (cfg.body_parts and cfg.techniques):
+        tech = dict(held_by=jnp.full(n, -1, jnp.int32), hold_grip=jnp.zeros(n),
+                    off_balance=jnp.maximum(state.off_balance - 1, 0).astype(jnp.int32),
+                    shoved=jnp.zeros(n, bool), thrown=jnp.zeros(n, bool), grabbed=jnp.zeros(n, bool))
     injury = injury + 0.5 * violence
 
     # ---------------------------------------------------------- animals act
@@ -3303,6 +3451,8 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         hardship=keep(hardship, state.hardship),
         scars=scars, lasting_injury=lasting_injury, pain=keep(pain, state.pain), heartache=keep(heartache, state.heartache),
         part_damage=jnp.where(alive0[:, None], part_damage, state.part_damage),
+        held_by=jnp.where(alive0, tech["held_by"], -1), hold_grip=jnp.where(alive0, tech["hold_grip"], 0.0),
+        off_balance=jnp.where(alive0, tech["off_balance"], 0),
         sex=state.sex, existed=state.existed, gestation=gestation, courting=courting, father=father, mother=state.mother,
         relatedness=state.relatedness, fetus_r=fetus_r, father_geno=father_geno, father_look=father_look,
         appearance=state.appearance, memory=memory, last_msg=heard_msg,
@@ -3348,5 +3498,7 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         nursed=nursing, genetic_reward=genetic, below=next_state.below, delved=delving, dark=dark_now > 0,
         stress_from=stress_src, downed=downed_of(next_state, cfg), relieved=relieving & alive0, soiled=soiled,
         gathered_kind=took_kind if cfg.ecology else jnp.full(n, -1, jnp.int32),
-        aim=jnp.where(hit_agent | hit_pred | hit_large | hit_small, aim, -1), blow_landed=blow_landed & hit_agent)
+        aim=jnp.where(hit_agent | hit_pred | hit_large | hit_small, aim, -1), blow_landed=blow_landed & hit_agent,
+        how=jnp.where(is_strike, how, -1), shoved=tech["shoved"], thrown=tech["thrown"], grabbed=tech["grabbed"],
+        pinned=pinned)
     return next_state, reward, done, info

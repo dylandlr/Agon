@@ -288,7 +288,7 @@ def main():
                 # Per output (action, aim, said, written): share of updates clipped, and the KL moved
                 "per_output": {name: {"clip_fraction": round(float(m["clip_fraction"][j]), 4),
                                       "approx_kl": round(float(m["approx_kl"][j]), 5)}
-                               for j, name in enumerate(["action", "aim", "said", "written"])},
+                               for j, name in enumerate(["action", "how", "said", "written"])},
                 **({"world_model": {"own_state_error": round(float(m["wm_own"]), 5),
                                     "belief_error": round(float(m["wm_latent"]), 5),
                                     "reward_error": round(float(m["wm_reward"]), 5),

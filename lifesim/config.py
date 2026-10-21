@@ -163,6 +163,31 @@ class EnvConfig:
     practice_half: float = 200.0
     blow_luck: float = 0.25
     glancing_prob: float = 0.1
+    # Techniques (env.LIMBS x env.MODES; needs body_parts for push and hold): no named moves, only
+    # what each limb and mode does. Per limb (hand, foot, head, body):
+    techniques: bool = True
+    limb_force: tuple = (1.0, 1.5, 1.2, 0.7)      # a kick ~1.5x a punch's peak force; body also x mass^(1/3)
+    limb_accuracy: tuple = (1.0, 0.8, 0.85, 1.15) # x the part's chance to land
+    kick_high_accuracy: float = 0.7               # x again for a kick at a head or neck
+    kick_balance: float = 0.1                     # a kick's chance to leave the kicker staggered (x (1 + leg damage))
+    headbutt_recoil: float = 0.3                  # share of a landed headbutt's blow one's own head takes
+    limb_push: tuple = (0.8, 1.0, 0.5, 1.4)       # leverage in a push (a shoulder or hip shoves best)
+    limb_grip: tuple = (1.0, 0.25, 0.0, 0.6)      # leverage in a hold (hands grip; a head cannot)
+    # Per mode (strike, push, hold): the share of the blow's damage dealt
+    mode_damage: tuple = (1.0, 0.2, 0.1)
+    # A push or hold is a contest: leverage x strength x lean mass^(2/3) x sound legs against the
+    # other's; someone down or staggered resists at unsteady_resist. A shove moves one a cell (into
+    # rough or steep ground: a fall, shove_fall_mult x that cell's hazard) and staggers one for
+    # shove_ticks; a push on someone one held last tick is a throw (throw_leverage x the chance):
+    # throw_damage x the thrower's force to the torso, and throw_ticks on the ground. A hold pins:
+    # next tick one steps only past its grip (the contest's chance), and blows land as on the downed
+    # in that proportion.
+    unsteady_resist: float = 0.3
+    shove_fall_mult: float = 3.0
+    shove_ticks: int = 1
+    throw_leverage: float = 1.5
+    throw_damage: float = 0.15
+    throw_ticks: int = 2
     lactation_infertile_years: float = 2.0   # a mother cannot conceive while her child is younger (0: off)
     nurse_rate: float = 0.03           # food and water a nursing child can take per tick
     nurse_cost: float = 0.6            # share of what the child takes that the mother pays
@@ -526,6 +551,7 @@ class EnvConfig:
     skills: bool = False
     skill_search_steps: int = 64       # route-planning sweeps (enough for any path on a 32 x 32 world)
     skill_cliff_avoid: float = 20.0    # a fully steep cell counts as this many steps on a route
+    patch_leave: float = 0.5           # seek-food skips and leaves patches poorer than this x the known average (0: off)
     # A rare temperament: selflessness weighs others' visible fortunes like one's own, kin or not,
     # so such an agent may give up its last food or its life for a stranger. Most agents have none;
     # each founder or newborn has it with probability saint_rate (not inherited; arises anew).

@@ -87,7 +87,7 @@ class ActorCritic(nn.Module):
     channels: int = 11
     conv_impl: str = "patch"
     msg_out: int = 0          # logits for the symbols said and written (OUT_TOKENS x VOCAB), 0 = none
-    aim_out: int = 0          # logits for the body part a strike aims at (N_PARTS), 0 = none
+    aim_out: int = 0          # logits for how a strike is delivered (env.N_HOW: part x limb x mode), 0 = none
     # Where speech and writing branch off (Lowe et al. 2019: sharing the layers that pick the action
     # makes messages look meaningful when they are not): "branch" their own hidden layer on the shared
     # trunk; "stopgrad" the same, but their learning does not shape the trunk; "separate" their own
@@ -150,7 +150,7 @@ class ActorCritic(nn.Module):
         return nn.relu(self.mid_dense(h))
 
     def action_logits(self, h):
-        """Logits of the action and of the part aimed at."""
+        """Logits of the action and of how a strike is delivered (part, limb, mode: env.how_parts)."""
         return self.pol_out(nn.relu(self.pol_hidden(h)))
 
     def msg_logits(self, h, obs):
@@ -276,14 +276,14 @@ def make_network(env_cfg, hidden: int = 128, encoder: str = "conv",
     return ActorCritic(n_actions=E.N_ACTIONS, hidden=hidden, encoder=encoder,
                        view_size=env_cfg.view_size, channels=E.N_OBS_CHANNELS,
                        conv_impl=conv_impl,
-                       msg_out=E.OUT_LOGITS if messages else 0, aim_out=E.N_PARTS if messages else 0,
+                       msg_out=E.OUT_LOGITS if messages else 0, aim_out=E.N_HOW if messages else 0,
                        msg_net=msg_net, world_model=world_model)
 
 
 def split_logits(logits):
-    """(action (..., N_ACTIONS), aim (..., N_PARTS), symbols (..., OUT_TOKENS, VOCAB))."""
+    """(action (..., N_ACTIONS), how (..., N_HOW), symbols (..., OUT_TOKENS, VOCAB))."""
     from . import env as E
-    A, K = E.N_ACTIONS, E.N_PARTS
+    A, K = E.N_ACTIONS, E.N_HOW
     return logits[..., :A], logits[..., A:A + K], logits[..., A + K:].reshape(logits.shape[:-1] + (E.OUT_TOKENS, E.VOCAB))
 
 

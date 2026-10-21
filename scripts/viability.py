@@ -17,6 +17,7 @@ band lasted; then a verdict. Writes viability.json next to --out if given.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import collections
 import json
 import sys
@@ -133,13 +134,16 @@ def scripted_policy(cfg: EnvConfig, knowledge: str = "full"):
         # child and drops it where the child stands; the child picks it up with its own food skill.
         # (Trained agents must learn this; the script does it so the check measures what the world
         # allows, not what a script that never shares can do.)
-        parent_of = (state.relatedness >= 0.45) & ((years[None, :] - years[:, None]) >= 14.0) \
+        parent_of = (state.relatedness >= 0.45) & ((years[:, None] - years[None, :]) >= 14.0) \
             & alive[:, None] & alive[None, :] & ~jnp.eye(n, dtype=bool)                    # [i, j]: i parent of j
         hungry_kid = alive & (years < 12.0) & (years >= cfg.infant_years) & (state.satiety < 0.5)
         kid_d = jnp.where(parent_of & hungry_kid[None, :], jnp.max(jnp.abs(pos[:, None] - pos[None]), -1), 10 ** 6)
         kid = jnp.argmin(kid_d, axis=1)
         provider = (jnp.min(kid_d, axis=1) < 10 ** 6) & (state.satiety > 0.55) & ~pressing
-        carrying = state.inv[:, E.PLANT] >= 0.5
+        # grasp while the cell has plants, up to 0.5; then (or once the patch runs out) take it over.
+        # Leaving with less matters: away from plants, the foraging branch eats what one carries.
+        carried = state.inv[:, E.PLANT]
+        carrying = (carried >= 0.5) | ((carried >= 0.05) & ~plants_here)
         with_kid = jnp.all(pos == pos[kid], axis=-1)
         give = jnp.where(state.hand != E.PLANT, E.SELECT_0 + E.PLANT,
                jnp.where(with_kid, E.RELEASE, _toward(pos, pos[kid], can_move, g)))
@@ -181,7 +185,10 @@ def build_cfg(args):
                        hazards=getattr(args, "hazards", 1.0))
     from lifesim.config import with_tick_minutes
     minutes = getattr(args, "tick_minutes", None)
-    return with_tick_minutes(cfg, minutes if minutes is not None else p.get("tick_minutes", 30.0))
+    cfg = with_tick_minutes(cfg, minutes if minutes is not None else p.get("tick_minutes", 30.0))
+    if getattr(args, "patch_leave", None) is not None:
+        cfg = dataclasses.replace(cfg, patch_leave=args.patch_leave)
+    return cfg
 
 
 def run(cfg, seed, days, knowledge="full", shocks=()):
@@ -254,6 +261,8 @@ def main():
                          "(600 days) and have children of its own")
     ap.add_argument("--tick-minutes", type=float, default=None, help="default: the preset's (1 for society)")
     ap.add_argument("--seeds", type=int, default=3)
+    ap.add_argument("--patch-leave", type=float, default=None,
+                    help="seek-food leaves patches poorer than this x the known average (default 0.5; 0 = off)")
     ap.add_argument("--knowledge", default="full", choices=["full", "own"],
                     help="full: true map (upper bound); own: the given skills, from what each has seen")
     ap.add_argument("--out", default=None)

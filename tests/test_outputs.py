@@ -46,11 +46,11 @@ def test_brains_start_mostly_silent_and_sample_every_output():
     params = net.init(jax.random.PRNGKey(0), jnp.zeros((1, 32)), x)
     _, logits, _ = net.apply(params, jnp.zeros((1, 32)), x)
     act, aim, sym = split_logits(logits)
-    assert act.shape[-1] == E.N_ACTIONS and aim.shape[-1] == E.N_PARTS and sym.shape[-2:] == (E.OUT_TOKENS, E.VOCAB)
+    assert act.shape[-1] == E.N_ACTIONS and aim.shape[-1] == E.N_HOW and sym.shape[-2:] == (E.OUT_TOKENS, E.VOCAB)
     speak = 1 - float(jax.nn.softmax(sym[0, 0, 0])[0])
     assert 0.06 < speak < 0.12                                   # ~9% speech at the start
     a, out = sample_outputs(jax.random.PRNGKey(1), logits[0, 0])
-    assert out.shape == (E.OUT_SLOTS,) and 0 <= int(out[-1]) < E.N_PARTS
+    assert out.shape == (E.OUT_SLOTS,) and 0 <= int(out[-1]) < E.N_HOW
 
 
 def _one_update(**kw):

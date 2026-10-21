@@ -62,6 +62,8 @@ def main():
     ap.add_argument("--chunk-days", type=float, default=5)
     ap.add_argument("--record-every", type=int, default=20, help="record every Nth chunk as a page (1 = all)")
     ap.add_argument("--tick-minutes", type=float, default=None)
+    ap.add_argument("--patch-leave", type=float, default=None,
+                    help="seek-food leaves patches poorer than this x the known average (default 0.5; 0 = off)")
     args = ap.parse_args()
     cfg = build_cfg(args)
     out = Path(args.out_dir)

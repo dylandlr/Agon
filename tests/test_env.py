@@ -152,7 +152,7 @@ def _neighbor_pair(terrain):
 
 
 def test_large_prey_reward_teamwork_more_than_solo_effort():
-    cfg, s, _ = _quiet_world(n=2)
+    cfg, s, _ = _quiet_world(n=2, blow_luck=0.0, glancing_prob=0.0)   # one draw: no luck in it
     west, mid, east = _neighbor_pair(s.terrain)
     s = s._replace(genotype=s.genotype._replace(strength=jnp.ones(2)),
                    pos=jnp.asarray([west, east], jnp.int32))
@@ -167,7 +167,7 @@ def test_large_prey_reward_teamwork_more_than_solo_effort():
 
 
 def test_small_prey_kill_drops_meat_and_credits_hunter():
-    cfg, s, _ = _quiet_world(n=1)
+    cfg, s, _ = _quiet_world(n=1, blow_luck=0.0, glancing_prob=0.0, body_parts=False)   # one sure, plain blow
     west, mid, _ = _neighbor_pair(s.terrain)
     s = s._replace(pos=jnp.asarray([west], jnp.int32),
                    genotype=s.genotype._replace(strength=jnp.ones(1)))
@@ -774,8 +774,10 @@ def test_survival_mode_pays_nothing_for_acts():
     assert np.isclose(float(r_touch[1]), float(r_other[1]), atol=1e-6)      # touched: nothing extra
 
 
-def test_survival_mode_cannot_be_farmed_by_juggling_food():
+def _juggle(effort_costs=True):
+    import dataclasses
     cfg, s = _survival_world(empathy=[1.0, 1.0], reciprocity=[1.0, 1.0])
+    cfg = dataclasses.replace(cfg, activity_needs=effort_costs and cfg.activity_needs)
     west, mid, _ = _neighbor_pair(s.terrain)
     s = s._replace(pos=jnp.asarray([west, west], jnp.int32), plants=jnp.zeros_like(s.plants),
                    meat=jnp.zeros_like(s.meat), memory=s.memory.at[:, :, E.MEM_GAVE_NEAR_ME].set(2.0),
@@ -796,9 +798,17 @@ def test_survival_mode_cannot_be_farmed_by_juggling_food():
             a = a[::-1]
         s, r, _, _ = step(s, jnp.array(a))
         idle += g ** k * float(r.sum())
-    # Felt changes telescope, so the return depends only on how well off agents end up. Bodies end
-    # the same either way, so passing the same food back and forth earns nothing extra.
+    return juggle, idle
+
+
+def test_survival_mode_cannot_be_farmed_by_juggling_food():
+    # Felt changes telescope, so the return depends only on how well off agents end up: passing the
+    # same food back and forth earns nothing extra. With effort free, exactly nothing; with
+    # activity_needs it costs a little (grasping and releasing is work, holding is rest).
+    juggle, idle = _juggle(effort_costs=False)
     assert abs(juggle - idle) < 1e-3
+    juggle, idle = _juggle(effort_costs=True)
+    assert juggle < idle + 1e-3
 
 
 def test_survival_mode_feels_body_needs_and_others_fates():
