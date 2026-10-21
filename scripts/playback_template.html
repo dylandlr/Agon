@@ -530,13 +530,14 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   // ---------- the camera: the map canvas shows a window of the world, viewN() cells across from
   // (camR, camC), so RimWorld-sized maps (250 x 250) draw only what is in view. Everything is drawn in
   // world coordinates under the camera's translation.
-  const VIEW_LEVELS = G <= 48 ? [G, Math.ceil(G / 1.5), Math.ceil(G / 2), Math.ceil(G / 3)] : [96, 64, 44, 30, 20];
+  const VIEW_LEVELS = G <= 48 ? [G, Math.ceil(G / 1.5), Math.ceil(G / 2), Math.ceil(G / 3), Math.ceil(G / 5), Math.max(4, Math.ceil(G / 8))]
+    : [96, 64, 44, 30, 20, 12, 7];
   let zi = G <= 48 ? 0 : 2, camR = 0, camC = 0, follow = false, camReady = false;   // camReady: playback state exists
   let VR0 = 0, VR1 = G, VC0 = 0, VC1 = G;
   const viewN = () => Math.min(G, VIEW_LEVELS[zi]);              // cells along the view's shorter side
   // The view fills the map area: cells stay square, so a wide area shows more columns than rows (and
   // where the whole map fits, it is letterboxed). ASPECT is the area's height over its width.
-  let ASPECT = 1;
+  let ASPECT = 1, RES = 1;
   const viewR = () => Math.min(G, ASPECT <= 1 ? viewN() : Math.round(viewN() * ASPECT));
   const viewC = () => Math.min(G, ASPECT <= 1 ? Math.round(viewN() / ASPECT) : viewN());
   const wholeMap = () => viewR() >= G && viewC() >= G;
@@ -555,11 +556,19 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       const [r, c] = placeOf(F[i].agents[selected], selected, i, frac, i > 0 ? F[i - 1] : null);
       camR = r + 0.5 - viewR() / 2; camC = c + 0.5 - viewC() / 2;
     }
-    const nr = viewR(), nc = viewC(); if (map.width !== nc * T || map.height !== nr * T) { map.width = nc * T; map.height = nr * T; }
+    // resolution: as many canvas pixels per cell as the cell takes on screen (zoomed in: sharper
+    // small figures), from 1x to 4x of T; everything is still drawn in T units, scaled by RES
+    const nr = viewR(), nc = viewC(), box = map.parentElement && map.parentElement.getBoundingClientRect();
+    if (box && box.width > 0) {
+      const cellPx = Math.min(box.width / nc, box.height / nr) * (window.devicePixelRatio || 1);
+      RES = Math.max(1, Math.min(4, Math.round((cellPx / T) * 2) / 2));
+    }
+    if (map.width !== Math.round(nc * T * RES) || map.height !== Math.round(nr * T * RES)) { map.width = Math.round(nc * T * RES); map.height = Math.round(nr * T * RES); }
     camClamp();
     VR0 = Math.max(0, Math.floor(camR) - 3); VR1 = Math.min(G, Math.ceil(camR + nr) + 3);
     VC0 = Math.max(0, Math.floor(camC) - 2); VC1 = Math.min(G, Math.ceil(camC + nc) + 2);
-    ctx.setTransform(1, 0, 0, 1, -Math.round(camC * P) * (T / P), -Math.round(camR * P) * (T / P));
+    ctx.setTransform(RES, 0, 0, RES, -Math.round(camC * P) * (T / P) * RES, -Math.round(camR * P) * (T / P) * RES);
+    ctx.imageSmoothingEnabled = ART !== "pixel";
   }
   const pointOfEvent = (ev) => { const b = mapRect();
     return [camR + (ev.clientY - b.top) / b.height * viewR(), camC + (ev.clientX - b.left) / b.width * viewC()]; };
@@ -580,6 +589,43 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   const blitBase = (cv, unit) => ctx.drawImage(cv, VC0 * unit, VR0 * unit, (VC1 - VC0) * unit, (VR1 - VR0) * unit,
                                                VC0 * unit, VR0 * unit, (VC1 - VC0) * unit, (VR1 - VR0) * unit);
   ctx.imageSmoothingEnabled = true;
+  // ---------- elevation on the normal map: a soft relief, built once from the height map. Slopes
+  // facing the north-west light a touch lighter, those facing away a touch darker, higher ground a
+  // little paler, and a faint ledge where the ground steps down to the south or east. Water stays flat.
+  let reliefCv = null;
+  function buildRelief() {
+    const h = DATA.height_map; if (!h) return null;
+    // tone: one pixel a cell, drawn smoothed so it shades across cells; ledges: crisp lines
+    const tone = document.createElement("canvas"); tone.width = G; tone.height = G;
+    const ledge = document.createElement("canvas"); ledge.width = G * 16; ledge.height = G * 16;
+    const tg = tone.getContext("2d"), g = ledge.getContext("2d"), U = 16;
+    const img = tg.createImageData(G, G);
+    const H = (r, c) => +h[Math.max(0, Math.min(G - 1, r)) * G + Math.max(0, Math.min(G - 1, c))];
+    for (let r = 0; r < G; r++) for (let c = 0; c < G; c++) {
+      const o = (r * G + c) * 4;
+      if (DATA.terrain[r * G + c] === "3") continue;               // water stays flat (transparent)
+      const v = H(r, c), lit = v - (H(r - 1, c - 1) + H(r - 1, c) + H(r, c - 1)) / 3;   // > 0: rises toward the light
+      const shade = Math.max(-1, Math.min(1, 0.5 * lit + 0.6 * (v / 9 - 0.5)));        // light slope and height
+      if (shade > 0) { img.data[o] = 255; img.data[o + 1] = 246; img.data[o + 2] = 222; img.data[o + 3] = Math.round(255 * 0.13 * shade); }
+      else { img.data[o] = 16; img.data[o + 1] = 20; img.data[o + 2] = 36; img.data[o + 3] = Math.round(255 * 0.17 * -shade); }
+      if (H(r + 1, c) < v && r + 1 < G) { g.fillStyle = "rgba(24, 20, 30, 0.2)"; g.fillRect(c * U, r * U + U - 1, U, 1);
+        g.fillStyle = "rgba(255, 248, 228, 0.09)"; g.fillRect(c * U, r * U + U - 2, U, 1); }
+      if (H(r, c + 1) < v && c + 1 < G) { g.fillStyle = "rgba(24, 20, 30, 0.12)"; g.fillRect(c * U + U - 1, r * U, 1, U); }
+    }
+    tg.putImageData(img, 0, 0);
+    return { tone, ledge };
+  }
+  function drawRelief(unit) {
+    if (overlay === "elevation") return;
+    if (reliefCv === null) reliefCv = buildRelief() || false;
+    if (!reliefCv) return;
+    const w = VC1 - VC0, hh = VR1 - VR0;
+    ctx.save(); ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(reliefCv.tone, VC0 - 0.5, VR0 - 0.5, w, hh, (VC0 - 0.5) * unit, (VR0 - 0.5) * unit, w * unit, hh * unit);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(reliefCv.ledge, VC0 * 16, VR0 * 16, w * 16, hh * 16, VC0 * unit, VR0 * unit, w * unit, hh * unit);
+    ctx.restore();
+  }
   if (DATA.nav) {
     const nav = document.createElement("p");
     nav.className = "note";
@@ -797,7 +843,9 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   }
   function drawAgent(a, info, r, c, g0 = ctx, k = info.id) {
     const id = agentColour(info), L = bodyLook(a, info);
-    if (ART === "pixel") { g0.save(); g0.imageSmoothingEnabled = false; g0.scale(T / P, T / P); pixAgent(g0, a, info, L, c * P, r * P); g0.restore(); return; }
+    if (ART === "pixel") { g0.save(); g0.imageSmoothingEnabled = false; g0.scale(T / P, T / P);
+      const fx = c * P + 8, fy = r * P + 15; g0.translate(fx, fy); g0.scale(FIG, FIG); g0.translate(-fx, -fy);   // scaled about the feet
+      pixAgent(g0, a, info, L, c * P, r * P); g0.restore(); return; }
     cellDraw(g0, r, c, (g) => {
       if (!a.alive || a.asleep) {                            // lying down: the same pawn on its side
         shadowAt(g, 0.5, 0.64, 0.4, 0.1);
@@ -1556,6 +1604,9 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   // tree or a big animal stands in front of someone, the hidden part of them shows as a faint fill with
   // a light outline in their own colour, and only there; what can be seen is drawn as it is.
   let XRAY = false, GRAB = null, FACE_OVERRIDE = null;
+  // People and animals are drawn smaller than a cell (FIG), so a crowd sharing a cell stands side by
+  // side in it instead of piled on one spot; zoom in to see them up close
+  const FIG = 0.42;
   let BODY_STYLE = window.AgonBody ? "model" : "pawn";                         // model (body_model.js) | pawn (pawnSprite) | measured | colony (bodySprite)
   const BOX = new WeakMap();
   function opaqueBox(s) {                              // the bounding box of a sprite's drawn pixels
@@ -1607,10 +1658,14 @@ const DATA = /*__PLAYBACK_DATA__*/null;
         if (dead) { [[18, 5], [18, 9]].forEach(([ex, ey]) => { px(q, ex, ey, INKP); px(q, ex + 1, ey + 1, INKP); px(q, ex + 1, ey - 1, INKP); px(q, ex - 1, ey + 1, INKP); px(q, ex - 1, ey - 1, INKP); }); }
         else { px(q, 19, 4, "#1c2229", 1, 2); px(q, 19, 9, "#1c2229", 1, 2); }
       }, sel, 1);
-      if (XRAY) { blit(xraySprite(s, col), x + 8 - s.width / 4 - 1, y + 13 - s.height / 2 - 1); return; }
-      pixShadow(g, x + 8, y + 12, 15);
+      // on the ground, not over it: the body's underside on the ground line (where a standing
+      // figure's feet are), a wide flat shadow, and grass and dirt over its lower edge
+      const yb = y + 14.5;
+      if (XRAY) { blit(xraySprite(s, col), x + 8 - s.width / 4 - 1, yb - s.height / 2 - 1); return; }
+      pixShadow(g, x + 8, y + 14, 18);
       if (SHADOW_MODE === 1) return;
-      blit(s, x + 8 - s.width / 4, y + 13 - s.height / 2);
+      blit(s, x + 8 - s.width / 4, yb - s.height / 2);
+      { const u = groundUnder(x, y); contactBand(g, u, x + 1, yb, 14, 0); grassInFront(g, u, x + 1, yb, 14, 0, 0, k); }
       if (!dead && !reduced && a.asleep) { const o = Math.floor(flick / 2) % 3; px(g, x + 12, y + 1 - o, "#eef2ff", 3, 1); px(g, x + 13, y + 2 - o, "#eef2ff"); px(g, x + 12, y + 3 - o, "#eef2ff", 3, 1); }
       if (!dead && a.downed && !a.asleep) {            // down: a pool of blood beside, a red cross above
         px(g, x + 3, y + 13, "#7a1f22", 6, 1.5); px(g, x + 4, y + 12.5, "#a8302f", 3, 1);
@@ -1840,12 +1895,15 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       if (fr < 1 && !reduced && (mv.pr !== r || mv.pc !== c)) { const e = fr < 0.5 ? 2 * fr * fr : 1 - 2 * (1 - fr) * (1 - fr);
         rr = mv.pr + (r - mv.pr) * e; cc = mv.pc + (c - mv.pc) * e; step = Math.floor(fr * 4) % 4; }
     }
+    if (LUNGE) { rr += LUNGE[0]; cc += LUNGE[1]; }                     // lunging at what it attacks
     if (n === "bat" || n === "fish" || n === "snake") step = reduced ? 0 : (flick + k) % 4;
     let s = smallSprite(n, col, step);
     if (face < 0) { const mk = "AM|" + n + "|" + step; let m = SPR.get(mk); if (!m) { m = mirror(s); SPR.set(mk, m); } s = m; }
     const moving = !!(mv && (mv.pr !== r || mv.pc !== c));
     const st = standing(r, c, n, sp.size ?? 0.3, moving, w0(s));
     let x = Math.round(cc * P * 2) / 2 + st.dx, y = Math.round(rr * P * 2) / 2 + st.dy;
+    g0.save(); { const fx = x + 8, fy = y + 14.5; g0.translate(fx, fy); g0.scale(FIG, FIG); g0.translate(-fx, -fy); }   // scaled about the feet
+    (() => {
     const w = s.width / 2, h = s.height / 2;
     const water = DATA.terrain[r * G + c] === "3";
     if (n === "fish" || (n === "crocodile" && water)) {                 // in the water, not on it
@@ -1871,6 +1929,8 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     g0.drawImage(s, x + 8 - w / 2, y + 14.5 - h + lift, w, h);
     if (under && n !== "snake" && n !== "crocodile") contactBand(g0, under, Math.round(x + 8 - w * 0.4), y + 14.5, Math.round(w * 0.8), step);
     if (under) grassInFront(g0, under, Math.round(x + 8 - w * 0.4), y + 14.5, Math.round(w * 0.8), step, face, k + 77);
+    })();
+    g0.restore();
   }
   // ---------- the ground, built once: woven blades, flat bare patches with grass hanging over their
   // edges, banks where land meets water, rocks, then trees in rows from the top so the lower ones stand
@@ -2194,6 +2254,62 @@ const DATA = /*__PLAYBACK_DATA__*/null;
         px(ctx, x, y + 6, "#5a3b26", 2, 2); px(ctx, x, y + 6, "#a8784a"); }
     }
   }
+  // ---------- attacks by animals: the attacker lunges into its target over the tick and three claw
+  // marks rake the struck; when a predator takes an animal, a puff where the prey was. A predator's
+  // attack on a person and a kill of an animal are matched to the nearest predator (a goring, to the
+  // nearest large animal) within two cells.
+  const ATK = new Map();
+  let LUNGE = null;
+  function attacksOf(i) {
+    let out = ATK.get(i); if (out) return out;
+    out = [];
+    const f = F[i];
+    if (f) (f.events || []).forEach((id) => {
+      const e = evById.get(id);
+      if (!e || !e.pos || !/^(predator_attack|preyed|gored)$/.test(e.type)) return;
+      const grp = e.type === "gored" ? "large" : "pred";
+      let best = null, bd = 3;
+      (f[grp] || []).forEach(([r, c, , b], j) => { if ((b || 0) !== 0) return;
+        const d = Math.max(Math.abs(r - e.pos[0]), Math.abs(c - e.pos[1])); if (d < bd) { bd = d; best = j; } });
+      out.push({ tr: e.pos[0], tc: e.pos[1], grp, j: best, kind: e.type, k: e.agent >= 0 ? e.agent : null });
+    });
+    ATK.set(i, out); return out;
+  }
+  function lungeFor(grp, j, r, c) {
+    const a = attacksOf(POSE.i).find((x) => x.grp === grp && x.j === j);
+    if (!a || reduced || POSE.frac >= 1) return null;
+    const dr = Math.sign(a.tr - r), dc = Math.sign(a.tc - c), s = Math.sin(Math.PI * Math.min(1, POSE.frac / 0.6)) * (POSE.frac < 0.6 ? 1 : 0);
+    return dr === 0 && dc === 0 ? [-0.25 * s, 0] : [0.45 * dr * s, 0.45 * dc * s];
+  }
+  function drawAttackFx(i, frac) {
+    if (reduced) return;
+    attacksOf(i).forEach((a) => {
+      const t = Math.min(1, frac), at = a.k !== null && AT[a.k] ? AT[a.k] : [a.tr, a.tc];
+      const x = at[1] * T + T / 2, y = at[0] * T + T * (a.k !== null ? 0.8 : 0.5);   // on the body, or where the prey was
+      const Tf = T * Math.max(0.55, FIG * 1.3);                                     // marks sized to the figure
+      if (t > 0.2 && t < 1) {
+        const p = Math.min(1, (t - 0.2) / 0.25), fade = t < 0.7 ? 1 : (1 - t) / 0.3;
+        ctx.save(); ctx.globalAlpha = 0.95 * fade; ctx.lineCap = "round";
+        for (let k = -1; k <= 1; k++) {                // three marks, raked from top right to bottom left
+          const ox = k * Tf * 0.15, x0 = x + ox + Tf * 0.2, y0 = y - Tf * 0.3, x1 = x + ox - Tf * 0.2, y1 = y + Tf * 0.26;
+          const xe = x0 + (x1 - x0) * p, ye = y0 + (y1 - y0) * p;
+          ctx.strokeStyle = "rgba(25, 8, 8, 0.8)"; ctx.lineWidth = Math.max(2, T * 0.09);
+          ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(xe, ye); ctx.stroke();
+          ctx.strokeStyle = k === 0 ? "#fff1ec" : "#ff5848"; ctx.lineWidth = Math.max(1, T * 0.04);
+          ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(xe, ye); ctx.stroke();
+        }
+        ctx.restore();
+      }
+      if (a.kind === "preyed" && t > 0.3 && t < 1) {    // the prey is gone: fur and dust thrown up
+        const q = (t - 0.3) / 0.7;
+        ctx.save(); ctx.globalAlpha = 0.75 * (1 - q);
+        for (let k = 0; k < 7; k++) { const ang = k * 0.9 + a.tr, d = T * (0.12 + 0.38 * q) * (0.6 + 0.4 * ((k * 37) % 5) / 4);
+          ctx.fillStyle = k % 2 ? "#b8a58a" : "#7a6650";
+          ctx.beginPath(); ctx.arc(x + Math.cos(ang) * d, y + Math.sin(ang) * d * 0.7 - q * T * 0.2, Math.max(1, T * 0.07 * (1 - q * 0.5)), 0, TAU); ctx.fill(); }
+        ctx.restore();
+      }
+    });
+  }
   function pixCreatures(f, flick, asScene = false) {
     // the raw frame's lists, matched with the tick before; only those above ground are drawn here.
     // asScene: return [[foot y in art pixels, draw], ...] for the y-sorted scene instead of drawing
@@ -2201,12 +2317,12 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     for (const [grp, dk] of [["small", 0], ["large", 4], ["pred", 9]]) {
       const raw = (F[POSE.i] && F[POSE.i][grp]) || [], mvs = animalMoves(POSE.i, grp);
       raw.forEach(([r, c, k, b], j) => { if ((b || 0) === 0 && r >= VR0 - 2 && r < VR1 + 2 && c >= VC0 - 2 && c < VC1 + 2) {
-        const mv = mvs[j];
-        if (!asScene) { pixAnimal(r, c, k ?? dk, ctx, mv); return; }
+        const mv = mvs[j], lg = lungeFor(grp, j, r, c);
+        if (!asScene) { LUNGE = lg; pixAnimal(r, c, k ?? dk, ctx, mv); LUNGE = null; return; }
         let rr = r;
         if (mv && POSE.frac < 1 && !reduced && (mv.pr !== r || mv.pc !== c)) { const fr = POSE.frac, e = fr < 0.5 ? 2 * fr * fr : 1 - 2 * (1 - fr) * (1 - fr); rr = mv.pr + (r - mv.pr) * e; }
         const big = SIZE_OF(k ?? dk) >= 0.6;                                  // big enough to hide a person
-        scene.push([rr * P + 14.5, () => pixelScale(() => pixAnimal(r, c, k ?? dk, ctx, mv)),
+        scene.push([rr * P + 14.5, () => pixelScale(() => { LUNGE = lg; pixAnimal(r, c, k ?? dk, ctx, mv); LUNGE = null; }),
                     big ? { r: rr, on: (g) => pixAnimal(r, c, k ?? dk, g, mv) } : null]);
       } });
     }
@@ -2778,9 +2894,9 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     POSE.i = i; POSE.frac = frac; POSE.live = true;
     if (CAVES && LAYER === "caves") { drawCaveFrame(i, flick, frac); POSE.live = false; return; }
     const f0 = F[i], f = surfaceView(f0), fp = i > 0 ? surfaceView(F[i - 1]) : null;
-    if (ART === "pixel") pixelScale(() => { blitBase(pixBase, P); pixGround(f, flick); });
+    if (ART === "pixel") pixelScale(() => { blitBase(pixBase, P); drawRelief(P); pixGround(f, flick); });
     else {
-      paintedBase(); blitBase(base, T);
+      paintedBase(); blitBase(base, T); drawRelief(T);
       // water: slow light ripples
       for (let r = VR0; r < VR1; r++) for (let c = VC0; c < VC1; c++) if (DATA.terrain[r * G + c] === "3") {
         const o = ((r * 7 + c * 3 + (reduced ? 0 : flick)) % 6) / 6;
@@ -2840,11 +2956,12 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       })]);
       f.agents.forEach((a, k) => { if (a.existed !== false) scene.push([at[k][0] * P + 15 + (a.alive && !a.asleep && !a.downed ? 0.01 : 0), agentDraw(a, k)]); });
       scene.sort((p, q) => p[0] - q[0]).forEach(([, fn]) => fn());
-      // whoever is hidden behind a tree or a big animal shows through it (only where hidden)
+      // the selected or hovered person, hidden behind a tree or a big animal, shows through it (only where hidden)
       const tf = ctx.getTransform();
       if (xrayCv.width !== map.width || xrayCv.height !== map.height) { xrayCv.width = maskCv.width = map.width; xrayCv.height = maskCv.height = map.height; }
       f.agents.forEach((a, k) => {
         if (a.existed === false || !a.alive || a.below) return;
+        if (k !== selected && k !== hovered) return;         // only the one being looked at: a crowd of ghosts reads as a smear
         const ka = at[k][0] * P + 15, r0 = Math.floor(at[k][0]);
         const trees = []; for (let r = r0; r <= Math.min(G - 1, r0 + TREE_UP + 1); r++) if (treeRow(r) && r * P + 14 > ka) trees.push(r);
         const beasts = scene.filter(([key, , occ]) => occ && key > ka && Math.abs(occ.r - at[k][0]) < 3);
@@ -2865,6 +2982,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
         g.beginPath(); g.moveTo(0.4, 0.42); g.lineTo(0.6, 0.42); g.lineTo(0.5, 0.6); g.closePath(); g.fillStyle = "rgba(214, 196, 255, 0.95)"; g.fill(); });
     });
     SHADOW_MODE = 0;
+    drawAttackFx(i, frac);
     if (ART === "pixel" && !reduced) pixelScale(() => f.agents.forEach((a, k) => {   // what one's hands do to the world
       const ty = evNow.get(k); if (!ty || !a.alive || a.below || !at[k]) return;
       const [rr, cc] = at[k], ph = Math.min(1, frac);
@@ -4085,8 +4203,11 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     [[-0.16, -0.32], [-0.16, 0], [-0.16, 0.32], [0.16, -0.16], [0.16, 0.16]],
     [[-0.16, -0.32], [-0.16, 0], [-0.16, 0.32], [0.16, -0.32], [0.16, 0], [0.16, 0.32]]];
   const BLOCK = []; for (const dr of [-0.22, 0, 0.22]) for (const dc of [-0.33, 0, 0.33]) BLOCK.push([dr, dc]);
-  const formation = (n) => (n < FORM.length ? FORM[n] : n <= 9 ? BLOCK.slice(0, n)
-    : BLOCK.concat(Array.from({ length: n - 9 }, (_, j) => [-0.3, -0.2 + 0.4 * ((j % 5) / 4)])));
+  const gridOf = (n) => { const m = Math.ceil(Math.sqrt(n)), rows = Math.ceil(n / m), out = [];
+    for (let j = 0; j < n; j++) { const rr = Math.floor(j / m), cc = j % m, inRow = Math.min(m, n - rr * m);
+      out.push([rows > 1 ? -0.34 + 0.68 * rr / (rows - 1) : 0, inRow > 1 ? -0.38 + 0.76 * cc / (inRow - 1) : 0]); }
+    return out; };
+  const formation = (n) => (n < FORM.length ? FORM[n] : gridOf(n));   // past six: rows across the cell
   const SLOTS = new Map();                                  // frame -> [[dr, dc] per agent], and crowd sizes
   function crowdOf(i) {
     let s = SLOTS.get(i);
@@ -4127,11 +4248,11 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   function hitFlash(r, c, frac) {
     const al = 0.55 * (1 - Math.min(1, frac));
     if (al <= 0.02) return;
-    ctx.fillStyle = `rgba(255, 70, 50, ${al})`; ctx.beginPath(); ctx.arc(c * T + T / 2, r * T + T / 2, T * 0.45, 0, TAU); ctx.fill();
+    ctx.fillStyle = `rgba(255, 70, 50, ${al})`; ctx.beginPath(); ctx.arc(c * T + T / 2, r * T + T * 0.75, T * 0.45 * FIG, 0, TAU); ctx.fill();
   }
   function nameTag(k, r, c, t) {
-    const txt = label(k, t), x = c * T + T / 2, y = r * T + T + Math.round(T * 0.36);
-    ctx.save(); ctx.font = `600 ${Math.round(T * (ART === "pixel" ? 0.42 : 0.38))}px ${ART === "pixel" ? "'Pixelify Sans', monospace" : "'IBM Plex Sans', sans-serif"}`;
+    const txt = label(k, t), x = c * T + T / 2, y = r * T + T + Math.round(T * 0.3 * Math.max(FIG, 0.6));
+    ctx.save(); ctx.font = `600 ${Math.max(9, Math.round(T * (ART === "pixel" ? 0.42 : 0.38) * Math.max(FIG, 0.6)))}px ${ART === "pixel" ? "'Pixelify Sans', monospace" : "'IBM Plex Sans', sans-serif"}`;
     ctx.textAlign = "center"; ctx.lineWidth = 3; ctx.strokeStyle = "rgba(15, 16, 24, 0.85)"; ctx.strokeText(txt, x, y);
     ctx.fillStyle = "#f2ecd9"; ctx.fillText(txt, x, y); ctx.restore();
   }
@@ -4192,14 +4313,14 @@ const DATA = /*__PLAYBACK_DATA__*/null;
   map.after(lblCv);
   const lblCtx = lblCv.getContext("2d");
   function drawLabels(f, i, frac, below) {
-    const rect = mapRect(), S = rect.width > 0 ? map.width / rect.width : 1;   // canvas px per screen px
+    const rect = mapRect(), S = rect.width > 0 ? map.width / RES / rect.width : 1;   // world px per screen px
     const ctx = lblCtx, dpr = window.devicePixelRatio || 1, wb = map.parentElement.getBoundingClientRect();
     const cw = Math.max(1, Math.round(rect.width * dpr)), chh = Math.max(1, Math.round(rect.height * dpr));
     if (lblCv.width !== cw || lblCv.height !== chh) { lblCv.width = cw; lblCv.height = chh; }
     lblCv.style.left = `${rect.left - wb.left}px`; lblCv.style.top = `${rect.top - wb.top}px`;
     lblCv.style.width = `${rect.width}px`; lblCv.style.height = `${rect.height}px`;
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cw, chh);
-    const kz = cw / map.width;                                  // label pixels per map pixel
+    const kz = cw / map.width * RES;                            // label pixels per world pixel
     ctx.setTransform(kz, 0, 0, kz, Math.round(-Math.round(camC * P) * (T / P) * kz), Math.round(-Math.round(camR * P) * (T / P) * kz));
     if ($("show-groups").checked) {                     // groups: a soft ring round each, in one colour per group
       groupsAt(i).forEach((x, gi) => {
@@ -4422,17 +4543,39 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       if (e.type === "gather") txt = `+${(e.what || "").split(" ")[0]}`;
       motes.push({ k: e.agent, r: a.r, c: a.c, below: !!a.below, txt, col, born: now + 140 * motes.filter((m) => m.k === e.agent && now - m.born < 300).length });
     });
+    // what changed in the body since the tick before: health lost or regained, injury, pain, stress,
+    // getting cold or hot, hungry or thirsty
+    const p = i > 0 ? F[i - 1] : null;
+    if (f && p) f.agents.forEach((a, k) => {
+      const b = p.agents[k];
+      if (!a || !b || !a.alive || !b.alive || a.existed === false || b.existed === false) return;
+      const add = (txt, col) => motes.push({ k, r: a.r, c: a.c, below: !!a.below, txt, col,
+        born: now + 140 * motes.filter((m) => m.k === k && now - m.born < 300).length });
+      const dh = (a.health ?? 1) - (b.health ?? 1);
+      if (dh <= -0.01) add(`\u2212${Math.max(1, Math.round(-dh * 100))} health`, "#ff6b5a");
+      else if (dh >= 0.05) add(`+${Math.round(dh * 100)} health`, "#9be07a");
+      const di = (a.injury || 0) - (b.injury || 0);
+      if (di >= 0.02) add(`+${Math.round(di * 100)} injury`, "#ff9b6b");
+      if ((a.pain || 0) - (b.pain || 0) >= 0.1) add("pain", "#ff8a80");
+      if ((a.stress || 0) - (b.stress || 0) >= 0.1) add("+stress", "#c9a7ff");
+      if ((a.heartache || 0) - (b.heartache || 0) >= 0.1) add("heartache", "#b9a7ff");
+      const t0 = b.temp ?? 0, t1 = a.temp ?? 0;
+      if (t1 < -0.5 && t0 >= -0.5) add("cold", "#9fc4ff");
+      if (t1 > 0.6 && t0 <= 0.6) add("hot", "#ffb36b");
+      if ((a.food ?? 1) < 0.2 && (b.food ?? 1) >= 0.2) add("hungry", "#e8c06b");
+      if ((a.water ?? 1) < 0.2 && (b.water ?? 1) >= 0.2) add("thirsty", "#8fd0ff");
+    });
     if (motes.length > 60) motes = motes.slice(-60);
   }
   function drawMotes(layerBelow, ctx, S) {                          // on the label layer, in screen-sized type
     const now = performance.now();
     motes = motes.filter((m) => now - m.born < 1300);
     ctx.save(); ctx.textAlign = "center";
-    ctx.font = `700 ${12 * S}px ${ART === "pixel" ? "'Pixelify Sans', monospace" : "'IBM Plex Sans', sans-serif"}`;
+    ctx.font = `700 ${11 * S}px ${ART === "pixel" ? "'Pixelify Sans', monospace" : "'IBM Plex Sans', sans-serif"}`;
     motes.forEach((m) => {
       if (m.below !== layerBelow) return;
       const p = AT[m.k] && Math.abs(AT[m.k][0] - m.r) < 2.5 && Math.abs(AT[m.k][1] - m.c) < 2.5 ? AT[m.k] : [m.r, m.c];
-      const age = Math.max(0, now - m.born) / 1300, x = p[1] * T + T * 0.95, y = p[0] * T + T * 0.1 - age * T * 0.9;
+      const age = Math.max(0, now - m.born) / 1300, x = p[1] * T + T * (0.5 + 0.45 * FIG), y = p[0] * T + T * (1 - 1.05 * FIG) - age * T * 0.6;
       ctx.globalAlpha = age < 0.75 ? 1 : (1 - age) / 0.25;
       ctx.lineWidth = 3 * S; ctx.strokeStyle = "rgba(15, 16, 24, 0.85)"; ctx.strokeText(m.txt, x, y); ctx.fillStyle = m.col; ctx.fillText(m.txt, x, y);
     });
@@ -4884,8 +5027,8 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       return;
     }
     const box = mapRect();
-    const tie = tieAt((ev.clientX - box.left) / box.width * map.width + Math.round(camC * P) * (T / P),
-                      (ev.clientY - box.top) / box.height * map.height + Math.round(camR * P) * (T / P));
+    const tie = tieAt((ev.clientX - box.left) / box.width * map.width / RES + Math.round(camC * P) * (T / P),
+                      (ev.clientY - box.top) / box.height * map.height / RES + Math.round(camR * P) * (T / P));
     if (!tie) { tip.hidden = true; return; }
     tip.innerHTML = tieCard(tie);
     tip.hidden = false;
