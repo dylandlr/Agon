@@ -1397,6 +1397,26 @@ def _techniques(state, cfg, bod, strength, mass_force, limb, mode, sdir, landed,
     return part_by_blow, violence, new_pos, fall_damage, injury, tech
 
 
+def caregiver_of(state: State, cfg: EnvConfig) -> jnp.ndarray:
+    """(N,) int: who nurses (and, for an infant, carries) each young child: its mother while she
+    lives; an orphan, the most closely related woman within reach who is nursing a child of her own
+    (cfg.wet_nursing; allomaternal nursing is common among foragers). -1: no one."""
+    n = state.pos.shape[0]
+    years = (state.age + state.birth_age) / cfg.ticks_per_bio_year
+    young = state.alive & (state.mother >= 0) & (years < cfg.nurse_years)
+    mom = jnp.clip(state.mother, 0)
+    has_mom = young & state.alive[mom]
+    if not cfg.wet_nursing:
+        return jnp.where(has_mom, mom, -1).astype(jnp.int32)
+    nursing_own = jnp.zeros(n, bool).at[mom].max(has_mom)
+    lactating = state.alive & (state.sex == FEMALE) & nursing_own
+    lp = layered_pos(state.pos, state.below)
+    near = _cheb(lp[:, None, :], lp[None, :, :]) <= 1
+    cand = near & lactating[None, :] & ~jnp.eye(n, dtype=bool)
+    best = jnp.argmax(jnp.where(cand, state.relatedness + 0.01, -1.0), axis=1)
+    return jnp.where(has_mom, mom, jnp.where(young & jnp.any(cand, axis=1), best, -1)).astype(jnp.int32)
+
+
 # ---------------------------------------------------------------- given skills
 def route_field(targets, terrain, cliff, cfg: EnvConfig):
     """(N, G, G) steps from each cell to the nearest target cell, per agent, walking around water
@@ -2170,10 +2190,14 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     below0 = state.below
     delving = (a == DELVE) & alive0
     if cfg.reproduction:
-        mom0 = jnp.clip(state.mother, 0)
+        care0 = caregiver_of(state, cfg)                 # mother, or a wet nurse for an orphan
+        mom0 = jnp.clip(care0, 0)
         infant0 = (state.age + state.birth_age) / cfg.ticks_per_bio_year < cfg.infant_years
-        delving = delving | (alive0 & infant0 & (state.mother >= 0) & delving[mom0]
-                             & jnp.all(state.pos == state.pos[mom0], axis=-1) & (below0 == below0[mom0]))
+        held_infant = alive0 & infant0 & (care0 >= 0) & (below0 == below0[mom0]) \
+            & (jnp.max(jnp.abs(state.pos - state.pos[mom0]), axis=-1) <= (1 if cfg.carry_infants else 0))
+        delving = delving | (held_infant & delving[mom0])
+    else:
+        held_infant, mom0 = jnp.zeros(n, bool), jnp.zeros(n, jnp.int32)
     below_after = below0 ^ delving
     lp0 = layered_pos(state.pos, below0)
     light0 = jnp.where(state.torch > 0, cfg.torch_light, 1)                  # how far one sees below
@@ -2228,6 +2252,12 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     move_energy = jnp.where(moving, cfg.move_cost * TERRAIN_MOVE_COST[terr_new] * climb
                             * (1 + cfg.snow_move_mult * state.snow[new_pos[:, 0], new_pos[:, 1]] * ~below0)
                             * (1 + state.injury) * (state.weight / bod["ideal_kg"]) / speed_now, 0.0)
+    if cfg.reproduction and cfg.carry_infants:
+        # An infant within reach is carried (cfg.carry_infants): it goes where its carrier goes,
+        # and the carrier's steps cost more by the infant's share of her weight
+        new_pos = jnp.where(held_infant[:, None], new_pos[mom0], new_pos)
+        load = jnp.zeros(n).at[mom0].add(jnp.where(held_infant, state.weight, 0.0)) / jnp.maximum(state.weight, 1.0)
+        move_energy = move_energy * (1 + cfg.carry_cost * load)
     # Falls: rock is rough ground (0.2), and any steep cell is dangerous in proportion to its drop
     cliff_new = state.cliff[new_pos[:, 0], new_pos[:, 1]]
     hazard = jnp.where(below0, 0.0, jnp.where(terr_new == ROCK, 0.2, 0.0) + cliff_new)
@@ -2830,8 +2860,8 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     energy = jnp.clip(energy, 0.0, 1.0)
     # Nursing: a young child within 1 cell of its mother takes milk; she pays most of it
     if cfg.reproduction:
-        mom = jnp.clip(state.mother, 0)
-        nursing = alive0 & (state.mother >= 0) & alive0[mom] & (bod["years"] < cfg.nurse_years) \
+        mom = mom0                                       # caregiver_of: mother, or a wet nurse
+        nursing = alive0 & (care0 >= 0) & alive0[mom] & (bod["years"] < cfg.nurse_years) \
             & (_cheb(lpa, lpa[mom]) <= 1)
         milk_food = jnp.where(nursing, jnp.minimum(cfg.nurse_rate, 1.0 - satiety), 0.0)
         milk_water = jnp.where(nursing, jnp.minimum(cfg.nurse_rate, 1.0 - hydration), 0.0)

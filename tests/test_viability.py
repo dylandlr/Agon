@@ -10,8 +10,11 @@ def test_a_competent_band_persists_and_its_children_reproduce():
     import argparse
     import viability as V
     # the society preset's world (250 x 250, living, ecology) at 30-minute ticks, so 60 days is 2,880
-    # steps on CI's CPUs rather than 86,400 (the ecology is the same per km^2 at any tick length)
-    cfg = V.build_cfg(argparse.Namespace(preset="society", world=None, food=1.0, tick_minutes=30.0))
+    # steps on CI's CPUs rather than 86,400 (the ecology is the same per km^2 at any tick length).
+    # Generations need years: at the preset's 40 days a biological year, 60 days is 1.5 years and no
+    # daughter could grow up, so the test compresses lives to 2 days a year (60 days = 30 years).
+    cfg = V.build_cfg(argparse.Namespace(preset="society", world=None, food=1.0, tick_minutes=30.0,
+                                         days_per_bio_year=2.0))
     r = V.run(cfg, seed=1, days=60, knowledge="own")
     assert not r["extinct"] and r["alive_end"] >= 10
     # daughters born here grew to a fertile weight and had children (impossible before child growth)

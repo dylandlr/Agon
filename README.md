@@ -1668,7 +1668,11 @@ adulthood with it.
   theirs; others' memories of the slot's last occupant are cleared.
 - **Infants** under 1 year cannot walk or forage. Until 2.5 (`nurse_years`), a child within one
   cell of its mother is nursed: its food and water are topped up and she pays
-  60% of what it takes.
+  60% of what it takes. An infant within one cell of its carer is carried (`carry_infants`): it
+  goes where she goes, and her steps cost more by its share of her weight. An orphan is nursed and
+  carried by the most closely related woman within reach who is nursing a child of her own
+  (`wet_nursing`; allomaternal nursing is common among foragers, e.g. the Aka and Efe), so a
+  mother's death no longer dooms her infant if another nursing woman stays by it.
 - **Needs follow the body and what it does** (`needs_by_size`, `activity_needs`): hunger and
   thirst scale with lean mass to the 3/4 power (Kleiber's law), from one's own frame (height and
   build genes) and growth against an average adult (a toddler about 0.57, a 9-year-old about 0.68,

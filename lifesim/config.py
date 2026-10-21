@@ -139,6 +139,9 @@ class EnvConfig:
     mutation_rate: float = 0.01        # chance per trait per birth of a de novo mutation
     mutation_size: float = 2.5         # its size, in population standard deviations (up or down)
     nurse_years: float = 2.5           # mother nurses within 1 cell until this age (foragers wean at ~2.5-3)
+    wet_nursing: bool = True           # an orphan is nursed by the closest kin among women nursing their own
+    carry_infants: bool = True         # an infant within 1 cell of its carer is carried as she moves
+    carry_cost: float = 1.0            # her steps cost x (1 + carry_cost x infant's share of her weight)
     # Children need less: food and water needs scale with body mass to the 3/4 power (Kleiber's law),
     # so a toddler needs a bit over half of what an adult does (on this body model's sizes) and an
     # adult is unchanged. Off, every age needs an adult's share.

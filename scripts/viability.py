@@ -178,7 +178,8 @@ def build_cfg(args):
     if (args.world or p.get("world")) == "living":
         cfg = living_world(cfg, ecology=getattr(args, "ecology", True), fouling=getattr(args, "fouling", True))
     from lifesim.config import with_time_scale
-    cfg = with_time_scale(cfg, p.get("days_per_year", 40), p.get("days_per_bio_year", 1.0))
+    bio = getattr(args, "days_per_bio_year", None)
+    cfg = with_time_scale(cfg, p.get("days_per_year", 40), bio if bio is not None else p.get("days_per_bio_year", 1.0))
     if p.get("reproduction"):
         cfg = with_reproduction(cfg, n_founders=p.get("founders"))
     cfg = with_threats(cfg, predators=getattr(args, "predators", 1.0), disease=getattr(args, "disease", 1.0),
