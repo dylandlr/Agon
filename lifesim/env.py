@@ -413,6 +413,7 @@ class StepInfo(NamedTuple):
     thrown: jnp.ndarray                # (N,) bool: thrown to the ground by someone holding it
     grabbed: jnp.ndarray               # (N,) bool: someone got hold of it this tick
     pinned: jnp.ndarray                # (N,) bool: a hold from last tick kept it from stepping
+    same_sex_mated: jnp.ndarray        # (N,) bool: intimacy with a partner of its own sex (no conception)
     soiled: jnp.ndarray                # (N,) bool: could not hold it any longer
 
 
@@ -1264,8 +1265,10 @@ def action_mask(state: State, cfg: EnvConfig) -> jnp.ndarray:
         adult = years >= cfg.adult_years
         lp = layered_pos(state.pos, below)
         near = (_cheb(lp[:, None, :], lp[None, :, :]) <= 1) & ~jnp.eye(state.pos.shape[0], dtype=bool)
-        partner_there = jnp.any(near & state.alive[None, :] & adult[None, :]
-                                & (state.sex[None, :] != state.sex[:, None]), axis=1)
+        to_other, to_same = gt.attraction_of(state.genotype)
+        other_sex = state.sex[None, :] != state.sex[:, None]
+        drawn = jnp.where(other_sex, to_other[:, None], to_same[:, None])          # i drawn to j's sex
+        partner_there = jnp.any(near & state.alive[None, :] & adult[None, :] & drawn, axis=1)
         can_mate = adult & partner_there & ~((state.sex == FEMALE) & (state.gestation > 0))
     else:
         can_mate = jnp.zeros_like(can_eat)
@@ -3086,8 +3089,13 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         stays_now = (a == REST) | ((a >= TOUCH_N) & (a < TOUCH_N + 8))
         willing = mating | ((state.courting > 0) & alive & stays_now)
         both = (mating[:, None] & willing[None, :]) | (willing[:, None] & mating[None, :])
+        to_other, to_same = gt.attraction_of(geno)
         pair = both & adj & female[:, None] & ~female[None, :] \
-            & adult[:, None] & adult[None, :]                           # [woman, man], both chose it
+            & adult[:, None] & adult[None, :] \
+            & to_other[:, None] & to_other[None, :]                       # [woman, man], both chose it
+        # Two of the same sex, both drawn to their own sex: intimacy, never a conception
+        same_pair = both & adj & (female[:, None] == female[None, :]) & adult[:, None] & adult[None, :] \
+            & to_same[:, None] & to_same[None, :]
         # Lactational amenorrhea: a mother with a living child young enough to nurse does not ovulate
         # (it returns if the child dies). With gestation and the wait to conceive this spaces births
         # about 3.4 biological years apart, as among foragers (3-4).
@@ -3105,7 +3113,8 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         could = conceive
         conceive = conceive & (jnp.cumsum(conceive) <= free)
         no_room = could & ~conceive           # the slot cap, not the world, stopped this child
-        mated = jnp.any(pair, axis=1) | jnp.any(pair, axis=0)
+        mated = jnp.any(pair, axis=1) | jnp.any(pair, axis=0) | jnp.any(same_pair, axis=1)
+        same_sex_mated = jnp.any(same_pair, axis=1)
         # An open offer lasts only while the agent stays with it: resting beside or touching the
         # other keeps it; doing anything else (moving away, striking, eating, sleeping...) withdraws
         # it at once. No one can be mated without having chosen it themselves within the window.
@@ -3114,7 +3123,7 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
                              jnp.where(mating, cfg.mate_window - 1, jnp.maximum(state.courting - 1, 0)))
         # Intimacy calms both partners, by their libido, less with each repeat with the same partner
         # (same habituation as other felt acts). Stress cannot go below zero, so it cannot be farmed.
-        intimate = (pair | pair.T).astype(jnp.float32)
+        intimate = (pair | pair.T | same_pair).astype(jnp.float32)
         fresh_i = jnp.exp(-state.habituation[..., HAB_INTIMACY] * 0.5 ** (1.0 / cfg.habituation_half_life))
         relief = cfg.intimacy_relief * geno.libido * (intimate * fresh_i).sum(1)
         stress = jnp.clip(stress - relief, 0.0, 1.0)
@@ -3134,7 +3143,7 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
                                              state.father_geno, geno)
         father_look = jnp.where(conceive[:, None], state.appearance[partner], state.father_look)
     else:
-        mated = conceive = birthing = no_room = jnp.zeros(n, bool)
+        mated = conceive = birthing = no_room = same_sex_mated = jnp.zeros(n, bool)
         courting = state.courting
         intimate = jnp.zeros((n, n))
         gestation, father, fetus_r = state.gestation, state.father, state.fetus_r
@@ -3606,5 +3615,5 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         gathered_kind=took_kind if cfg.ecology else jnp.full(n, -1, jnp.int32),
         aim=jnp.where(hit_agent | hit_pred | hit_large | hit_small, aim, -1), blow_landed=blow_landed & hit_agent,
         how=jnp.where(is_strike, how, -1), shoved=tech["shoved"], thrown=tech["thrown"], grabbed=tech["grabbed"],
-        pinned=pinned)
+        pinned=pinned, same_sex_mated=same_sex_mated)
     return next_state, reward, done, info

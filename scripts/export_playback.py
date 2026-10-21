@@ -602,7 +602,7 @@ def main():
         frames.append(build_frame(t, prev, state, a, info, evs, env_cfg, args.agents, minds))
         if (t - skip) % 12 == 0:
             knowledge.append(knowledge_snapshot(t, state))
-    morals = ["empathy", "kin_care", "envy", "guilt", "reciprocity", "vengefulness", "sadism"]
+    morals = ["empathy", "kin_care", "envy", "guilt", "reciprocity", "vengefulness", "sadism", "same_sex"]
     geno = jax.tree_util.tree_map(np.asarray, state.genotype)
     from lifesim import techtree
     skills = [dict() for _ in range(args.agents)]           # tech blocks each did in this recording

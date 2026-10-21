@@ -3098,6 +3098,7 @@ const DATA = /*__PLAYBACK_DATA__*/null;
     if (e.type === "gave_birth" && e.child && e.child.length) s += ` to ${e.child.map(who).join(" and ")}`;
     if (e.type === "touch") s += ` ${(e.targets || []).length ? e.targets.map(who).join(" and ") : "someone"}`;
     if (e.type === "struck_by_agent" && e.by && e.by.length) s = `${who(e.agent)} was struck at by ${e.by.map(who).join(" and ")}`;
+    if (e.type === "mated" && e.same_sex) s += " (same-sex intimacy)";
     if (e.type === "strike_agent" && e.technique) s += ` (${e.technique}${e.landed ? "" : ", missed"}: ${e.limb}, ${e.mode}, at the ${e.part})`;
     else if (e.type === "strike_agent" && e.part) s += ` (aimed at the ${e.part}${e.landed ? "" : ": missed"})`;
     if (e.type === "condition") {

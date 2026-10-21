@@ -392,3 +392,33 @@ def test_children_need_less_food_and_water_by_kleibers_law():
     assert 0.4 * adult < toddler < 0.7 * adult
     flat = loss(dataclasses.replace(cfg, needs_by_size=False))      # an average adult frame: unchanged
     assert abs(flat[0] - flat[1]) < 1e-6 and abs(flat[1] - adult) < 1e-6
+
+
+def test_same_sex_intimacy_calms_and_bonds_but_never_conceives():
+    """Attraction (genotype.same_sex): two men both drawn to their own sex can mate; it relieves
+    stress like any intimacy and never starts a pregnancy. A straight man and a gay one cannot."""
+    cfg, s = _world()
+    men = s._replace(sex=jnp.array([E.MALE, E.MALE, 0, 1], jnp.int32),
+                     stress=jnp.full(4, 0.5))
+    gay = men._replace(genotype=men.genotype._replace(same_sex=jnp.array([0.9, 0.5, 0.0, 0.0])))   # gay, bisexual
+    assert bool(E.action_mask(gay, cfg)[0, MATE]) and bool(E.action_mask(gay, cfg)[1, MATE])
+    out, _, _, info = E.step(gay, jnp.array([MATE, MATE, REST, REST]), cfg)
+    assert bool(info.mated[0]) and bool(info.mated[1]) and bool(info.same_sex_mated[0])
+    assert int(out.gestation[0]) == 0 and int(out.gestation[1]) == 0 and not bool(info.conceived.any())
+    assert float(out.stress[0]) < 0.5 and float(out.stress[1]) < 0.5
+    straight = men._replace(genotype=men.genotype._replace(same_sex=jnp.array([0.9, 0.0, 0.0, 0.0])))
+    assert not bool(E.action_mask(straight, cfg)[1, MATE])               # the straight man is not drawn
+    out2, _, _, info2 = E.step(straight, jnp.array([MATE, MATE, REST, REST]), cfg)
+    assert not bool(info2.mated.any())
+    # a gay man and a woman: no mating, so no conception
+    mixed = s._replace(genotype=s.genotype._replace(same_sex=jnp.array([0.0, 0.9, 0.0, 0.0])))
+    _, _, _, info3 = E.step(mixed, jnp.array([MATE, MATE, REST, REST]), cfg)
+    assert not bool(info3.mated.any()) and not bool(info3.conceived.any())
+
+
+def test_orientation_is_mostly_straight_with_a_bisexual_and_gay_minority():
+    from lifesim import genotype as gt
+    g = gt.sample(jax.random.PRNGKey(0), 20000)
+    other, same = (np.asarray(x) for x in gt.attraction_of(g))
+    straight, bi, gay = (other & ~same).mean(), (other & same).mean(), (~other & same).mean()
+    assert 0.85 < straight < 0.93 and 0.06 < bi < 0.11 and 0.015 < gay < 0.035

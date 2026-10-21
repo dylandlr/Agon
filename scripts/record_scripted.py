@@ -32,7 +32,7 @@ from lifesim.recorder import _stamp_events, extract_events  # noqa: E402
 from export_playback import build_frame, knowledge_snapshot, page_html, world_static  # noqa: E402
 from viability import build_cfg, scripted_policy  # noqa: E402
 
-MORALS = ["empathy", "kin_care", "envy", "guilt", "reciprocity", "vengefulness", "sadism"]
+MORALS = ["empathy", "kin_care", "envy", "guilt", "reciprocity", "vengefulness", "sadism", "same_sex"]
 
 
 def agents_meta(state, events):

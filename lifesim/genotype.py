@@ -40,6 +40,10 @@ class Genotype(NamedTuple):
     # Drive: how much stress intimacy relieves. Pleasure is felt through the body (calm),
     # so selection can tune the drive without it becoming a reward of its own.
     libido: jnp.ndarray
+    # Attraction to one's own sex, 0..1 (attraction_of): below 0.25 straight, 0.25-0.75
+    # bisexual, above 0.75 gay. Mating needs mutual attraction; between two of the same sex it is
+    # intimacy (calm, attachment), never a conception.
+    same_sex: jnp.ndarray
     # Rare: weighs others' visible fortunes like one's own, kin or not (0 for nearly everyone).
     # Not inherited: it arises anew with probability EnvConfig.saint_rate (set by the environment).
     selflessness: jnp.ndarray
@@ -58,7 +62,7 @@ _BOUNDS = {
     "social_learning": (0.0, 1.0),
     "temperament_drift": (0.0, 1.0),
     "empathy": (0.0, 1.0), "kin_care": (0.0, 1.0), "envy": (0.0, 1.0), "guilt": (0.0, 1.0),
-    "reciprocity": (0.0, 1.0), "vengefulness": (0.0, 1.0), "sadism": (0.0, 1.0),
+    "reciprocity": (0.0, 1.0), "vengefulness": (0.0, 1.0), "sadism": (0.0, 1.0), "same_sex": (0.0, 1.0),
     "selflessness": (0.0, 2.0),
 }
 _FIELDS = Genotype._fields
@@ -73,6 +77,8 @@ def sample(key: jax.Array, n: int) -> Genotype:
             vals[name] = jnp.zeros((n,))
         elif name == "sadism":                  # skewed: most feel almost none, a few a great deal
             vals[name] = jax.random.uniform(k, (n,)) ** 4
+        elif name == "same_sex":                # U^12: about 89% straight, 8.5% bisexual, 2.5% gay
+            vals[name] = jax.random.uniform(k, (n,)) ** 12
         elif name in _LOGNORMAL:
             vals[name] = jnp.exp(_LOGNORMAL[name] * jax.random.normal(k, (n,)))
         else:
@@ -103,7 +109,13 @@ HERITABILITY = {
     "lr_scale": 0.4, "critical_period": 0.4, "social_learning": 0.4, "temperament_drift": 0.4,
     "empathy": 0.35, "kin_care": 0.35, "envy": 0.35, "guilt": 0.35,
     "reciprocity": 0.35, "vengefulness": 0.35, "sadism": 0.35, "libido": 0.4,
+    "same_sex": 0.3,                    # twin studies: about 0.3
 }
+
+
+def attraction_of(g: Genotype):
+    """(to the other sex, to one's own sex) as bool arrays: straight, bisexual (both) or gay."""
+    return g.same_sex < 0.75, g.same_sex > 0.25
 
 
 def inherit(key: jax.Array, mother: Genotype, father: Genotype, population: Genotype) -> Genotype:

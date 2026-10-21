@@ -52,7 +52,7 @@ from lifesim.ppo_multi import MAConfig, Population, Transition, make_train  # no
 from lifesim.policy import sample_outputs  # noqa: E402
 from lifesim.recorder import _stamp_events, extract_events  # noqa: E402
 
-MORALS = ["empathy", "kin_care", "envy", "guilt", "reciprocity", "vengefulness", "sadism"]
+MORALS = ["empathy", "kin_care", "envy", "guilt", "reciprocity", "vengefulness", "sadism", "same_sex"]
 TRAITS = MORALS + ["selflessness", "libido", "pain_aversion", "social_reward", "novelty", "strength",
                    "patience", "social_learning", "lr_scale", "speed"]
 # What each life did, counted per tick alive (scripts/archetypes.py clusters these into roles)

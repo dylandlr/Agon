@@ -365,7 +365,8 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
         if bool(info.woken[i]):
             emit(i, "woken", [(pid(last(i, "struck_by_agent", "predator_attack", "burned", within=0)), "being disturbed")])
         if bool(info.mated[i]):
-            ev = emit(i, "mated")
+            same = bool(np.asarray(info.same_sex_mated)[i]) if hasattr(info, "same_sex_mated") else False
+            ev = emit(i, "mated", **({"same_sex": True} if same else {}))
             same_tick[(i, "mated")] = ev["id"]
     for i in range(n):
         if bool(info.conceived[i]):
