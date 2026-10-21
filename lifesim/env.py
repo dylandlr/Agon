@@ -2562,17 +2562,20 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     # (a pack of wolves, a big cat, a bear, a crocodile), never a mammoth; a large kill leaves a
     # carcass with meat for scavengers
     hunter = predators.alive & awake & (predators.rest <= 0)
+    # chasing (cfg.animal_hunting) brings predator and prey together far more often, so each
+    # meeting kills less often: herds hold at about three quarters of their slots
+    hunt_scale = cfg.hunt_kill_scale if cfg.animal_hunting else 1.0
     prow = lrow(predators.pos, predators.below)
     pred_sp_grid = jnp.full((2 * g, g), -1, jnp.int32).at[prow, predators.pos[:, 1]].max(jnp.where(hunter, psp, -1))
     big_grid = jnp.zeros((2 * g, g)).at[prow, predators.pos[:, 1]].add(jnp.where(hunter, SP["takes_large"][psp], 0.0))
     srow, lrow_ = lrow(small.pos, small.below), lrow(large.pos, large.below)
     eaten_by_pred = small.alive & (pred_sp_grid[srow, small.pos[:, 1]] >= 0) & \
-        (jax.random.uniform(keys[10], small.alive.shape) < cfg.predator_prey_kill_prob)
+        (jax.random.uniform(keys[10], small.alive.shape) < cfg.predator_prey_kill_prob * hunt_scale)
     small_preyed_by = jnp.where(eaten_by_pred, pred_sp_grid[srow, small.pos[:, 1]], -1)
     small = small._replace(alive=small.alive & ~eaten_by_pred)
     can_take = SP["size"][large.species] < 0.95                                   # not a mammoth
     large_taken = large.alive & can_take & (jax.random.uniform(jax.random.fold_in(keys[10], 2), large.alive.shape)
-                                           < cfg.predator_large_kill_prob * big_grid[lrow_, large.pos[:, 1]])
+                                           < cfg.predator_large_kill_prob * hunt_scale * big_grid[lrow_, large.pos[:, 1]])
     large_preyed_by = jnp.where(large_taken, pred_sp_grid[lrow_, large.pos[:, 1]], -1)
     meat, cave_floor = carcass(meat, cave_floor, large, jnp.where(large_taken, 0.5 * SP["meat"][large.species], 0.0))
     mins, cave_floor = leftovers(mins, cave_floor, large, large_taken, ("hide", "bone"))

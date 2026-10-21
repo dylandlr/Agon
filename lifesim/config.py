@@ -555,6 +555,7 @@ class EnvConfig:
     skill_search_steps: int = 64       # route-planning sweeps (enough for any path on a 32 x 32 world)
     skill_cliff_avoid: float = 20.0    # a fully steep cell counts as this many steps on a route
     animal_hunting: bool = True        # predators chase prey they can take; prey flee such predators
+    hunt_kill_scale: float = 0.3       # with animal_hunting: x predator kill chances per meeting (more meetings)
     patch_leave: float = 0.5           # seek-food skips and leaves patches poorer than this x the known average (0: off)
     # A rare temperament: selflessness weighs others' visible fortunes like one's own, kin or not,
     # so such an agent may give up its last food or its life for a stranger. Most agents have none;
