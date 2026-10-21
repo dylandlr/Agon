@@ -33,6 +33,12 @@ gate      Did the validated caveman agents persist in their continuous world (bi
           born there reaching fertile age)? core, archetypes,
           inheritance and stress refuse to start until it passes (--skip-gate to override), so
           hours are not spent on agents that cannot persist.
+probe     The current world as it now stands, on the 250 x 250 "society" preset (1-minute ticks),
+          excretion off, sleep-consolidated learning on: the full run, the same without sleep
+          learning, with caves underground, and with a grounded language (each symbol a word), each
+          followed by its continuous world (playback pages with the Decisions tab), plus a baseline
+          playback of untrained brains deciding in the same world (export_playback --decisions).
+          On an A100 (40 GB) use --worlds 24 --agent-chunk 4 (about 21 GB; 64 worlds do not fit).
 report    Training results grouped by condition (scripts/compare_runs.py) and a table of how each
           continuous world went.
 
@@ -94,6 +100,10 @@ def items(kind, args=None):
         return [(f"{cond}_r{r}", ["--seed", str(31 + r), "--map-seed", "21", "--inherit", "innate"]
                  + (["--imitation", "0"] if cond == "solitary" else []))
                 for cond in ("social", "solitary") for r in range(reps)]
+    if kind == "probe":
+        base = ["--no-excretion"]
+        return [("full", base), ("no_sleep_learning", base + ["--no-sleep-learning"]),
+                ("caves", base + ["--underground"]), ("grounded_language", base + ["--language", "grounded"])]
     if kind == "validate":
         return [("caveman", []), ("caveman_no_sleep_learning", ["--no-sleep-learning"]),
                 ("blank", ["--slate", "blank"]), ("caveman_no_world_model", ["--no-world-model"])]
@@ -121,7 +131,7 @@ def run(cmd, log):
                 r = json.loads(line)
                 if "update" in r:
                     d = r["deaths"]
-                    print(f"  steps {r['agent_steps']:>12,}  lifespan {r['mean_age_at_death']:>7}  "
+                    print(f"  steps {r['agent_steps']:>12,}  lifespan {str(r['mean_age_at_death']):>7}  "
                           f"thirst {d.get('thirst', 0) / max(1, sum(d.values())):4.0%}  births {r.get('births')} (cap stopped {r.get('conceptions_blocked_by_slot_cap', 0)})  "
                           f"asleep n/d {r.get('asleep_share_night')}/{r.get('asleep_share_day')}  "
                           f"learned {r.get('learned_share')}  {r.get('agent_sps', 0):,.0f}/s", flush=True)
@@ -142,7 +152,7 @@ def version_of(run_dir: Path):
 def stale(args, kind, todo):
     """Runs this command would reuse or resume that were made by other code."""
     now, bad = code_version(), []
-    dirs = [Path(args.root) / kind / name for name, _ in todo] if kind in ("validate", "core", "archetypes") \
+    dirs = [Path(args.root) / kind / name for name, _ in todo] if kind in ("validate", "core", "archetypes", "probe") \
         else [Path(args.root) / "validate" / "caveman"]
     for d in dirs:
         v = version_of(d)
@@ -194,20 +204,38 @@ def do_item(name, extra, args, kind):
     if not (out / "params.msgpack").exists():
         cmd = [sys.executable, str(HERE / "train_phase2.py"), "--preset", PRESET, "--worlds", str(args.worlds),
                "--ticks", str(ticks), "--log-every", "10", "--ckpt-every", "10", "--out", str(out), "--resume",
-               *extra]
+               *(["--agent-chunk", str(args.agent_chunk)] if getattr(args, "agent_chunk", 0) else []), *extra]
         if run(cmd, f"{out}.log") != 0:
             raise SystemExit(f"training {name} failed; see {out}.log")
     else:
         print(f"{name}: trained", flush=True)
     cont = out / "continuous"
     if args.days > 0 and not (cont / "finished").exists():
+        pb_days = args.playback_days if args.playback_days is not None else (0.25 if kind == "probe" else None)
         cmd = [sys.executable, str(HERE / "continuous_world.py"), "--run", str(out), "--days", str(args.days),
                "--chunk-days", "5", "--playback-every", str(args.playback_every), "--seed", "21",
-               "--out-dir", str(cont)]
+               "--out-dir", str(cont), *(["--playback-days", str(pb_days)] if pb_days is not None else [])]
         if run(cmd, f"{out}.continuous.log") != 0:
             raise SystemExit(f"continuous world for {name} failed; see {out}.continuous.log")
         (cont / "finished").write_text("")
     print(f"{name}: done", flush=True)
+
+
+def do_baseline_decisions(args):
+    """Untrained brains deciding in the probe's world: the baseline the trained runs' playbacks are
+    read against (what a fresh network does before any learning)."""
+    out = Path(args.root) / "probe" / "baseline_decisions.html"
+    if out.exists():
+        print("baseline decisions: done", flush=True)
+        return
+    out.parent.mkdir(parents=True, exist_ok=True)
+    a = PRESETS[PRESET]
+    cmd = [sys.executable, str(HERE / "export_playback.py"), "--decisions", "--world", a.get("world", "living"),
+           "--slate", a.get("slate", "caveman"), "--grid", str(a["grid"]), "--agents", str(a["agents"]),
+           "--tick-minutes", str(a.get("tick_minutes", 30.0)), "--encoder", a.get("encoder", "conv"),
+           "--days", "0.25", "--seed", "21", "--out", str(out)]
+    if run(cmd, f"{out}.log") != 0:
+        raise SystemExit(f"baseline decisions playback failed; see {out}.log")
 
 
 def do_inheritance(name, extra, args):
@@ -339,7 +367,7 @@ def report(root):
     if len(versions) > 1:
         print(f"WARNING: runs come from {len(versions)} code versions {sorted(map(str, versions))}; "
               "compare_runs keeps them apart", flush=True)
-    for kind in ("validate", "core", "archetypes"):
+    for kind in ("validate", "probe", "core", "archetypes"):
         group = [str(r) for r in runs if r.parent.name == kind]
         if group:
             print(f"\n=== {kind}: training (last 20% of each run, mean and 95% interval over seeds)")
@@ -411,7 +439,7 @@ def report(root):
     if (cav / "lives.json").exists():
         print("\n=== hierarchy in the caveman continuous world (scripts/hierarchy.py)")
         print("\n".join(hierarchy.render(hierarchy.analyse(World(cav)))))
-    for kind in ("validate", "core", "archetypes"):
+    for kind in ("validate", "probe", "core", "archetypes"):
         if list((root / kind).glob("*/continuous/lives.json")):
             print(f"\n=== {kind}: roles agents fell into (scripts/archetypes.py)")
             subprocess.run([sys.executable, str(HERE / "archetypes.py"), str(root / kind)])
@@ -419,7 +447,7 @@ def report(root):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("kind", choices=["validate", "core", "archetypes", "placed", "culture", "inheritance", "stress",
+    ap.add_argument("kind", choices=["validate", "probe", "core", "archetypes", "placed", "culture", "inheritance", "stress",
                                      "gate", "report"])
     ap.add_argument("--root", required=True)
     ap.add_argument("--worlds", type=int, default=64)
@@ -429,6 +457,11 @@ def main():
                          "year of age, long enough for a child born early to grow up (600 days)")
     ap.add_argument("--playback-every", type=int, default=8)
     ap.add_argument("--only", type=int, default=None, help="run just item K (HPRC array task)")
+    ap.add_argument("--playback-days", type=float, default=None,
+                    help="days kept in each continuous-world playback page (probe default 0.25: at 1-minute "
+                         "ticks a whole day on a 250 x 250 map is a very large page)")
+    ap.add_argument("--agent-chunk", type=int, default=0,
+                    help="passed to training: agents per chunk in the update (less memory; 4 on an A100 for society)")
     ap.add_argument("--skip-gate", action="store_true", help="run even if the persistence gate fails")
     ap.add_argument("--preset", default="society", choices=sorted(PRESETS),
                     help="run settings for trained runs (lifesim/presets.py); realtime = 365-day years and real "
@@ -455,7 +488,7 @@ def main():
         raise SystemExit("These runs were made by other code and would be reused or resumed:\n  "
                          + "\n  ".join(bad) + f"\nUse a fresh --root for code {code_version()} "
                          "(results from different code must not be mixed).")
-    if args.kind != "validate" and not args.skip_gate:
+    if args.kind not in ("validate", "probe") and not args.skip_gate:
         ok, lines = gate(args.root)
         if not ok:
             raise SystemExit("\n".join(lines))
@@ -468,6 +501,8 @@ def main():
             do_stress(name, extra, args)
         else:
             do_item(name, extra, args, args.kind)
+    if args.kind == "probe" and args.only is None:
+        do_baseline_decisions(args)
 
 
 if __name__ == "__main__":
