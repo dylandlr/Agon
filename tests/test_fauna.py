@@ -143,7 +143,7 @@ def test_wolves_stalk_deer_and_deer_run_from_them():
     """cfg.animal_hunting with stalk_large: a hunting predator closes on prey it can take, and the
     prey moves away; without hunting, neither notices the other. People are far off."""
     import dataclasses
-    cfg_on = dataclasses.replace(CFG, stalk_large=True)
+    cfg_on = dataclasses.replace(CFG, stalk_large=True, animal_sleep=0.0)   # midday: keep the wolf awake
     s, land = _world()
     r, c = next((r, c) for r, c in land if c + 3 < 20 and all((r, c + k) in land for k in range(4)))
     far = next(p for p in land if max(abs(p[0] - r), abs(p[1] - c)) > 10)
@@ -155,7 +155,7 @@ def test_wolves_stalk_deer_and_deer_run_from_them():
         wolf_c, deer_c = np.asarray(out.predators.pos[:, 0, 1]), np.asarray(out.large.pos[:, 0, 1])
         return (wolf_c - c).mean(), (deer_c - (c + 2)).mean()
     wolf_move, deer_move = gaps(cfg_on)
-    off_w, off_d = gaps(dataclasses.replace(CFG, animal_hunting=False))
+    off_w, off_d = gaps(dataclasses.replace(CFG, animal_hunting=False, animal_sleep=0.0))
     assert wolf_move > off_w + 0.15 and wolf_move > 0.2    # the wolf comes east
     assert deer_move > off_d + 0.1 and deer_move > 0.1     # the deer runs east (at its flight rate)
     assert abs(off_w) < 0.1                                # without hunting the wolf only wanders (the deer grazes)
@@ -171,7 +171,7 @@ def test_a_wolf_prefers_a_deer_to_a_nearer_person():
     def drift(cfg):
         out = jax.vmap(lambda k: E.step(s._replace(key=k), jnp.full(2, E.REST, jnp.int32), cfg))(KEYS[:200])[0]
         return (np.asarray(out.predators.pos[:, 0, 1]) - c).mean()
-    on = dataclasses.replace(CFG, stalk_large=True)
+    on = dataclasses.replace(CFG, stalk_large=True, animal_sleep=0.0)      # midday: keep the wolf awake
     assert drift(on) > 0.2                                               # toward the deer (east)
     assert drift(dataclasses.replace(on, prey_preference=0.0)) < 0.05   # no preference: the nearer person
 
