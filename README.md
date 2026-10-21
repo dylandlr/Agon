@@ -600,8 +600,12 @@ of its kind, all through mechanics rather than scripts:
 Predators also hunt animals: any takes small prey on its cell, and wolves, big cats, bears and
 crocodiles take large prey (never a mammoth), leaving a carcass for scavengers. With
 `animal_hunting` (on) they also stalk it: a hunting predator chases the nearest quarry it notices,
-a person or an animal it can take, and prey flee the nearest predator that could take them as they
-flee people (deer notice at 2 cells, a wolf at 5). A slot's species is
+a person or small prey (large prey only with `stalk_large`, off: with a handful of large-prey
+slots against six hunters, stalking empties the herds within two months, since a slot refills in
+about 42 days), and prey flee the nearest predator that could take them as they
+flee people (deer notice at 2 cells, a wolf at 5). Predators prefer their usual prey: choosing whom
+to chase, a person counts as 3 cells farther off (`prey_preference`), so a wolf with a deer in
+reach goes for the deer; a person beside it can still be attacked. A slot's species is
 fixed, so each world keeps the same mix (slot 0 of each group is the classic rabbit, deer and
 wolf, which take the group's config values). 6 predators per 1,000 cells (was 1) so that each
 kind is present: on a 32 x 32 map, 2 wolves, 2 big cats, a bear and a crocodile. The scripted

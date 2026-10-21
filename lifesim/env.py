@@ -1880,7 +1880,13 @@ def _move_animals(key, an: Animals, agent_pos, agent_alive, terrain, approach, c
         d_o = jnp.where(others["ok"], d_o, 10 ** 6)
         all_pos, d_all = jnp.concatenate([agent_pos, others["pos"]]), jnp.concatenate([d, d_o], axis=1)
     near_all = jnp.argmin(d_all, axis=1)
-    dist_all = jnp.min(d_all, axis=1)
+    if others is not None and approach:
+        # A predator prefers its usual prey: a person counts as cfg.prey_preference cells farther
+        # off when choosing whom to chase (attacks on people beside it are unchanged)
+        n_ag = agent_pos.shape[0]
+        score = d_all + jnp.where(jnp.arange(d_all.shape[1]) < n_ag, cfg.prey_preference + 0.01, 0.0)[None, :]
+        near_all = jnp.argmin(score, axis=1)
+    dist_all = jnp.take_along_axis(d_all, near_all[:, None], axis=1)[:, 0]
     hunting = (an.rest <= 0) & ((sp["provoked"][spc] == 0) | (an.anger > 0)) if approach else jnp.ones_like(an.alive)
     engaged = an.alive & awake & (dist_all <= notice) & hunting
     toward = jnp.sign(all_pos[near_all] - an.pos)
@@ -2498,7 +2504,8 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     graze_on = state.plants if cfg.grazing else None
     if cfg.animal_hunting:
         # Animals among animals: prey flee predators that could take them (cfg.animal_hunting), and a
-        # hunting predator chases the nearest quarry it notices, a person or an animal it can take
+        # hunting predator chases the nearest quarry it notices, a person or small prey (large prey
+        # too with cfg.stalk_large: a few large-prey slots cannot feed six stalking predators)
         p_sp = predators.species
         takes_big = SP["takes_large"][p_sp] > 0                                          # (P,)
         big_ok = SP["size"][large.species] < 0.95                                         # not a mammoth
@@ -2512,7 +2519,7 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
                                     caves, graze_on, flee_large)
         quarry = dict(pos=jnp.concatenate([small.pos, large.pos]), below=jnp.concatenate([small.below, large.below]),
                       ok=jnp.concatenate([jnp.broadcast_to(small.alive[None, :], (p_sp.shape[0], small.pos.shape[0])),
-                                          takes_big[:, None] & (large.alive & big_ok)[None, :]], axis=1))
+                                          takes_big[:, None] & (large.alive & big_ok)[None, :] & cfg.stalk_large], axis=1))
         predators, target, pdist = _move_animals(keys[8], predators, pos_after, alive0, state.terrain, True, cfg,
                                                  night, season, SP, caves, None, quarry)
     else:
