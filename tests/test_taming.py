@@ -9,7 +9,7 @@ import numpy as np
 
 from lifesim import env as E
 from lifesim import fauna as fa
-from tests.test_fauna import CFG, KEYS, _world, put
+from test_fauna import CFG, KEYS, _world, put
 
 AWAKE = dataclasses.replace(CFG, animal_sleep=0.0)      # (no sleep bouts: every test at any hour)
 

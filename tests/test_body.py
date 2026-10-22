@@ -84,7 +84,7 @@ def test_hurt_arms_weaken_and_ruined_legs_stop_walking():
 
 
 def test_a_blow_to_a_leg_lames_an_animal():
-    from tests.test_byproducts import CFG as ONE, _put, _world as one_world
+    from test_byproducts import CFG as ONE, _put, _world as one_world
     s, west, mid = one_world()
     s = s._replace(large=_put(s.large, "deer", mid, float(SP["hp"][fa.IDX["deer"]])))
     keys = jax.random.split(jax.random.PRNGKey(3), 200)
