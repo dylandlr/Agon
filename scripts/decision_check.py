@@ -116,6 +116,7 @@ def live(cfg, kind, seed, days, hidden, encoder, run=None, world_model=True):
     night = jax.jit(lambda t: E.is_night(t, cfg))
     seen = {r: [0, 0] for r in RULES}
     deaths = {}
+    start = int(np.asarray(state.alive).sum())          # founders: with reproduction, not every slot starts alive
     for t in range(int(days * cfg.day_length)):
         obs, mask = observe(state)
         key, k = jax.random.split(key)
@@ -144,7 +145,7 @@ def live(cfg, kind, seed, days, hidden, encoder, run=None, world_model=True):
         for c in np.asarray(info.death_cause)[np.asarray(info.died)]:
             name = E.CAUSE_NAMES[int(c)]
             deaths[name] = deaths.get(name, 0) + 1
-    return {"rules": seen, "alive_end": int(np.asarray(state.alive).sum()), "agents": n, "deaths": deaths}
+    return {"rules": seen, "alive_end": int(np.asarray(state.alive).sum()), "agents": start, "deaths": deaths}
 
 
 def main():
@@ -170,7 +171,7 @@ def main():
         for kind in kinds:
             results[kind].append(live(cfg, kind, 100 + seed, args.days, hidden, encoder, run,
                                       world_model=bool(h.get("world_model", True))))
-            print(f"seed {seed} {kind}: alive at end {results[kind][-1]['alive_end']}/{results[kind][-1]['agents']}", flush=True)
+            print(f"seed {seed} {kind}: alive at end {results[kind][-1]['alive_end']}/{results[kind][-1]['agents']} (at start)", flush=True)
 
     def rate(kind, rule):
         n = sum(r["rules"][rule][0] for r in results[kind])
@@ -191,7 +192,7 @@ def main():
         best = table[kinds[-1]][r]["rate"]
         lift = "n/a" if (best is None or not base) else f"{best / base:.2f}x"
         lines.append(f"| {r} | {when} | " + " | ".join(cells) + f" | {lift} |")
-    lines.append("| alive at end | | " + " | ".join(f"{table[k]['alive_share_end']:.0%}" for k in kinds) + " | |")
+    lines.append("| alive at end, of those at start | | " + " | ".join(f"{table[k]['alive_share_end']:.0%}" for k in kinds) + " | |")
     print("\n" + "\n".join(lines))
     if args.out:
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)
