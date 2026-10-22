@@ -51,8 +51,15 @@ RULES = {
     "drink_when_thirsty": ({E.DRINK, E.SEEK_WATER}, "hydration < 0.3"),
     "eat_when_hungry": ({E.EAT, E.SEEK_FOOD}, "satiety < 0.3"),
     "rest_at_night": ({E.SLEEP, E.REST}, "night"),
-    "flee_from_predator": ({E.FLEE}, "predator within 3 cells"),
+    "flee_from_predator": ({E.FLEE}, "a live threat within 3 cells: FLEE"),
+    "get_away_from_predator": (set(), "a live threat within 3 cells: ended farther from it"),
 }
+# Waste: acts that do nothing for a full need. Lower is better; chance is the random agents' rate.
+WASTE = {
+    "drink_when_full": ({E.DRINK}, "hydration >= 0.9"),
+    "eat_when_full": ({E.EAT}, "satiety >= 0.9"),
+}
+FULL = 0.9
 
 
 def build_cfg(args, run: Path | None):
@@ -114,7 +121,7 @@ def live(cfg, kind, seed, days, hidden, encoder, run=None, world_model=True):
     step = jax.jit(lambda s, a, m: E.step(s, a, cfg, m))
     observe = jax.jit(lambda s: (E.observe(s, cfg), E.action_mask(s, cfg)))
     night = jax.jit(lambda t: E.is_night(t, cfg))
-    seen = {r: [0, 0] for r in RULES}
+    seen = {r: [0, 0] for r in list(RULES) + list(WASTE)}
     deaths = {}
     start = int(np.asarray(state.alive).sum())          # founders: with reproduction, not every slot starts alive
     for t in range(int(days * cfg.day_length)):
@@ -127,21 +134,37 @@ def live(cfg, kind, seed, days, hidden, encoder, run=None, world_model=True):
         else:
             carry, a, msg = act(params, carry, obs, mask, jnp.asarray(t == 0), k)
         alive = np.asarray(state.alive) & ~np.asarray(state.asleep)
-        awake_or_not = np.asarray(state.alive)
         an = np.asarray(a)
         hyd, sat = np.asarray(state.hydration), np.asarray(state.satiety)
-        pp = np.asarray(state.pos)
-        pr = np.asarray(state.predators.pos)[np.asarray(state.predators.alive)]
-        near = np.zeros(n, bool)
-        if len(pr):
-            near = (np.abs(pp[:, None, :] - pr[None, :, :]).max(-1) <= NEAR).any(1)
+        # A threat is a predator that can attack this agent now: alive, in its layer, not resting (a sated or
+        # just-attacked predator does not hunt) and not at ease with it (tame). Others are not a threat.
+        pp = np.asarray(state.pos) + np.stack([np.zeros(n, np.int32), np.asarray(state.below).astype(np.int32) * E.LAYER_OFF], -1)
+        P = state.predators
+        lp = np.asarray(P.pos) + np.stack([np.zeros(len(P.alive), np.int32), np.asarray(P.below).astype(np.int32) * E.LAYER_OFF], -1)
+        hunting = np.asarray(P.alive) & (np.asarray(P.rest) <= 0)
+        dist = np.abs(pp[:, None, :] - lp[None, :, :]).max(-1).astype(float)          # (N, P)
+        ok = hunting[None, :] & (np.asarray(P.bond).T < cfg.tame_calm if cfg.taming else True)
+        dist = np.where(ok, dist, 1e6)
+        near = (dist <= NEAR).any(1)
+        nearest = dist.argmin(1)
+        before = dist[np.arange(n), nearest]
         conds = {"drink_when_thirsty": alive & (hyd < LOW), "eat_when_hungry": alive & (sat < LOW),
-                 "rest_at_night": awake_or_not & bool(night(state.t)), "flee_from_predator": alive & near}
-        for r, (acts, _) in RULES.items():
+                 "rest_at_night": alive & bool(night(state.t)), "flee_from_predator": alive & near,
+                 "get_away_from_predator": alive & near,
+                 "drink_when_full": alive & (hyd >= FULL), "eat_when_full": alive & (sat >= FULL)}
+        pending = (conds["get_away_from_predator"], nearest, lp.copy(), np.asarray(P.alive).copy())
+        for r, (acts, _) in {**RULES, **WASTE}.items():
+            if r == "get_away_from_predator":
+                continue
             m = conds[r]
             seen[r][0] += int(m.sum())
             seen[r][1] += int(np.isin(an[m], list(acts)).sum())
         state, _, _, info = step(state, a, msg)
+        m, nearest_i, lp0, _ = pending                  # moved away: ended farther from that same predator
+        pa = np.asarray(state.pos) + np.stack([np.zeros(n, np.int32), np.asarray(state.below).astype(np.int32) * E.LAYER_OFF], -1)
+        after = np.abs(pa - lp0[nearest_i]).max(-1)
+        seen["get_away_from_predator"][0] += int(m.sum())
+        seen["get_away_from_predator"][1] += int((after[m] > before[m]).sum())
         for c in np.asarray(info.death_cause)[np.asarray(info.died)]:
             name = E.CAUSE_NAMES[int(c)]
             deaths[name] = deaths.get(name, 0) + 1
@@ -178,7 +201,7 @@ def main():
         k = sum(r["rules"][rule][1] for r in results[kind])
         return (k / n if n >= MIN_TICKS else None), n
 
-    table = {kind: {r: dict(zip(("rate", "ticks"), rate(kind, r))) for r in RULES} for kind in kinds}
+    table = {kind: {r: dict(zip(("rate", "ticks"), rate(kind, r))) for r in list(RULES) + list(WASTE)} for kind in kinds}
     for kind in kinds:
         table[kind]["alive_share_end"] = float(np.mean([r["alive_end"] / r["agents"] for r in results[kind]]))
     lines = [f"{args.days:g} days x {args.seeds} seeds, {cfg.n_agents} agents, grid {cfg.grid_size}, "
@@ -192,6 +215,12 @@ def main():
         best = table[kinds[-1]][r]["rate"]
         lift = "n/a" if (best is None or not base) else f"{best / base:.2f}x"
         lines.append(f"| {r} | {when} | " + " | ".join(cells) + f" | {lift} |")
+    lines += ["", "Waste (acts on a full need; LOWER is better, random agents set the chance level):", "",
+              "| waste | when | " + " | ".join(f"{k} (ticks)" for k in kinds) + " |", "|---|---|" + "---|" * len(kinds)]
+    for r, (_, when) in WASTE.items():
+        lines.append(f"| {r} | {when} | " + " | ".join(
+            "n/a" if table[k][r]["rate"] is None else f"{table[k][r]['rate']:.1%} ({table[k][r]['ticks']})" for k in kinds) + " |")
+    lines.append("")
     lines.append("| alive at end, of those at start | | " + " | ".join(f"{table[k]['alive_share_end']:.0%}" for k in kinds) + " | |")
     print("\n" + "\n".join(lines))
     if args.out:

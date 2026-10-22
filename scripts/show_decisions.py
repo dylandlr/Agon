@@ -51,7 +51,10 @@ def situations(a: dict, pred: list) -> list[str]:
         tags.append("cold")
     if a.get("health", 1.0) < 0.4:
         tags.append("hurt")
-    if any(max(abs(p[0] - a["r"]), abs(p[1] - a["c"])) <= 3 for p in pred):
+    # a predator is a threat if it is in the agent's layer and not tame to anyone (a tame one stands off).
+    # The page does not record a predator's rest, so a sated one still counts: a slight over-count.
+    if any(max(abs(p[0] - a["r"]), abs(p[1] - a["c"])) <= 3 and (len(p) < 4 or bool(p[3]) == bool(a.get("below", False))) and (len(p) < 5 or p[4] < 0)
+           for p in pred):
         tags.append("predator")
     if a.get("action") == "mate":
         tags.append("mating")
