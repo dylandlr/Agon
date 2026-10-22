@@ -65,12 +65,19 @@ def age_step(kind, age, years, burning):
 
 
 def crop(kind, age):
-    """(G, G, 4) x the cell's greens, fruit, nuts, roots capacity and growth: mature fruit and nut trees
-    bear (none until half grown); greens and roots are the ground's, not the trees'."""
+    """(G, G, 4) x the cell's greens, fruit, nuts, roots capacity and growth: fruit and nuts are moved
+    toward the stands that bear them (mature fruit and nut trees; none until half grown), and away from
+    the rest, keeping the world's forest total what the ecology was calibrated to (each crop divided by
+    its mean over the forest). Greens and roots are the ground's, not the trees'."""
     k = jnp.clip(kind, 0)
+    forest = kind >= 0
     bearing = jnp.clip((grown(kind, age) - 0.5) / 0.5, 0.0, 1.0)
-    fruit = jnp.where(kind >= 0, 0.5 + col("fruit")[k] * bearing, 1.0)
-    nuts = jnp.where(kind >= 0, 0.5 + col("nuts")[k] * bearing, 1.0)
+
+    def spread(raw):
+        mean = jnp.sum(jnp.where(forest, raw, 0.0)) / jnp.maximum(jnp.sum(forest), 1)
+        return jnp.where(forest, raw / jnp.maximum(mean, 1e-6), 1.0)
+    fruit = spread(0.5 + col("fruit")[k] * bearing)
+    nuts = spread(0.5 + col("nuts")[k] * bearing)
     one = jnp.ones_like(fruit)
     return jnp.stack([one, fruit, nuts, one], -1)
 

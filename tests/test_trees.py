@@ -37,9 +37,12 @@ def test_a_stand_grows_falls_when_old_and_burns_back():
 
 def test_fruit_and_nut_trees_bear_when_grown():
     apple, hazel, pine = (jnp.array([[T.NAMES.index(n)]], jnp.int32) for n in ("wild apple", "hazel", "pine"))
-    old, young = jnp.array([[90.0]]), jnp.array([[1.0]])
-    assert float(T.crop(apple, old)[0, 0, 1]) > 1.5 > float(T.crop(apple, young)[0, 0, 1])
-    assert float(T.crop(hazel, old)[0, 0, 2]) > 1.5 and float(T.crop(pine, old)[0, 0, 1]) == 0.5
+    kind = jnp.concatenate([apple, apple, hazel, pine], axis=1)         # one row of four stands
+    age = jnp.array([[90.0, 1.0, 90.0, 90.0]])
+    c = np.asarray(T.crop(kind, age))[0]
+    assert c[0, 1] > 1.5 * c[1, 1] and c[0, 1] > c[3, 1]                 # a grown apple bears, a seedling not
+    assert c[2, 2] > c[3, 2] and c[2, 2] > c[0, 2]                       # hazel nuts
+    assert abs(c[:, 1].mean() - 1.0) < 1e-5 and abs(c[:, 2].mean() - 1.0) < 1e-5   # the forest's total kept
 
 
 def test_agents_see_a_stands_height_and_leaves_and_the_world_wires_it():

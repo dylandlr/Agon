@@ -3493,8 +3493,12 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     # it back. Dead wood falls by the kind and size of the trees (tr.SPECIES deadfall).
     tree_age, felled = TREES.age_step(state.tree_kind, state.tree_age, cfg.tick_minutes / 1440.0 / cfg.days_per_year, fire > 0)
     size = TREES.grown(state.tree_kind, state.tree_age)
+    forest_c = state.tree_kind >= 0
+    fmean = lambda x: jnp.sum(jnp.where(forest_c, x, 0.0)) / jnp.maximum(jnp.sum(forest_c), 1)
     drop_rate = TREES.col("deadfall")[jnp.clip(state.tree_kind, 0)] * (0.3 + 0.7 * size)
-    wood_cap = cfg.wood_max * (0.5 + 0.5 * size)
+    drop_rate = drop_rate / jnp.maximum(fmean(drop_rate), 1e-6)       # (the world's dead wood as calibrated)
+    wood_cap = 0.5 + 0.5 * size
+    wood_cap = cfg.wood_max * wood_cap / jnp.maximum(fmean(wood_cap), 1e-6)
     wood = jnp.where(felled, wood + cfg.wood_max * size, wood)
     wood = jnp.where(state.terrain == FOREST,
                      jnp.minimum(wood + jnp.where(fire <= 0, cfg.wood_regrow * drop_rate, 0.0), jnp.maximum(wood_cap, wood)),

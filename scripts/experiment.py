@@ -492,6 +492,8 @@ def main():
         ok, lines = gate(args.root)
         if not ok:
             raise SystemExit("\n".join(lines))
+    if args.kind == "probe" and args.only is None:
+        do_baseline_decisions(args)              # first: it needs no training (untrained brains deciding)
     for name, extra in todo:
         if args.kind == "inheritance":
             do_inheritance(name, extra, args)
@@ -501,8 +503,6 @@ def main():
             do_stress(name, extra, args)
         else:
             do_item(name, extra, args, args.kind)
-    if args.kind == "probe" and args.only is None:
-        do_baseline_decisions(args)
 
 
 if __name__ == "__main__":
