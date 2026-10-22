@@ -977,7 +977,7 @@ def mean_temperature(terrain, height, cfg: EnvConfig):
     g = terrain.shape[0]
     rows = jnp.broadcast_to(jnp.arange(g, dtype=jnp.float32)[:, None], (g, g)).reshape(-1)
     hour = (cfg.warmest_hour + 6.0) % 24.0                       # where the daily swing averages out
-    days = jnp.array((0,) + tuple(cfg.season_starts)) + 1
+    days = [int(d) + 1 for d in (0,) + tuple(cfg.season_starts)]     # (python ints: reset may be traced)
     temps = [ambient_temperature(jnp.int32(int(d) * cfg.day_length + int(hour / 24.0 * cfg.day_length)), CLEAR,
                                  terrain.reshape(-1), cfg, height.reshape(-1), rows) for d in days]
     return (sum(temps) / len(temps)).reshape(g, g)
@@ -1651,6 +1651,8 @@ def observe(state: State, cfg: EnvConfig) -> jnp.ndarray:
         # within a burning branch's light. Plants, animals, weather and fire above do not show.
         zero = jnp.zeros((n, v, v, 1))
         occ_deep = _occupancy(state.pos, state.alive & state.below, g)
+        if cfg.cell_room > 0:                         # below too: how full each cell is
+            occ_deep = room_used(state, cfg, body(state, cfg)["ideal_kg"])[g:] / cfg.cell_room
         dead_deep = jnp.zeros((g, g)).at[state.pos[:, 0], state.pos[:, 1]].max(jnp.where(state.below, body_look(state, cfg), 0.0))
         amt_d = state.cave_floor[..., MIN0:].sum(-1)
         w_d = state.cave_floor[..., MIN0:] / jnp.maximum(amt_d, 1e-6)[..., None]
@@ -1687,7 +1689,8 @@ def observe(state: State, cfg: EnvConfig) -> jnp.ndarray:
     reach = sight_radius(state, cfg)
     within = jnp.maximum(jnp.abs(offs)[:, None], jnp.abs(offs)[None, :])[None] <= reach[:, None, None]
     win = jnp.where(within[..., None], win, 0.0)
-    win = win.at[:, r, r, N_TERRAIN + 2].add(-state.alive.astype(jnp.float32))  # not self
+    if cfg.cell_room <= 0:                            # a head count, not oneself (with room: how full, oneself included)
+        win = win.at[:, r, r, N_TERRAIN + 2].add(-state.alive.astype(jnp.float32))  # not self
 
     terr_here = state.terrain[state.pos[:, 0], state.pos[:, 1]]
     amb = ambient_temperature(state.t, state.weather, terr_here, cfg,
@@ -3814,8 +3817,8 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     inv = jnp.where(dead_now[:, None], 0.0, inv)
     warm = 2.0 ** ((amb - 20.0) / 10.0) * jnp.where(amb <= 0.0, cfg.rot_frozen, 1.0)
     rot = jnp.where(is_body, state.rot + warm * cfg.tick_minutes / (1440.0 * cfg.decay_days), 0.0)
-    burned = is_body & ~state.below & (fire[r_, c_] > 0)
-    rot = jnp.where(burned, jnp.maximum(rot, 1.0), rot)
+    body_burned = is_body & ~state.below & (fire[r_, c_] > 0)
+    rot = jnp.where(body_burned, jnp.maximum(rot, 1.0), rot)
     to_bones = is_body & (state.rot < 1.0) & (rot >= 1.0)                            # once
     minerals = minerals.at[r_, c_, BONE - MIN0].add(jnp.where(to_bones & ~state.below, cfg.body_bones, 0.0))
     if cfg.underground:

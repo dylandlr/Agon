@@ -941,7 +941,7 @@ def test_a_death_is_felt_on_seeing_the_body():
     assert float(info.moral_reward[0]) < -cfg.care_empathy * cfg.death_penalty   # grief on finding the body
     v, r, c = cfg.view_size, cfg.view_radius, E.N_OBS_CHANNELS
     win = np.asarray(obs_before[0, :v * v * c]).reshape(v, v, c)
-    assert win[..., E.CH_BODIES].sum() == 1.0                      # and the body is visible
+    assert 0.99 < win[..., E.CH_BODIES].sum() <= 1.0              # and the body is visible (fresh: barely begun to rot)
     s, _, _, info = step(s)
     assert abs(float(info.moral_reward[0])) < 1e-6                      # felt once, not every tick
 

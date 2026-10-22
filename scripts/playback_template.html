@@ -1759,7 +1759,8 @@ const DATA = /*__PLAYBACK_DATA__*/null;
       { const u = groundUnder(x, y); contactBand(g, u, x + 1, yb, 14, 0); grassInFront(g, u, x + 1, yb, 14, 0, 0, k); }
       if (stage) for (let q = 0; q < 2 + 2 * stage; q++)                 // flies over the rotting (they move tick to tick)
         px(g, x + 2 + Math.floor(hash(k, q, POSE.i) * 13), y + 6 + Math.floor(hash(q, k, POSE.i + 7) * 6), "#141210", 1, 1);
-      if (!dead && a.asleep) { px(g, x + 12, y + 1, "#eef2ff", 3, 1); px(g, x + 13, y + 2, "#eef2ff"); px(g, x + 12, y + 3, "#eef2ff", 3, 1); }   // a still "z": asleep
+      if (!dead && a.asleep) { px(g, x + 12, y + 1, "#eef2ff", 3, 1); px(g, x + 13, y + 2, "#eef2ff"); px(g, x + 12, y + 3, "#eef2ff", 3, 1);   // a still "z": asleep
+        if (g === ctx) hitBox(FIGS, g, map, x + 11, y, x + 16, y + 5, { k }); }                    // (and it answers a click)
       if (!dead && a.downed && !a.asleep) {            // down: a pool of blood beside, a red cross above (still)
         px(g, x + 3, y + 13, "#7a1f22", 6, 1.5); px(g, x + 4, y + 12.5, "#a8302f", 3, 1);
         px(g, x + 6, y - 2, INKP, 5, 5); px(g, x + 7, y - 1.5, "#e04848", 3, 4); px(g, x + 6.5, y - 0.5, "#e04848", 4, 2); }

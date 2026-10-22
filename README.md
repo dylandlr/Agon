@@ -624,6 +624,46 @@ wolf, which take the group's config values). 6 predators per 1,000 cells (was 1)
 kind is present: on a 32 x 32 map, 2 wolves, 2 big cats, a bear and a crocodile. The scripted
 competent band still persists with them (viability.py: 2 of 2, 3 years).
 
+### The dead (decay, disease, burial)
+
+What one carries falls where one dies. Then the body decomposes (`rot`, 0 fresh to 1 bones): at 20 C
+it takes `decay_days` (20), half as long for every 10 C warmer, and all but stops when frozen. For its
+first 2 days it gives off nothing; then, rising over 3 more days and lasting until only bones are left,
+it gives off rot: flies gather, the ground and water by it foul (`corpse_foul`, five people's refuse a
+day), and the living beside it may catch sickness (`corpse_infection`, 0.4% a tick a body, about 17%
+a day). At bones it leaves bone where it lay. Earth or stone heaped on its cell (`bury_cover`, 3 units
+of loose stone, clay, limestone, basalt, gypsum or quicklime, put there with the ordinary place or drop
+acts) covers it and ends the rot; fire burns it to bones. Nothing says to bury, burn or avoid the dead:
+whether anyone does, and why (it seems to keep people well, or for no reason they could say), is theirs
+to come to. Agents see a body by how it looks (fresh, fading as it rots, nothing once covered or bones)
+and smell the rot in the foul channel. The recorder logs `body_covered` (with who heaped it),
+`body_burned` and `bones`.
+
+### Room in a cell
+
+Each cell holds `cell_room` (4) of body. A standing adult of the reference build takes 1, scaled by
+lean mass^(2/3), so a child takes less; lying down (asleep, downed or dead) takes twice that; a grave as
+much as one standing; bones none. Animals take room by kind (`fauna.ROOM`: rabbit 0.1, wolf 0.5, deer
+1.2, horse 2, mammoth 4; fish and bats none). A step into a cell without room for one fails
+(`StepInfo.crowded`, logged as a failed move "no room"), so a band spreads over neighbouring cells:
+four can stand together, two can lie together, and a crowd is a shape on the map, not a pile.
+Those already in a cell keep their place; those stepping in take what is left, in a random order each
+tick. Animals are not stopped by it but take their room. Agents see how full each cell in view is.
+Grouping still pays as before (warmth beside others, defenders against predators within one cell,
+striking the same animal together); room makes where each one stands something to coordinate.
+
+### Trees
+
+Each forest cell's trees are of one kind (lifesim/trees.py), from a real species: Scots pine, Norway
+spruce, silver birch, English oak, European beech, hazel, wild apple, white willow, juniper, wild
+olive. The kind is chosen by the cell's mean temperature and wetness, in stands. Each stand has an age:
+it grows toward its kind's height (fast young), falls past its lifespan (its wood on the ground, a
+seedling in its place) and is burned back by fire. Fruit and nut trees raise the cell's fruit and nut
+crop once half grown; dead wood falls by kind and size. The agents never see the kind, age or
+lifespan: only a stand's height and the tone of its leaves (two observation channels). The player
+draws each kind (cones, tall pines, white birches, hanging willows, round crowns in their own greens,
+apples in fruit, hazel bushes, junipers) at its height, and the cell inspector names the kind.
+
 ### Taming (emergent)
 
 No act tames an animal (`taming`, on). Each animal is more or less at ease with each person, a bond
@@ -762,6 +802,15 @@ tabs sits on the right: Inspect, Log, People, Language and World.
     the figure whose painted pixels are there (the front one where figures overlap; in the pixel
     look by each sprite's own alpha, in the painted look by drawing the candidates again at the
     point), then, between figures, the nearest.
+  - Room slots: each cell is a 2 x 2 of slots, one per unit of room (a standing adult one, a child or
+    small animal half, someone lying down or a big animal a row), shared by people and animals, so
+    what is drawn is what the world counts. One alone stands in the middle.
+  - Field of view: the selected person's sight, by the observation's own rule. Outside the dashed
+    square is beyond their sight (shorter when sleepy, one cell asleep); inside, dimmed cells are hidden
+    from them now (at night beyond their night sight unless fire-lit; underground beyond touch and
+    torchlight). Toggle: Field of view.
+  - No idle motion: people stand still unless they act (no breathing bob), and the sleep "z", the
+    downed cross, fish, bats and snakes are still until they move.
   - Hovering never moves anything: labels are laid out as if no one were hovered, and the hovered
     person's card (what they are doing and feeling, and what they said) is laid on top, under them.
   - Clicking someone, their name, their portrait in the colonist bar or their row always opens them
