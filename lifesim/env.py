@@ -228,6 +228,8 @@ class Animals(NamedTuple):
     temper: jnp.ndarray   # (M,) 0..1: this one's own temperament, 0.5 the species' usual; inherited at
                           # respawn from a living one of its kind (EnvConfig.temper_spread, temper_mutation).
                           # Hidden from agents. Hot: keener to attack and fight back, slower to trust.
+    grudge: jnp.ndarray   # (M,) int32: the agent its anger is aimed at (who struck it, or who struck its
+                          # person beside it), -1 none. While angry it goes for that one, not the nearest.
 
 
 class State(NamedTuple):
@@ -889,7 +891,7 @@ def _new_animals(key, terrain, n, group, cfg: EnvConfig, passage=None):
     return Animals(pos=pos, below=roost, alive=jnp.ones(n, bool),
                    hp=species_params(cfg)["hp"][sp], rest=jnp.zeros(n, jnp.int32), species=sp,
                    anger=jnp.zeros(n, jnp.int32), lame=jnp.zeros(n, jnp.int32),
-                   bond=jnp.zeros((n, cfg.n_agents)), temper=temper)
+                   bond=jnp.zeros((n, cfg.n_agents)), temper=temper, grudge=jnp.full(n, -1, jnp.int32))
 
 
 def fire_heat(fire, cfg: EnvConfig):
@@ -1950,6 +1952,14 @@ def _move_animals(key, an: Animals, agent_pos, agent_alive, terrain, approach, c
         d = jnp.where(bond >= cfg.tame_calm, 10 ** 6, d)  # at ease with them: no flight, no chase
     nearest = jnp.argmin(d, axis=1)                      # the nearest agent (returned for attacks)
     dist = jnp.min(d, axis=1)
+    if approach:
+        # Angry at someone in particular (struck by them, or they struck its person): that one is
+        # whom it goes for and bites, while they live and its anger lasts, whoever else is nearer
+        n_ag = agent_pos.shape[0]
+        g_ix = jnp.clip(an.grudge, 0, n_ag - 1)
+        d_g = d_people[jnp.arange(an.pos.shape[0]), g_ix]
+        held = (an.anger > 0) & (an.grudge >= 0) & agent_alive[g_ix] & (d_g < 10 ** 6)
+        nearest, dist = jnp.where(held, g_ix, nearest), jnp.where(held, d_g, dist)
     # what it reacts to: agents, and other animals (quarry or threat) when given
     all_pos, d_all = agent_pos, d
     all_below = caves["below"] if caves is not None else None
@@ -1968,6 +1978,7 @@ def _move_animals(key, an: Animals, agent_pos, agent_alive, terrain, approach, c
         n_ag = agent_pos.shape[0]
         score = d_all + jnp.where(jnp.arange(d_all.shape[1]) < n_ag, cfg.prey_preference + 0.01, 0.0)[None, :]
         near_all = jnp.argmin(score, axis=1)
+        near_all = jnp.where(held, g_ix, near_all)                                   # the one it holds a grudge against
     dist_all = jnp.take_along_axis(d_all, near_all[:, None], axis=1)[:, 0]
     hunting = (an.rest <= 0) & ((sp["provoked"][spc] == 0) | (an.anger > 0)) if approach else jnp.ones_like(an.alive)
     if approach and asleep is not None:
@@ -2062,7 +2073,8 @@ def _move_animals(key, an: Animals, agent_pos, agent_alive, terrain, approach, c
         else:
             ok = ok & ok_top & go
         pos = jnp.where(ok[:, None], newc, pos)
-    return an._replace(pos=pos, below=below, anger=jnp.maximum(an.anger - 1, 0),
+    anger = jnp.maximum(an.anger - 1, 0)
+    return an._replace(pos=pos, below=below, anger=anger, grudge=jnp.where(anger > 0, an.grudge, -1),
                        lame=jnp.maximum(an.lame - 1, 0)), nearest, dist
 
 
@@ -2088,7 +2100,7 @@ def _respawn(key, an: Animals, terrain, prob, cfg: EnvConfig, hp_of, passage=Non
                        hp=jnp.where(born, hp_of[an.species], an.hp), rest=jnp.where(born, 0, an.rest),
                        anger=jnp.where(born, 0, an.anger), lame=jnp.where(born, 0, an.lame),
                        bond=jnp.where(born[:, None], 0.0, an.bond),
-                       temper=jnp.where(born, temper, an.temper))
+                       temper=jnp.where(born, temper, an.temper), grudge=jnp.where(born, -1, an.grudge))
 
 
 def generate_bugs(key, terrain, cfg: EnvConfig) -> dict:
@@ -2607,7 +2619,12 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         return jnp.zeros((2 * g, g), jnp.int32).at[trl, tc].max(
             jnp.where(hit & lame_blow, _ticks(cfg, cfg.animal_lame_ticks), 0))
 
-    def wound(an: Animals, grid, lamed=None):
+    def striker_of(an: Animals, hit):
+        """(M,) the agent who struck each animal this tick (any of them, if several), -1 none."""
+        at = hit[None, :] & (trl[None, :] == lrow(an.pos, an.below)[:, None]) & (tc[None, :] == an.pos[:, 1][:, None])
+        return jnp.where(at.any(1), jnp.argmax(at, axis=1), -1)
+
+    def wound(an: Animals, grid, lamed=None, hit=None):
         # Damage reduction, not a hard threshold: armor (by species) blunts weak blows most, so
         # a lone hunter wounds slowly and several striking together wound much faster.
         total = grid[lrow(an.pos, an.below), an.pos[:, 1]]
@@ -2617,12 +2634,13 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         killed = an.alive & (hp <= 0)
         struck = an.alive & (total > 0)
         lame = an.lame if lamed is None else jnp.maximum(an.lame, jnp.where(an.alive, lamed[lrow(an.pos, an.below), an.pos[:, 1]], 0))
+        grudge = an.grudge if hit is None else jnp.where(struck, striker_of(an, hit), an.grudge)
         return an._replace(hp=hp, alive=an.alive & ~killed, anger=jnp.where(struck, _ticks(cfg, 60), an.anger),
-                           lame=lame), killed, taken
+                           lame=lame, grudge=grudge), killed, taken
 
-    predators, killed_pred, pred_taken = wound(state.predators, dmg_grid(hit_pred, lethal), lame_grid(hit_pred))
-    large, killed_large, _ = wound(state.large, dmg_grid(hit_large, lethal), lame_grid(hit_large))
-    small, killed_small, _ = wound(state.small, dmg_grid(hit_small, lethal), lame_grid(hit_small))
+    predators, killed_pred, pred_taken = wound(state.predators, dmg_grid(hit_pred, lethal), lame_grid(hit_pred), hit_pred)
+    large, killed_large, _ = wound(state.large, dmg_grid(hit_large, lethal), lame_grid(hit_large), hit_large)
+    small, killed_small, _ = wound(state.small, dmg_grid(hit_small, lethal), lame_grid(hit_small), hit_small)
     meat, cave_floor = state.meat, state.cave_floor
 
     def carcass(meat, floor, an, amount):
@@ -2684,11 +2702,13 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
                          kill_species(killed_pred, predators)], axis=-1)                  # (N, 3) species or -1
     # The downed cannot ward off, turn or roll away: every blow lands square (cfg.downed_hit_mult)
     down0 = downed_of(state, cfg)
+    # who struck at whom this tick (striker, victim), on one's own layer; and each one's attacker, -1 none
+    on_cell = (trl[:, None] == lrow(state.pos, below0)[None, :]) & (tc[:, None] == state.pos[None, :, 1])
+    attempt = hit_agent[:, None] & on_cell & alive0[None, :] & ~jnp.eye(n, dtype=bool)
+    attacker_of = jnp.where(attempt.any(0), jnp.argmax(attempt, axis=0), -1)                       # (N,)
     if cfg.body_parts:
         # Blow by blow: who struck whom (on one's own layer), whether it landed where it was aimed,
         # how much of it told (the part's lethality), and the damage to that part (its fragility)
-        on_cell = (trl[:, None] == lrow(state.pos, below0)[None, :]) & (tc[:, None] == state.pos[None, :, 1])
-        attempt = hit_agent[:, None] & on_cell & alive0[None, :] & ~jnp.eye(n, dtype=bool)        # (striker, victim)
         landed = attempt & lands_agent[:, None]
         blow = jnp.where(landed, (dmg * cfg.agent_strike_scale)[:, None], 0.0) \
             * jnp.where(down0, cfg.downed_hit_mult, 1.0)[None, :]
@@ -2791,11 +2811,23 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
                                  & (SP["pack"][psp][:, None] > 0)
                                  & (_cheb(lp_pred[None, :, :], lpa[target][:, None, :]) <= 1)).sum(axis=1)
         # its person struck beside it: provoked, it fights (as a wild one would, never its person)
-        defend = (tame_p & beside & struck_by_agent[None, :]).any(1)
-        predators = predators._replace(anger=jnp.where(defend, _ticks(cfg, 60), predators.anger))
-        can_attack = can_attack | (defend & predators.alive & awake & (pdist <= 1) & alive0[target] & ~fire_guard & ~at_ease)
+        hurt_person = tame_p & beside & struck_by_agent[None, :]                               # (P, N)
+        defend = hurt_person.any(1)
+        foe = attacker_of[jnp.argmax(hurt_person, axis=1)]                                     # who struck them
+        defend = defend & (foe >= 0)
+        foe = jnp.clip(foe, 0, n - 1)
+        predators = predators._replace(anger=jnp.where(defend, _ticks(cfg, 60), predators.anger),
+                                       grudge=jnp.where(defend, foe, predators.grudge))
+        # this tick it turns on the striker: a bite now if they are beside it, the chase from the next
+        target = jnp.where(defend, foe, target)
+        pdist = jnp.where(defend, _cheb(lp_pred, lpa[foe]), pdist)
+        foe_ease = jnp.take_along_axis(predators.bond, foe[:, None], axis=1)[:, 0] >= cfg.tame_calm
+        can_attack = jnp.where(defend, predators.alive & awake & (pdist <= 1) & alive0[foe] & ~foe_ease
+                               & ~(heat0[pos_after[foe][:, 0], pos_after[foe][:, 1]] > 0), can_attack)
     defenders = group - jnp.maximum(pack_here - 1, 0)
-    deterred = can_attack & (defenders >= 2) & (SP["ambush"][psp] == 0)
+    # a group stands off a hunter weighing its odds; not one with a grudge, which fights in anger
+    aimed = (predators.anger > 0) & (predators.grudge >= 0)
+    deterred = can_attack & (defenders >= 2) & (SP["ambush"][psp] == 0) & ~aimed
     keen = SP["atk_p"][psp] * jnp.where(night | predators.below, 1.0, 1.0 - 0.5 * SP["nocturnal"][psp])   # caves are night
     keen = keen * (0.5 + predators.temper)                                                   # its own temperament
     if cfg.taming:

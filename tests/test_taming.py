@@ -129,3 +129,36 @@ def test_bonds_fade_apart_and_reset_with_a_new_animal():
     dead = s2._replace(large=s2.large._replace(alive=s2.large.alive.at[0].set(False)))
     reborn = E._respawn(jax.random.PRNGKey(0), dead.large, dead.terrain, 1.0, AWAKE, E.species_params(AWAKE)["hp"])
     assert float(reborn.bond[0].max()) == 0.0
+
+
+def test_a_tame_wolf_turns_on_whoever_strikes_its_person_not_a_bystander():
+    """Cells west to east: the striker, its person, the wolf, a bystander. The striker hits the
+    person (strike east). The wolf's anger is aimed at the striker: over the ticks that follow it
+    is the striker who gets bitten, never the bystander beside the wolf, nor its person."""
+    cfg3 = dataclasses.replace(AWAKE, n_agents=3)
+    s = E.reset(jax.random.PRNGKey(4), cfg3)
+    off = lambda an: an._replace(alive=jnp.zeros_like(an.alive))
+    t = np.asarray(s.terrain)
+    land = [(r, c) for r in range(3, 20) for c in range(3, 20) if (t[r - 1:r + 2, c - 1:c + 2] != E.WATER).all()]
+    s = s._replace(small=off(s.small), large=off(s.large), predators=off(s.predators),
+                   conditions=jnp.zeros_like(s.conditions), t=jnp.int32(24),
+                   birth_age=jnp.full(3, int(25 * cfg3.ticks_per_bio_year), jnp.int32))
+    striker, person, w, bystander = _cells(land, 4)
+    s = s._replace(pos=jnp.asarray([person, striker, bystander], jnp.int32),
+                   predators=_with_bond(put(s.predators, 0, "wolf", w), 0, 0, 0.9))
+    east = E.STRIKE_N + 2
+    acts = jnp.full(3, E.REST, jnp.int32).at[1].set(east)                   # #1 strikes east: hits #0
+    rest = jnp.full(3, E.REST, jnp.int32)
+
+    def run(k):
+        st, _, _, _ = E.step(s._replace(key=k), acts, cfg3)
+        grudge = st.predators.grudge[0]
+        hits = jnp.zeros(3)
+        for j in range(8):
+            st, _, _, info = E.step(st._replace(key=jax.random.fold_in(k, j)), rest, cfg3)
+            hits = hits + info.attacked_by_predator.astype(jnp.float32)
+        return hits, grudge
+    hits, grudge = jax.vmap(run)(KEYS[:60])
+    hits, grudge = np.asarray(hits).mean(0), np.asarray(grudge)
+    assert (grudge == 1).mean() > 0.9, grudge                 # aimed at the striker (unless it had wandered off)
+    assert hits[1] > 0.0 and hits[2] == 0.0 and hits[0] == 0.0, hits
