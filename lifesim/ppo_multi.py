@@ -115,6 +115,13 @@ class MAConfig:
     # by a learned trust that starts at 0.
     world_model: bool = False
     wm_coef: float = 1.0
+    # One trunk for the population: the encoder, the GRU and the world model (perception and the
+    # physics of the world, the same for everyone) learn from everyone's experience; the policy,
+    # value, message heads and trust stay each agent's own. Done by tying: every agent keeps a
+    # copy, started identical, and the trunk's update is the mean over the agents who learned
+    # this round, so the copies never part. Checkpoints, inheritance and playback see the same
+    # shapes as before. The ablation against per-individual brains (claude/research/design-audit).
+    share_trunk: bool = False
     seed: int = 0
 
     @property
@@ -230,6 +237,37 @@ def _scale_per_agent(updates, lrs):
     return jax.tree_util.tree_map(lambda u: u * lrs.reshape((-1,) + (1,) * (u.ndim - 1)), updates)
 
 
+# The modules of policy.ActorCritic that make up the trunk (MAConfig.share_trunk)
+TRUNK = ("conv1", "conv2", "conv3", "win_dense", "feat_dense", "in_dense", "mid_dense", "gru",
+         "dyn1", "dyn2", "rew_hidden", "rew_out", "dec_hidden", "dec_out")
+
+
+def _is_trunk(path):
+    return any(getattr(k, "key", None) in TRUNK for k in path)
+
+
+def _tie_trunk(tree, weights=None):
+    """Trunk leaves: the mean over the agent axis (weighted; by default over the agents whose
+    leaf is not all zero, i.e. who learned this round), broadcast back to every agent. Other
+    leaves unchanged."""
+    def one(path, x):
+        if not _is_trunk(path) or x.ndim < 1:
+            return x
+        w = weights
+        if w is None:
+            w = (jnp.abs(x).reshape(x.shape[0], -1).max(1) > 0).astype(x.dtype)
+        w = w.reshape((-1,) + (1,) * (x.ndim - 1))
+        mean = (x * w).sum(0, keepdims=True) / jnp.maximum(w.sum(0, keepdims=True), 1.0)
+        return jnp.broadcast_to(mean, x.shape)
+    return jax.tree_util.tree_map_with_path(one, tree)
+
+
+def _copy_trunk_from_first(params):
+    """Every agent's trunk set to agent 0's: identical copies to start the tie."""
+    return jax.tree_util.tree_map_with_path(
+        lambda path, x: jnp.broadcast_to(x[:1], x.shape) if _is_trunk(path) and x.ndim >= 1 else x, params)
+
+
 def _swap_axes_nb(x):
     """(B, N, ...) <-> (N, B, ...)"""
     return jnp.swapaxes(x, 0, 1)
@@ -305,6 +343,8 @@ def make_train(env_cfg: EnvConfig, cfg: MAConfig):
                  jnp.ones((1, b, A + M), bool))
         params = jax.vmap(lambda k: net.init(k, jnp.zeros((b, cfg.hidden)), dummy))(
             jax.random.split(k_net, n))
+        if cfg.share_trunk:
+            params = _copy_trunk_from_first(params)
         opt_state = adam.init(params)
         reset_flag = jnp.ones((n, b), bool)
         return (params, opt_state, states, obs, mask, reset_flag, carry, k_run, empty_memory(b, obs.shape[-1])), pop
@@ -336,6 +376,18 @@ def make_train(env_cfg: EnvConfig, cfg: MAConfig):
     def lrs_of(pop: Population):
         scale = pop.genotype.lr_scale if cfg.per_agent_lr else jnp.ones(n)
         return cfg.lr * scale
+
+    def scaled(updates, lrs):
+        """Each agent's update at its own learning rate; a shared trunk at the population's mean
+        rate (so the tied copies move together)."""
+        if not cfg.share_trunk:
+            return _scale_per_agent(updates, lrs)
+        mean_lr = jnp.full_like(lrs, lrs.mean())
+        return jax.tree_util.tree_map_with_path(
+            lambda path, u: u * (mean_lr if _is_trunk(path) else lrs).reshape((-1,) + (1,) * (u.ndim - 1)), updates)
+
+    def tied(grads):
+        return _tie_trunk(grads) if cfg.share_trunk else grads
 
     def gammas_of(pop: Population):
         g = pop.genotype.patience if cfg.trait_gamma else jnp.full(n, cfg.gamma)
@@ -634,9 +686,9 @@ def make_train(env_cfg: EnvConfig, cfg: MAConfig):
                 tr, a, tg, ic, d_obs, d_act, d_mask, d_msg, d_w = bt
                 grads, ent = jax.grad(total_loss, has_aux=True)(params, ic, tr, a, tg,
                                                                 d_obs, d_act, d_mask, d_msg, d_w)
-                grads = _per_agent_clip(grads, cfg.max_grad_norm)
+                grads = tied(_per_agent_clip(grads, cfg.max_grad_norm))
                 updates, opt_state = adam.update(grads, opt_state, params)
-                params = optax.apply_updates(params, _scale_per_agent(updates, lrs))
+                params = optax.apply_updates(params, scaled(updates, lrs))
                 return (params, opt_state), ent
 
             (params, opt_state), ents = jax.lax.scan(mb_step, (params, opt_state), batches)
@@ -666,13 +718,16 @@ def make_train(env_cfg: EnvConfig, cfg: MAConfig):
             earned = jnp.where(jnp.any(traj.died, 0), 1.0, jnp.minimum(slept / (cfg.consolidation_ticks / cfg.tick_scale), 1.0))
             share = earned.mean(1)                                                    # (N,)
             sh = lambda x: share.reshape((-1,) + (1,) * (x.ndim - 1))
-            step = _per_agent_clip(jax.tree_util.tree_map(lambda q: q * sh(q), pending), cfg.max_grad_norm)
+            step = tied(_per_agent_clip(jax.tree_util.tree_map(lambda q: q * sh(q), pending), cfg.max_grad_norm))
             updates, new_opt = adam.update(step, opt_state, params)
             on = share > 0
-            keep = lambda new, old: jax.tree_util.tree_map(
-                lambda a_, b_: jnp.where(on.reshape((-1,) + (1,) * (a_.ndim - 1)), a_, b_)
+            if cfg.share_trunk:                       # a tied trunk moves for everyone whenever anyone slept
+                on_all = jnp.broadcast_to(jnp.any(on), on.shape)
+            keep = lambda new, old: jax.tree_util.tree_map_with_path(
+                lambda path, a_, b_: jnp.where((on_all if cfg.share_trunk and _is_trunk(path) else on)
+                                               .reshape((-1,) + (1,) * (a_.ndim - 1)), a_, b_)
                 if (a_.ndim >= 1 and a_.shape[:1] == (n,)) else a_, new, old)
-            params = keep(optax.apply_updates(params, _scale_per_agent(updates, lrs)), params)
+            params = keep(optax.apply_updates(params, scaled(updates, lrs)), params)
             opt_state = keep(new_opt, opt_state)
             memory = memory._replace(pending=jax.tree_util.tree_map(lambda q: q * (1 - sh(q)), pending))
             graded_w = jnp.broadcast_to(earned[None], traj.reward.shape)

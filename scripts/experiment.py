@@ -105,8 +105,9 @@ def items(kind, args=None):
         return [("full", base), ("no_sleep_learning", base + ["--no-sleep-learning"]),
                 ("caves", base + ["--underground"]), ("grounded_language", base + ["--language", "grounded"])]
     if kind == "validate":
-        return [("caveman", []), ("caveman_no_sleep_learning", ["--no-sleep-learning"]),
-                ("blank", ["--slate", "blank"]), ("caveman_no_world_model", ["--no-world-model"])]
+        return [("caveman", []), ("caveman_shared_trunk", ["--share-trunk"]),
+                ("caveman_no_world_model", ["--no-world-model"]),
+                ("caveman_no_sleep_learning", ["--no-sleep-learning"]), ("blank", ["--slate", "blank"])]
     if kind == "stress":
         return [(k, [s]) for k, s in STRESS]
     if kind == "inheritance":
