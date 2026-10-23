@@ -18,10 +18,11 @@ could not have told a thinking agent from a lucky one.
 
 ## 1. The learning problem is starved, by design
 
-Every individual owns its own network (`ppo_multi.py`: "one network per individual"). In the
-run, 64 slots, 8 founders alive at a time for most of training, 4 replica worlds, 100M agent-steps
-in all. A founder's brain saw on the order of 1–2M of its own steps; a slot filled late in
-training saw far fewer. A 128-unit GRU over an 11x11x64 window plus about 30 body features,
+Every individual owns its own network (`ppo_multi.py`: "one network per individual"). The run's
+"100M agent-steps" counts all 64 slots in 4 worlds every tick, dead slots included (64 x 4 x
+390,528 ticks = 1.0e8). About 8 were alive at a time, so alive experience was about 12.5M steps
+in all, spread over mostly the 8 founder brains: about 1.5M steps each, lived as 2,289 lives
+averaging 114 days. A slot filled late in training saw far fewer. A 128-unit GRU over an 11x11x64 window plus about 30 body features,
 trained by PPO from scratch, is not going to learn planning-grade behaviour from 1M on-policy
 steps. Imitation (`imitation_coef` 0.5) shares behaviour but not gradients, and the imitation
 network is run without memory, so it transfers reflexes, not strategies.
@@ -115,13 +116,20 @@ stress is in well-being, so the channel exists; check its magnitude against a bi
 
 ## 6. On LLMs and "more deep learning"
 
-For Agon, the emergent society, an LLM in the decision loop would import human priors about
-fire, cooking, kinship and law, which is exactly what the emergent arm is meant to measure the
-absence or appearance of. LLMs belong in Paragon (the designed society) and in analysis: naming
-what agents did, summarising a life, proposing hypotheses from the event log. Within Agon, the
+An LLM in the decision loop would import human priors about fire, cooking, kinship and law,
+which is exactly what Agon is meant to measure the absence or appearance of. (Paragon, the
+designed-society arm, is shelved for now, 2026-10-23.) The one place for an LLM is analysis:
+naming what agents did, summarising a life, proposing hypotheses from the event log. Within Agon, the
 deep-learning changes worth making are the pooled trunk (section 1), a sized-up encoder once data
 is pooled, and a dynamics model trained with some counterfactual signal (section 3). Nothing here
 calls for a different family of model.
+
+## Note on animals (2026-10-23)
+
+Animals now have a temperament, are neutral to strangers once tame, and aim their anger: a
+grudge against who struck them or who struck their person beside them. When they did not see
+the blow (struck in their sleep) or several struck at once, they blame the one they trust least,
+by bond. None of this is scripted behaviour; it is state the animal carries.
 
 ## Order of work
 

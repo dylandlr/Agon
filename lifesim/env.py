@@ -2619,12 +2619,20 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         return jnp.zeros((2 * g, g), jnp.int32).at[trl, tc].max(
             jnp.where(hit & lame_blow, _ticks(cfg, cfg.animal_lame_ticks), 0))
 
-    def striker_of(an: Animals, hit):
-        """(M,) the agent who struck each animal this tick (any of them, if several), -1 none."""
-        at = hit[None, :] & (trl[None, :] == lrow(an.pos, an.below)[:, None]) & (tc[None, :] == an.pos[:, 1][:, None])
-        return jnp.where(at.any(1), jnp.argmax(at, axis=1), -1)
+    def striker_of(an: Animals, hit, asleep):
+        """(M,) whom each struck animal blames, -1 none. Awake, it saw the blow: one of those who
+        struck at it. Asleep, it only wakes hurt with people beside it: it blames one of them. Of
+        several, the one it trusts least (the lowest bond; a stranger before a friend)."""
+        here = (trl[None, :] == lrow(an.pos, an.below)[:, None]) & (tc[None, :] == an.pos[:, 1][:, None])
+        at = hit[None, :] & here                                                               # (M, N) struck at it
+        beside = (_cheb(layered_pos(an.pos, an.below)[:, None, :],
+                        layered_pos(state.pos, below0)[None, :, :]) <= 1) & alive0[None, :]
+        suspects = at if asleep is None else jnp.where(asleep[:, None], beside, at)
+        trust = an.bond if cfg.taming else jnp.zeros(suspects.shape)
+        pick = jnp.argmin(jnp.where(suspects, trust, 2.0), axis=1)
+        return jnp.where(suspects.any(1), pick, -1)
 
-    def wound(an: Animals, grid, lamed=None, hit=None):
+    def wound(an: Animals, grid, lamed=None, hit=None, asleep=None):
         # Damage reduction, not a hard threshold: armor (by species) blunts weak blows most, so
         # a lone hunter wounds slowly and several striking together wound much faster.
         total = grid[lrow(an.pos, an.below), an.pos[:, 1]]
@@ -2634,13 +2642,13 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         killed = an.alive & (hp <= 0)
         struck = an.alive & (total > 0)
         lame = an.lame if lamed is None else jnp.maximum(an.lame, jnp.where(an.alive, lamed[lrow(an.pos, an.below), an.pos[:, 1]], 0))
-        grudge = an.grudge if hit is None else jnp.where(struck, striker_of(an, hit), an.grudge)
+        grudge = an.grudge if hit is None else jnp.where(struck, striker_of(an, hit, asleep), an.grudge)
         return an._replace(hp=hp, alive=an.alive & ~killed, anger=jnp.where(struck, _ticks(cfg, 60), an.anger),
                            lame=lame, grudge=grudge), killed, taken
 
-    predators, killed_pred, pred_taken = wound(state.predators, dmg_grid(hit_pred, lethal), lame_grid(hit_pred), hit_pred)
-    large, killed_large, _ = wound(state.large, dmg_grid(hit_large, lethal), lame_grid(hit_large), hit_large)
-    small, killed_small, _ = wound(state.small, dmg_grid(hit_small, lethal), lame_grid(hit_small), hit_small)
+    predators, killed_pred, pred_taken = wound(state.predators, dmg_grid(hit_pred, lethal), lame_grid(hit_pred), hit_pred, asleep_p)
+    large, killed_large, _ = wound(state.large, dmg_grid(hit_large, lethal), lame_grid(hit_large), hit_large, asleep_l)
+    small, killed_small, _ = wound(state.small, dmg_grid(hit_small, lethal), lame_grid(hit_small), hit_small, asleep_s)
     meat, cave_floor = state.meat, state.cave_floor
 
     def carcass(meat, floor, an, amount):
@@ -2702,10 +2710,9 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
                          kill_species(killed_pred, predators)], axis=-1)                  # (N, 3) species or -1
     # The downed cannot ward off, turn or roll away: every blow lands square (cfg.downed_hit_mult)
     down0 = downed_of(state, cfg)
-    # who struck at whom this tick (striker, victim), on one's own layer; and each one's attacker, -1 none
+    # who struck at whom this tick (striker, victim), on one's own layer
     on_cell = (trl[:, None] == lrow(state.pos, below0)[None, :]) & (tc[:, None] == state.pos[None, :, 1])
     attempt = hit_agent[:, None] & on_cell & alive0[None, :] & ~jnp.eye(n, dtype=bool)
-    attacker_of = jnp.where(attempt.any(0), jnp.argmax(attempt, axis=0), -1)                       # (N,)
     if cfg.body_parts:
         # Blow by blow: who struck whom (on one's own layer), whether it landed where it was aimed,
         # how much of it told (the part's lethality), and the damage to that part (its fragility)
@@ -2813,7 +2820,10 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         # its person struck beside it: provoked, it fights (as a wild one would, never its person)
         hurt_person = tame_p & beside & struck_by_agent[None, :]                               # (P, N)
         defend = hurt_person.any(1)
-        foe = attacker_of[jnp.argmax(hurt_person, axis=1)]                                     # who struck them
+        # who struck them; of several, the one the animal trusts least (a stranger before a friend)
+        person = jnp.argmax(hurt_person, axis=1)                                               # (P,)
+        struck_them = attempt[:, person].T & alive0[None, :]                                   # (P, N) strikers of its person
+        foe = jnp.where(struck_them.any(1), jnp.argmin(jnp.where(struck_them, predators.bond, 2.0), axis=1), -1)
         defend = defend & (foe >= 0)
         foe = jnp.clip(foe, 0, n - 1)
         predators = predators._replace(anger=jnp.where(defend, _ticks(cfg, 60), predators.anger),
