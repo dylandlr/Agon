@@ -225,6 +225,9 @@ class Animals(NamedTuple):
     anger: jnp.ndarray    # (M,) int32 ticks left of being provoked (struck)
     lame: jnp.ndarray     # (M,) int32 ticks left lame from a blow to a leg (EnvConfig.body_parts)
     bond: jnp.ndarray     # (M, N) 0..1: how at ease the animal is with each agent (taming; EnvConfig.taming)
+    temper: jnp.ndarray   # (M,) 0..1: this one's own temperament, 0.5 the species' usual; inherited at
+                          # respawn from a living one of its kind (EnvConfig.temper_spread, temper_mutation).
+                          # Hidden from agents. Hot: keener to attack and fight back, slower to trust.
 
 
 class State(NamedTuple):
@@ -882,10 +885,11 @@ def _new_animals(key, terrain, n, group, cfg: EnvConfig, passage=None):
         pos = jnp.where(roost[:, None], cells, pos)
     else:
         roost = jnp.zeros(n, bool)
+    temper = jnp.clip(0.5 + cfg.temper_spread * jax.random.normal(jax.random.fold_in(key, 11), (n,)), 0.0, 1.0)
     return Animals(pos=pos, below=roost, alive=jnp.ones(n, bool),
                    hp=species_params(cfg)["hp"][sp], rest=jnp.zeros(n, jnp.int32), species=sp,
                    anger=jnp.zeros(n, jnp.int32), lame=jnp.zeros(n, jnp.int32),
-                   bond=jnp.zeros((n, cfg.n_agents)))
+                   bond=jnp.zeros((n, cfg.n_agents)), temper=temper)
 
 
 def fire_heat(fire, cfg: EnvConfig):
@@ -2002,6 +2006,12 @@ def _move_animals(key, an: Animals, agent_pos, agent_alive, terrain, approach, c
             & (jax.random.uniform(jax.random.fold_in(k_herd, 11), act.shape) < cfg.scavenge_seek)
         calm_dir = jnp.where(nose[:, None], MOVE_DELTAS[jnp.argmax(smell, axis=1)], calm_dir)
     acts = jax.random.uniform(k_act, (an.pos.shape[0],))
+    if bond is not None and approach:
+        # tame to someone and not provoked: neutral, it chases people only with its wildness
+        b_max = jnp.max(jnp.where(agent_alive[None, :], bond, 0.0), axis=1)
+        neutral = (b_max >= cfg.tame_calm) & (an.anger <= 0)
+        person = near_all < agent_pos.shape[0]
+        act = jnp.where(neutral & person, act * an.temper * (1.0 - b_max), act)
     move_engaged = engaged & (acts < act)
     move_wander = ~engaged & awake & (jax.random.uniform(k_wander, acts.shape) < cfg.wander_prob)
     if scent is not None and approach:
@@ -2059,8 +2069,15 @@ def _move_animals(key, an: Animals, agent_pos, agent_alive, terrain, approach, c
 def _respawn(key, an: Animals, terrain, prob, cfg: EnvConfig, hp_of, passage=None):
     """A dead animal's slot is filled again, now and then, by one of the same species in its habitat
     (bats in the caves)."""
-    k_p, k_c = jax.random.split(key)
+    k_p, k_c, k_t = jax.random.split(key, 3)
     born = ~an.alive & (jax.random.uniform(k_p, an.alive.shape) < prob)
+    # Temperament runs in families: the newcomer takes after a living one of its kind (a parent,
+    # chosen at random), a little changed; with none alive, the species' usual spread.
+    kin = an.alive[None, :] & (an.species[None, :] == an.species[:, None])                   # (M, M)
+    parent = jnp.argmax(jnp.where(kin, jax.random.uniform(jax.random.fold_in(k_t, 1), kin.shape), -1.0), axis=1)
+    noise = jax.random.normal(jax.random.fold_in(k_t, 2), an.alive.shape)
+    temper = jnp.where(kin.any(1), an.temper[parent] + cfg.temper_mutation * noise, 0.5 + cfg.temper_spread * noise)
+    temper = jnp.clip(temper, 0.0, 1.0)
     cells = _habitat_cells(k_c, terrain, an.species, cfg)
     roost = jnp.zeros_like(born)
     if passage is not None:
@@ -2070,7 +2087,8 @@ def _respawn(key, an: Animals, terrain, prob, cfg: EnvConfig, hp_of, passage=Non
                        below=jnp.where(born, roost, an.below),
                        hp=jnp.where(born, hp_of[an.species], an.hp), rest=jnp.where(born, 0, an.rest),
                        anger=jnp.where(born, 0, an.anger), lame=jnp.where(born, 0, an.lame),
-                       bond=jnp.where(born[:, None], 0.0, an.bond))
+                       bond=jnp.where(born[:, None], 0.0, an.bond),
+                       temper=jnp.where(born, temper, an.temper))
 
 
 def generate_bugs(key, terrain, cfg: EnvConfig) -> dict:
@@ -2634,7 +2652,8 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     # Struck, some fight back: aurochs and mammoths trample, boars gore, bears maul (the striker)
     def counter(an, hit, kk):
         rows = lrow(an.pos, an.below)
-        on = jnp.zeros((2 * g, g)).at[rows, an.pos[:, 1]].max(jnp.where(an.alive, SP["counter_p"][an.species], 0.0))
+        on = jnp.zeros((2 * g, g)).at[rows, an.pos[:, 1]].max(
+            jnp.where(an.alive, SP["counter_p"][an.species] * (0.5 + an.temper), 0.0))        # hot ones fight back more
         hurt = jnp.zeros((2 * g, g)).at[rows, an.pos[:, 1]].max(jnp.where(an.alive, SP["counter_dmg"][an.species], 0.0))
         who = jnp.zeros((2 * g, g), jnp.int32).at[rows, an.pos[:, 1]].max(
             jnp.where(an.alive & (SP["counter_p"][an.species] > 0), an.species, -1))
@@ -2771,9 +2790,19 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         pack_here = pack_here - (tame_to_tgt & predators.alive[None, :] & (psp[None, :] == psp[:, None])
                                  & (SP["pack"][psp][:, None] > 0)
                                  & (_cheb(lp_pred[None, :, :], lpa[target][:, None, :]) <= 1)).sum(axis=1)
+        # its person struck beside it: provoked, it fights (as a wild one would, never its person)
+        defend = (tame_p & beside & struck_by_agent[None, :]).any(1)
+        predators = predators._replace(anger=jnp.where(defend, _ticks(cfg, 60), predators.anger))
+        can_attack = can_attack | (defend & predators.alive & awake & (pdist <= 1) & alive0[target] & ~fire_guard & ~at_ease)
     defenders = group - jnp.maximum(pack_here - 1, 0)
     deterred = can_attack & (defenders >= 2) & (SP["ambush"][psp] == 0)
     keen = SP["atk_p"][psp] * jnp.where(night | predators.below, 1.0, 1.0 - 0.5 * SP["nocturnal"][psp])   # caves are night
+    keen = keen * (0.5 + predators.temper)                                                   # its own temperament
+    if cfg.taming:
+        # tame to someone and not provoked: neutral to strangers, biting only with its wildness
+        b_max = jnp.max(jnp.where(alive0[None, :], predators.bond, 0.0), axis=1)
+        neutral = (b_max >= cfg.tame_calm) & (predators.anger <= 0)
+        keen = jnp.where(neutral, keen * predators.temper * (1.0 - b_max), keen)
     attack = can_attack & ~deterred & (jax.random.uniform(keys[9], target.shape) < keen)
     bite = jnp.where(attack, SP["atk_dmg"][psp] + SP["venom"][psp], 0.0) \
         * jnp.where(down0[target], cfg.downed_hit_mult, 1.0)                    # a downed one is easy meat
@@ -3562,7 +3591,7 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         striking = is_strike & tgt_ok & alive0
 
         def rebond(an0, an, fed):
-            ease = SP["tameable"][an.species][:, None]
+            ease = SP["tameable"][an.species][:, None] * (1.5 - an.temper)[:, None]        # hot ones trust slowly
             struck = striking[None, :] & (trl[None, :] == lrow(an0.pos, an0.below)[:, None]) \
                 & (tc[None, :] == an0.pos[:, 1][:, None]) & an0.alive[:, None]                  # (M, N): i struck at it
             near = (_cheb(layered_pos(an.pos, an.below)[:, None, :], lpa[None, :, :]) <= 1) & alive0[None, :]

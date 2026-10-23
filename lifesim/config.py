@@ -590,6 +590,16 @@ class EnvConfig:
     tame_calm: float = 0.5             # at or above: at ease with that person
     tame_follow: float = 0.7           # at or above: follows that person (cfg.tame_follow_prob of its steps)
     tame_follow_prob: float = 0.6
+    # A tame animal (at ease with someone) is neutral to everyone else: unprovoked, it chases and
+    # attacks strangers only with its wildness, temper x (1 - its strongest bond), so a calm,
+    # well-kept one is near harmless and a hot one with a thin bond is still dangerous. Struck, or
+    # with its person struck beside it, it is provoked (anger) and fights as a wild one, never its
+    # person. Each animal has its own temperament (Animals.temper, 0..1, 0.5 usual): hot ones are
+    # keener to attack and fight back (x 0.5..1.5) and slower to trust (bond gains x 1.5..0.5), so
+    # they take more keeping to be safe. It runs in families: inherited at respawn from a living
+    # one of its kind, a little changed. Agents cannot see it; they learn each animal.
+    temper_spread: float = 0.2         # standard deviation of temperament in a fresh population
+    temper_mutation: float = 0.1       # standard deviation of a newcomer's temperament about its parent's
     scavenge_seek: float = 0.6         # a hungry predator not chasing anything steps toward meat beside it
     stalk_hungry_hp: float = 0.75     # a predator below this share of its hp stalks large prey too (0: never)
     animal_sleep_jitter: float = 0.075  # each slot's sleep bout starts up to this share of a day early or late

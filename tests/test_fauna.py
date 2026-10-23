@@ -29,6 +29,8 @@ def put(an, i, name, cell, **kw):
     an = an._replace(pos=an.pos.at[i].set(jnp.asarray(cell, jnp.int32)), alive=an.alive.at[i].set(True),
                      hp=an.hp.at[i].set(float(SP["hp"][k])), species=an.species.at[i].set(k),
                      rest=an.rest.at[i].set(0), anger=an.anger.at[i].set(kw.get("anger", 0)))
+    if hasattr(an, "temper"):          # a usual temperament (0.5) unless the test says otherwise: numbers stay exact
+        an = an._replace(temper=an.temper.at[i].set(kw.get("temper", 0.5)))
     return an
 
 
