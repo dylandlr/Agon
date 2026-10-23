@@ -587,7 +587,9 @@ def make_train(env_cfg: EnvConfig, cfg: MAConfig):
                     * tr.learn_w[:-1]
                 np_ = jnp.maximum(pair.sum(), 1.0)
                 lat = ((terms["z"][:-1] - jax.lax.stop_gradient(terms["h"][1:])) ** 2).mean(-1)
-                own = ((terms["own"][:-1] - tr.obs[1:][..., dec_idx]) ** 2).mean(-1)
+                # the own-state head learns the CHANGE over the tick, scaled (policy.own_scale): what the
+                # action did, not the level the belief already carries
+                own = ((terms["own"][:-1] - net.own_scale * (tr.obs[1:][..., dec_idx] - tr.obs[:-1][..., dec_idx])) ** 2).mean(-1)
                 rew = (terms["r"] - tr.reward) ** 2
                 wm = ((lat * pair).sum() / np_, (rew * w).sum() / denom, (own * pair).sum() / np_)
                 loss = loss + cfg.wm_coef * (wm[0] + wm[1] + wm[2])

@@ -97,6 +97,10 @@ class ActorCritic(nn.Module):
     imagine_k: int = 6        # actions considered per decision
     imagine_h: int = 6        # ticks imagined for each
     imagine_gamma: float = 0.97
+    # The own-state head predicts the CHANGE in each need over the next tick, times this (a tick's
+    # change is a few hundredths: scaled up so what an action does is the whole signal, not a sliver
+    # of the level, which the belief already holds). Levels come back as now + the summed changes.
+    own_scale: float = 10.0
 
     def setup(self):
         if self.encoder == "conv":
@@ -178,6 +182,7 @@ class ActorCritic(nn.Module):
         return self.rew_out(nn.relu(self.rew_hidden(h))).squeeze(-1)
 
     def decode(self, h):
+        """The change in each need (DECODE_NAMES) expected over the next tick, times own_scale."""
         return self.dec_out(nn.relu(self.dec_hidden(h)))
 
     def habit(self, z, mask_a):
@@ -213,8 +218,14 @@ class ActorCritic(nn.Module):
             cand, q = self.imagine(h, prior, mask)
             q = jax.lax.stop_gradient(q)                       # ideas are trained by the model loss only
             ok = jnp.take_along_axis(mask[..., :self.n_actions], cand, -1)   # fewer valid actions than k
-            mean = (q * ok).sum(-1, keepdims=True) / jnp.maximum(ok.sum(-1, keepdims=True), 1)
-            bias = self.trust * (q - mean) * ok
+            nok = jnp.maximum(ok.sum(-1, keepdims=True), 1)
+            mean = (q * ok).sum(-1, keepdims=True) / nok
+            # Standardised over the candidates: imagined returns differ by hundredths (a few ticks of
+            # a slowly changing life), so raw differences would need an enormous trust to move a
+            # logit, and trust's own gradient would be as small. Scaled, trust 1 means "one standard
+            # idea's worth of logit".
+            std = jnp.sqrt((((q - mean) ** 2) * ok).sum(-1, keepdims=True) / nok) + 1e-3
+            bias = self.trust * (q - mean) / std * ok
             full = jnp.sum(jax.nn.one_hot(cand, self.n_actions + self.aim_out + self.msg_out) * bias[..., None], axis=-2)
             logits = jnp.where(mask, prior + full, MASK_VALUE)
             out.update(cand=cand, q=q)
@@ -252,14 +263,18 @@ class ActorCritic(nn.Module):
         return. For the playback's Ideas view."""
         carry, out = self.trace(carry, x)
         z, a = out["h"], first_action
+        n_win = self.view_size ** 2 * self.channels
+        now = x[0][..., jnp.asarray(DECODE_INDEX) + n_win]           # the needs as observed now
+        level = now
         acts, states, rewards = [], [], []
         for _ in range(self.imagine_h):
             acts.append(a)
             z = self.dyn(z, a)
-            states.append(self.decode(z))
+            level = level + self.decode(z) / self.own_scale          # the level expected after this step
+            states.append(level)
             rewards.append(self.reward_of(z))
             a = self.habit(z, x[2][..., :self.n_actions])
-        return jnp.stack(acts, -1), jnp.stack(states, -2), jnp.stack(rewards, -1), self.decode(out["h"])
+        return jnp.stack(acts, -1), jnp.stack(states, -2), jnp.stack(rewards, -1), now
 
 
 def make_network(env_cfg, hidden: int = 128, encoder: str = "conv",
