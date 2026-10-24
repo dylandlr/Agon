@@ -124,6 +124,22 @@ deep-learning changes worth making are the pooled trunk (section 1), a sized-up 
 is pooled, and a dynamics model trained with some counterfactual signal (section 3). Nothing here
 calls for a different family of model.
 
+## The stall, measured (2026-10-23, evening)
+
+Per sixth of the validate run (306 windows): deaths 1,025, 325, 280, 177, 209, 276; policy
+entropy 0.116 then 0.07-0.08 (of 4.4 nats over 84 actions); mean age at death 1,346, 2,964,
+3,679, 5,912, 5,567, 3,988 ticks (births per sixth 0, 5, 21, 19, 22, 28: infants pull the last
+figure down). By cause, thirst 345 -> 73 in the first sixth then 30-70; cold 271, 123, 85, 49,
+54, 79. Winter behaviour was learned, partly: huddling on winter nights 0.30, 0.40, 0.55, 0.63,
+0.61, 0.64; seek_shelter 18 -> 89 per 1,000 ticks. The scripted band (shelter + huddle, no fire)
+has no cold deaths; the trained agents do it about two thirds of the time and stopped improving
+there. Reading: the policies went near-deterministic a sixth of the way in, kept what they had,
+and explored no further. Two things hold them: a small fixed entropy bonus (0.005) and the
+retention loss (0.1) toward their own past behaviour. Added: an entropy floor
+(`--entropy-target`, coef = ent_coef x exp(gain x (target - entropy))), and the ablations
+`caveman_entropy_floor` and `caveman_no_retention` in `experiment.py validate`; a stall panel in
+the notebook. Not the world and not the brains.
+
 ## Note on animals (2026-10-23)
 
 Animals now have a temperament, are neutral to strangers once tame, and aim their anger: a
