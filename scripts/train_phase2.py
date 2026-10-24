@@ -137,10 +137,10 @@ def main():
                          "(ideas); on in the presets, --no-world-model for the ablation")
     ap.add_argument("--share-trunk", action="store_true",
                     help="one trunk (encoder, memory, world model) for the population, tied across the agents; "
+                         "policy, value, messages and trust stay each agent's own (MAConfig.share_trunk)")
     ap.add_argument("--entropy-target", type=float, default=0.0,
                     help="an entropy floor in nats (0 = off): the entropy bonus grows under it, shrinks above "
                          "(MAConfig.entropy_target); the validate run collapsed to 0.07 of 4.4 and stopped learning")
-                         "policy, value, messages and trust stay each agent's own (MAConfig.share_trunk)")
     ap.add_argument("--predators", type=float, default=1.0,
                     help="x predator numbers and respawning (0 = predators that never attack)")
     ap.add_argument("--disease", type=float, default=1.0, help="x every chance of infection")
