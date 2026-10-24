@@ -282,7 +282,7 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
                     grabbed=any(bool(np.asarray(info.grabbed)[v]) for v in vs),
                     victim_down=any(bool(np.asarray(prev.off_balance)[v] > 0) or bool(np.asarray(info.downed)[v]) for v in vs)
                     if hasattr(prev, "off_balance") else False))
-            ev = emit(i, "strike_agent", answers, own="its own choice (no blow to answer)", victims=victims, **tool(i), **aimed)
+            ev = emit(i, "strike_agent", answers, own="no blow to answer in the record", victims=victims, **tool(i), **aimed)
             same_tick[(i, "strike_agent")] = ev["id"]
         elif code == E.OUT_RELEASE:
             ev = emit(i, "release", near=np.flatnonzero(gifts[i]).tolist())
@@ -333,7 +333,13 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
     for i in range(n):
         p_i = [int(info.pos[i, 0]), int(info.pos[i, 1])]
         if bool(info.fell[i]):
-            emit(i, "fall", own="the ground (a steep edge, or rough rock)")
+            if st is not None:
+                r_, c_ = int(info.pos[i, 0]), int(info.pos[i, 1])
+                steep = float(np.asarray(st.cliff)[r_, c_]) > 0
+                own = "a steep edge" if steep else ("rough rock" if int(np.asarray(st.terrain)[r_, c_]) == E.ROCK else "the ground")
+            else:
+                own = "the ground"
+            emit(i, "fall", own=own)
         if bool(info.newly_infected[i]):
             ps = []
             if same_tick.get((i, "drink")):
@@ -345,8 +351,15 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
                     if j != i and pv.alive[j] and pv.infection[j] > 0 and _cheb(pv.pos[j], pv.pos[i]) <= 1:
                         ps.append((pid(A.get(j, {}).get("infected")), f"close contact with sick #{j}"))
             mosq = float(np.asarray(info.mosquitoes)[i]) if hasattr(info, "mosquitoes") else 0.0
-            emit(i, "infected", ps, own="mosquitoes" if mosq > 0.2 else "it arose on its own (the base rate)",
-                 **({"mosquitoes": round(mosq, 2)} if mosq > 0.2 else {}))
+            # the other sources the world has (env.py, disease): a rotting body beside it, mosquito bites.
+            # With none of them, the source is not traced; the recorder says so rather than guess.
+            if prev is not None and cfg is not None and hasattr(prev, "rot"):
+                haz = np.asarray(E.corpse_hazard(prev, cfg))
+                beside = [j for j in range(n) if j != i and haz[j] > 0 and _cheb(pv.pos[j], pv.pos[i]) <= 1]
+                for j in beside:
+                    ps.append((mem.get(("death_of_life", j), (None,))[0], f"the rotting body of #{j} beside it"))
+            own = "mosquito bites" if mosq > 0 else "source not traced"
+            emit(i, "infected", ps, own=own, **({"mosquitoes": round(mosq, 2)} if mosq > 0 else {}))
         if bool(info.recovered[i]):
             emit(i, "recovered", [(pid(last(i, "infected")), "got over the illness")])
         if int(info.ignited[i]) > 0:
@@ -422,8 +435,9 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
                         if d and d[1] >= A[i]["born"][1]:
                             ps.append((d[0], "its mother's death (no milk)"))
                     extra = {"air": round(float(info.ambient_temp[i]), 1)} if why else {}
-                    own = {"starving": "not eating enough", "parched": "not drinking enough",
-                           "freezing": "the cold of the place and season", "overheating": "the heat of the place and season"}[name]
+                    own = {"starving": f"satiety {float(st.satiety[i]):.2f}", "parched": f"hydration {float(st.hydration[i]):.2f}",
+                           "freezing": f"body temperature {float(st.body_temp[i]):+.2f}",
+                           "overheating": f"body temperature {float(st.body_temp[i]):+.2f}"}[name]
                     emit(i, name, ps, own=own, **extra)
                     a[flag] = True
                 elif not bool(now):

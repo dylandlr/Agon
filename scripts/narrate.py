@@ -227,8 +227,8 @@ class Narrator:
             why = self.cause_text(e).replace("the water it drank", "bad water")
             why = re.sub(r"sick #(\d+)", lambda m: "sick " + self.other(int(m.group(1))), why)
             self.sick_since[k] = e["t"]
-            if why.startswith("it arose"):
-                return f"{n} fell sick; the record names no source (it arose on its own)."
+            if why == "source not traced":
+                return f"{n} fell sick; the source is not traced."
             return f"{n} fell sick" + (f" from {why}" if why else "") + "."
         if t == "recovered":
             since = self.sick_since.pop(k, None)
@@ -261,11 +261,11 @@ class Narrator:
             deg = None if air is None else int(round(air))
             return f"{n} was freezing {when}" + (f", the air at {deg} {'degree' if abs(deg) == 1 else 'degrees'}" if deg is not None else "") + "."
         if t == "starving":
-            return f"{n} was starving."
+            return f"{n} was starving" + (f" ({why})" if why else "") + "."
         if t == "parched":
-            return f"{n} was parched."
+            return f"{n} was parched" + (f" ({why})" if why else "") + "."
         if t == "fall":
-            return f"{n} fell."
+            return f"{n} fell" + (f" on {why}" if why else "") + "."
         if t == "gather_lost":
             return f"{n} lost what {he} {P.was(k, e.get('life', 1))} gathering."
         if t == "move_failed":
