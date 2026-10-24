@@ -1,0 +1,398 @@
+"""A run's events as a story to read: story.txt from the recorder's own log, nothing invented.
+
+    python scripts/narrate.py runs/x/validate/caveman/continuous            # a continuous world
+    python scripts/narrate.py runs/x/validate/caveman --out story.txt       # same (finds continuous/)
+    python scripts/narrate.py DIR --from-day 30 --to-day 60 --agent 3
+
+Every sentence comes from an event in events.jsonl (lifesim/recorder.py) and the causes it
+carries. Routine (foraging, drinking, eating, sleeping, company) is told once per season as a
+summary; the notable (fights, sickness, animals, weather, hunger and cold, mating, births, deaths)
+is told day by day. People are named for reading, by slot and life (the names are not the
+agents' own; their own naming, if any, is in summary.json): founders in the order of their slots,
+a later life in a slot gets the next unused name. Sex comes from lives.json when it is there.
+"""
+from __future__ import annotations
+
+import argparse
+import collections
+import gzip
+import json
+import re
+from pathlib import Path
+
+NAMES = ["Ash", "Bren", "Cael", "Dov", "Esk", "Fenn", "Gant", "Hael", "Ilse", "Jory", "Kesh", "Lir",
+         "Mab", "Nol", "Oren", "Pim", "Quill", "Rook", "Sel", "Tam", "Ulf", "Vey", "Wren", "Yara", "Zed"]
+SEASONS = ["Spring", "Summer", "Autumn", "Winter"]
+PLANTS = {"roots": "roots", "berries": "berries", "nuts": "nuts", "grubs": "grubs", "honey": "honey",
+          "fruit": "fruit", "leaves": "leaves", "mushrooms": "mushrooms", "tubers": "tubers"}
+ORD = ["first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth"]
+
+
+def load_events(where: Path) -> list[dict]:
+    if where.is_dir() and (where / "continuous").is_dir():
+        where = where / "continuous"
+    for name in ("events.jsonl", "events.jsonl.gz"):
+        f = where / name if where.is_dir() else where
+        if f.exists():
+            op = gzip.open if f.suffix == ".gz" else open
+            with op(f, "rt") as fh:
+                return [json.loads(line) for line in fh if line.strip()]
+    raise SystemExit(f"no events.jsonl in {where}")
+
+
+def parse_time(stamp: str):
+    """'Y1 Spring D7 10:30' -> (year, season index, day, 'HH:MM')."""
+    m = re.match(r"Y(\d+) (\w+) D(\d+) (\d\d:\d\d)", stamp)
+    return int(m.group(1)), SEASONS.index(m.group(2)), int(m.group(3)), m.group(4)
+
+
+class People:
+    """Names by (slot, life); pronouns by sex when lives.json gives it."""
+
+    def __init__(self, lives):
+        self.names, self.sex, self.next = {}, {}, 0
+        for life in lives or []:
+            key = (life.get("slot", life.get("agent")), life.get("life", 1))
+            if life.get("sex") in ("m", "f", "male", "female"):
+                self.sex[key] = life["sex"][0]
+
+    def name(self, slot, life=1):
+        key = (slot, life)
+        if key not in self.names:
+            self.names[key] = NAMES[self.next % len(NAMES)] + ("" if self.next < len(NAMES) else f" {self.next // len(NAMES) + 1}")
+            self.next += 1
+        return self.names[key]
+
+    def he(self, slot, life=1):
+        return {"m": "he", "f": "she"}.get(self.sex.get((slot, life)), "they")
+
+    def his(self, slot, life=1):
+        return {"m": "his", "f": "her"}.get(self.sex.get((slot, life)), "their")
+
+    def him(self, slot, life=1):
+        return {"m": "him", "f": "her"}.get(self.sex.get((slot, life)), "them")
+
+    def was(self, slot, life=1):
+        return "were" if self.he(slot, life) == "they" else "was"
+
+
+def clock_phrase(hhmm: str) -> str:
+    h = int(hhmm[:2])
+    if h < 4:
+        return "in the small hours"
+    if h < 7:
+        return "at dawn"
+    if h < 12:
+        return "in the morning"
+    if h < 14:
+        return "at midday"
+    if h < 18:
+        return "in the afternoon"
+    if h < 21:
+        return "in the evening"
+    return "at night"
+
+
+def joined(items):
+    items = list(items)
+    if not items:
+        return ""
+    if len(items) == 1:
+        return items[0]
+    return ", ".join(items[:-1]) + " and " + items[-1]
+
+
+def plural(n, one, many=None):
+    return f"{n} {one if n == 1 else (many or one + 's')}"
+
+
+class Narrator:
+    def __init__(self, events, lives=None, only_agent=None):
+        self.ev = events
+        self.by_id = {e["id"]: e for e in events}
+        self.people = People(lives)
+        self.only = only_agent
+        self.stung = collections.Counter()
+        self.sick_since = {}
+        self.down_since = {}
+        self.dead = {}
+        self.pregnant = {}                 # slot -> father slot, until a birth or death
+        self.last_attack = {}              # slot -> species of the last predator that caught them
+        self.lives = {}                     # slot -> current life number seen
+        self.weather = "clear"
+        self.snap_since = None
+        # founders: the agents alive at t = 0 (life 1), in slot order
+        self.founders = sorted({e["agent"] for e in events if e.get("agent", -1) >= 0 and e.get("life", 1) == 1})
+        for s in self.founders:
+            self.people.name(s, 1)
+
+    # ------------------------------------------------------------ helpers
+    def who(self, e, slot=None, life=None):
+        slot = e["agent"] if slot is None else slot
+        life = e.get("life", 1) if life is None else life
+        self.lives[slot] = max(self.lives.get(slot, 1), life)
+        return self.people.name(slot, life)
+
+    def other(self, slot):
+        """Another agent by slot, at its current life (events name others by slot only)."""
+        return self.people.name(slot, self.lives.get(slot, 1))
+
+    def cause_text(self, e):
+        return ", ".join(e.get("because") or [])
+
+    def root_weather(self, e):
+        for p in e.get("parents") or []:
+            w = self.by_id.get(p)
+            if w and w["type"] == "weather":
+                return w
+        return None
+
+    # ------------------------------------------------------------ one event -> a sentence or None
+    def tell(self, e) -> str | None:
+        t, k = e["type"], e.get("agent", -1)
+        if self.only is not None and k != self.only and self.only not in (e.get("victims") or []) \
+                and self.only not in (e.get("targets") or []) and e.get("giver") != self.only and e.get("body") != self.only:
+            return None
+        P = self.people
+        if k >= 0:
+            n = self.who(e)
+            he, his, him = P.he(k, e.get("life", 1)), P.his(k, e.get("life", 1)), P.him(k, e.get("life", 1))
+        when = clock_phrase(e["time"][-5:])
+        if t == "stung":
+            self.stung[n] += 1
+            c = self.stung[n]
+            if c == 1:
+                return f"{n} robbed a hive {when} and was stung for it."
+            if c == 2:
+                return f"{n} went back to the hive and was stung again."
+            if c == 3:
+                return f"{n} robbed a hive a third time. The bees were consistent."
+            return f"{n} was stung robbing a hive, the {ORD[min(c - 1, 9)]} time."
+        if t == "strike_agent":
+            v = joined(self.other(x) for x in e.get("victims") or [])
+            tech = (e.get("technique") or "blow").replace("useless hold (a head cannot grip)", "hold with the head, which cannot grip")
+            back = " striking back" if any("striking back" in b for b in e.get("because") or []) else ""
+            if "(broken)" in tech:
+                return f"{n} got {v} in a {tech.replace(' (broken)', '')}{back}; {v} broke it."
+            if "(moved them)" in tech:
+                return f"{n} hit {v} with a {tech.replace(' (moved them)', '')} and shoved them back."
+            if e.get("landed"):
+                return f"{n} landed a {tech} on {v}{back}."
+            return f"{n} tried a {tech} on {v}{back} and missed."
+        if t == "struck_by_agent":
+            return None                                   # told from the striker's side
+        if t == "predator_attack":
+            loss = e.get("health_loss", 0)
+            sev = "a bad wound" if loss >= 0.2 else "a bite"
+            self.last_attack[k] = e.get("species", "predator")
+            return f"A {e.get('species', 'predator')} caught {n} {when}: {sev}, {loss:.0%} of {his} health."
+        if t == "downed":
+            why = self.cause_text(e)
+            self.down_since[k] = e["t"]
+            return f"{n} went down" + (f" from {why}" if why else ", too weak to stand") + "."
+        if t == "stood_up":
+            since = self.down_since.pop(k, None)
+            hrs = (e["t"] - since) / 2 if since is not None else None
+            return f"{n} got up again" + (" soon after" if hrs is not None and hrs < 1 else (f" after {hrs:.0f} hours" if hrs else "")) + "."
+        if t == "held_off_predator":
+            return f"{n} stood {his} ground and held a predator off."
+        if t == "strike_animal":
+            return f"{n} struck at an animal."
+        if t == "infected":
+            why = self.cause_text(e).replace("the water it drank", "bad water")
+            why = re.sub(r"sick #(\d+)", lambda m: "sick " + self.other(int(m.group(1))), why)
+            self.sick_since[k] = e["t"]
+            return f"{n} fell sick" + (f" from {why}" if why else "") + "."
+        if t == "recovered":
+            since = self.sick_since.pop(k, None)
+            days = (e["t"] - since) / 48 if since is not None else None
+            return f"{n} got over the illness" + (f" after {days:.0f} days" if days and days >= 1 else "") + "."
+        if t == "condition":
+            c = e.get("condition")
+            why = self.cause_text(e)
+            if c == "haunted":
+                return f"Nearly dying left {n} haunted."
+            if c == "hardened":
+                return f"Long hardship had hardened {n}."
+            return f"{n} became {c}" + (f" ({why})" if why else "") + "."
+        if t == "weather":
+            w = e.get("weather")
+            self.weather = w
+            if w == "cold_snap":
+                self.snap_since = e["t"]
+                return "A cold snap set in."
+            if w == "heat_wave":
+                return "A heat wave began."
+            if w == "drought":
+                return "The rains failed: drought."
+            if w == "clear":
+                return "The weather broke and cleared."
+            return f"The weather turned: {w}."
+        if t == "freezing":
+            air = e.get("air")
+            why = self.cause_text(e)
+            deg = None if air is None else int(round(air))
+            return f"{n} was freezing {when}" + (f", the air at {deg} {'degree' if abs(deg) == 1 else 'degrees'}" if deg is not None else "") + "."
+        if t == "starving":
+            return f"{n} was starving."
+        if t == "parched":
+            return f"{n} was parched."
+        if t == "fall":
+            return f"{n} fell."
+        if t == "gather_lost":
+            return f"{n} lost what {he} {P.was(k, e.get('life', 1))} gathering."
+        if t == "move_failed":
+            return None
+        if t == "took_food":
+            g = self.other(e["giver"]) if e.get("giver") is not None else "someone"
+            return f"{n} took food that {g} had left on the ground."
+        if t == "tamed":
+            an = e.get("animal", "animal")
+            art = "An" if an[:1] in "aeiou" else "A"
+            return f"{art} {an} that had been eating what {n} left behind came to be at ease with {him}."
+        if t == "conceived":
+            f = self.other(e["father"]) if e.get("father") is not None else None
+            self.pregnant[k] = e.get("father")
+            return f"{n} conceived" + (f"; the father was {f}" if f else "") + "."
+        if t == "born":
+            m = self.other(e["mother"]) if e.get("mother") is not None else None
+            if e.get("mother") is not None:
+                self.pregnant.pop(e["mother"], None)
+            return f"{n} was born" + (f" to {m}" if m else "") + "."
+        if t == "death":
+            cause = e.get("cause", "unknown")
+            self.dead[k] = (cause, e["time"])
+            w = None
+            for p in e.get("parents") or []:
+                pe = self.by_id.get(p)
+                if pe and pe["type"] == "freezing":
+                    w = self.root_weather(pe)
+            verbs = {"cold": "froze to death", "starvation": "starved to death", "thirst": "died of thirst",
+                     "disease": "died of the sickness", "predation": "was killed by a predator",
+                     "violence": "was killed", "injury": "died of {his} wounds", "age": "died of old age",
+                     "burns": "burned to death", "fall": "died of a fall", "childbirth": "died in childbirth",
+                     "heat": "died of the heat", "exhaustion": "died of exhaustion"}
+            v = verbs.get(cause, f"died of {cause}").format(his=his)
+            if cause == "predation" and k in self.last_attack:
+                sp = self.last_attack[k]
+                v = f"was killed by the {sp}"
+            carrying = ""
+            if k in self.pregnant:
+                fa = self.pregnant.pop(k)
+                carrying = f", carrying {self.other(fa) + chr(39) + 's' if fa is not None and fa >= 0 else 'a'} child,"
+            extra = ""
+            if w is not None and self.snap_since is not None:
+                extra = f", {plural(round((e['t'] - w['t']) / 48), 'day')} into the cold snap"
+            return f"{n}{carrying} {v} {when}{extra}."
+        if t == "bones":
+            b = e.get("body")
+            return f"What was left of {self.other(b)} was bones now." if b is not None else None
+        return None
+
+    # ------------------------------------------------------------ the story
+    def story(self, from_day=None, to_day=None) -> str:
+        P = self.people
+        out = []
+        say = out.append
+        founders = [P.name(s, 1) for s in self.founders]
+        first, last = self.ev[0]["time"], self.ev[-1]["time"]
+        say("THE BAND")
+        say("")
+        say(f"{len(founders)} of them at the start: {joined(founders)}. Names are for reading; the record calls them "
+            + joined(f"#{s}" for s in self.founders) + ".")
+        say(f"From {first} to {last}.")
+        # group by season, then day
+        routine = {"gather", "drink", "eat", "fell_asleep", "bedded", "touch", "woken", "release", "mated"}
+        seasons = collections.OrderedDict()
+        for e in self.ev:
+            y, s, d, hhmm = parse_time(e["time"])
+            day_index = (y - 1) * 40 + s * 10 + d          # only for --from/--to; year length taken as 40 days
+            if from_day is not None and day_index < from_day:
+                continue
+            if to_day is not None and day_index > to_day:
+                continue
+            seasons.setdefault((y, s), collections.OrderedDict()).setdefault(d, []).append(e)
+        for (y, s), days in seasons.items():
+            say("")
+            say(f"YEAR {y}, {SEASONS[s].upper()}")
+            say("")
+            # the season's routine, in one breath
+            rs = collections.Counter()
+            plants = collections.Counter()
+            mates = collections.Counter()
+            beds = set()
+            for d, evs in days.items():
+                for e in evs:
+                    if e["type"] in routine:
+                        rs[e["type"]] += 1
+                        if e["type"] == "gather":
+                            plants[{"dropped food": "food others had dropped"}.get(e.get("plant"), e.get("plant") or e.get("what") or "food")] += 1
+                        if e["type"] == "bedded":
+                            beds.add(e["agent"])
+                        if e["type"] == "mated":
+                            mates[(e["t"])] += 1
+            alive_now = [P.name(sl, self.lives.get(sl, 1)) for sl in self.founders if sl not in self.dead]
+            bits = []
+            if rs["gather"]:
+                top = joined(k for k, _ in plants.most_common(3))
+                bits.append(f"they gathered {top} ({rs['gather']} times)")
+            if rs["drink"]:
+                bits.append(f"drank {rs['drink']} times")
+            if rs["eat"]:
+                bits.append(f"ate {rs['eat']} times")
+            if rs["fell_asleep"]:
+                bits.append(f"slept {rs['fell_asleep']} nights" + (f", {len(beds)} of them on bedding" if beds else ""))
+            if rs["touch"]:
+                bits.append(f"kept each other company ({rs['touch']} touches)")
+            pairs = sum(1 for v in mates.values() if v >= 2)
+            if pairs:
+                bits.append("lay together " + ("once" if pairs == 1 else f"{pairs} times"))
+            if bits:
+                say("The season's round: " + joined(bits) + ".")
+            # the days
+            quiet = 0
+            for d, evs in days.items():
+                lines = [ln for ln in (self.tell(e) for e in evs if e["type"] not in routine) if ln]
+                if not lines:
+                    quiet += 1
+                    continue
+                if quiet:
+                    say(f"({plural(quiet, 'quiet day')}.)")
+                    quiet = 0
+                say(f"Day {d}. " + " ".join(lines))
+            if quiet:
+                say(f"({plural(quiet, 'quiet day')} to the season's end.)")
+        # the end
+        say("")
+        say("AFTER")
+        say("")
+        if self.dead:
+            tally = collections.Counter(c for c, _ in self.dead.values())
+            say("The dead: " + joined(f"{P.name(sl, self.lives.get(sl, 1))} ({c}, {tm})" for sl, (c, tm) in self.dead.items()) + ".")
+            say("By cause: " + joined(f"{c} {k}" for k, c in tally.most_common()) + ".")
+        alive = [P.name(sl, self.lives.get(sl, 1)) for sl in self.founders if sl not in self.dead]
+        say(("Still alive at the end: " + joined(alive) + ".") if alive else "No one was left.")
+        return "\n".join(out)
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("where", help="a run's continuous/ folder, the run folder, or an events.jsonl")
+    ap.add_argument("--out", default=None, help="write the story here (default: story.txt next to the events)")
+    ap.add_argument("--from-day", type=int, default=None)
+    ap.add_argument("--to-day", type=int, default=None)
+    ap.add_argument("--agent", type=int, default=None, help="only what touches this slot")
+    args = ap.parse_args()
+    where = Path(args.where)
+    events = load_events(where)
+    folder = (where / "continuous" if (where / "continuous").is_dir() else where) if where.is_dir() else where.parent
+    lives = json.load(open(folder / "lives.json")) if (folder / "lives.json").exists() else None
+    text = Narrator(events, lives, args.agent).story(args.from_day, args.to_day)
+    out = Path(args.out) if args.out else folder / "story.txt"
+    out.write_text(text)
+    print(text)
+    print(f"\nwrote {out}")
+
+
+if __name__ == "__main__":
+    main()
