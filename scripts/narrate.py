@@ -261,11 +261,14 @@ class Narrator:
             deg = None if air is None else int(round(air))
             return f"{n} was freezing {when}" + (f", the air at {deg} {'degree' if abs(deg) == 1 else 'degrees'}" if deg is not None else "") + "."
         if t == "starving":
+            why = self.cause_text(e)
             return f"{n} was starving" + (f" ({why})" if why else "") + "."
         if t == "parched":
+            why = self.cause_text(e)
             return f"{n} was parched" + (f" ({why})" if why else "") + "."
         if t == "fall":
-            return f"{n} fell" + (f" on {why}" if why else "") + "."
+            why = self.cause_text(e)
+            return f"{n} fell" + (f" ({why})" if why else "") + "."
         if t == "gather_lost":
             return f"{n} lost what {he} {P.was(k, e.get('life', 1))} gathering."
         if t == "move_failed":
@@ -383,6 +386,10 @@ class Narrator:
             exp = ", ".join(f"{k_} {v:+.2f}" for k_, v in idea.get("expects", {}).items()) or "no change"
             line += f". Imagined: {idea['best']}" + (" (a new idea)" if idea.get("new") else "") \
                 + f", then {' > '.join(idea.get('plan', [])[1:4])}; expecting {exp}; trust {idea.get('trust', 0):+.3f}"
+        rolled = r.get("rolled")
+        if rolled:
+            line += ". The world rolled: " + "; ".join(
+                f"{k} {p:.1%} (draw {u:.3f}: {'it happened' if u < p else 'it did not'})" for k, (p, u) in rolled.items())
         return line + "."
 
     # ------------------------------------------------------------ the story

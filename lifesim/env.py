@@ -427,6 +427,15 @@ class StepInfo(NamedTuple):
     crowded: jnp.ndarray               # (N,) bool: a step failed for want of room in the cell (EnvConfig.cell_room)
     tamed: jnp.ndarray                 # (N,) int32: species of an animal that came to be at ease with it this tick, or -1
     soiled: jnp.ndarray                # (N,) bool: could not hold it any longer
+    # The ledger (omniscient, deterministic): every chance the world rolled against an agent this
+    # tick, by source, and the draw it rolled. Each a float array; the recorder turns them into
+    # exact causes ("sickness: 3.1% from the water drunk, 0 from contact; the draw was 0.02").
+    #   infect_water, infect_meat, infect_contact, infect_bite, infect_rot: (N,) the chance from each
+    #   infect_p: (N,) the chance in all, after susceptibility; infect_draw: (N,) the uniform rolled
+    #   fall_p, fall_draw: (N,)   conceive_p, conceive_draw: (N,)
+    #   pred_target: (P,) int agent each predator went for; pred_p: (P,) its chance of a bite this
+    #   tick (0 if it could not); pred_draw: (P,); pred_bit: (P,) bool
+    odds: dict
 
 
 GRAZERS = ("rabbit", "fowl", "tortoise", "deer", "aurochs", "boar", "horse", "mammoth")   # eat plants (cfg.grazing)
@@ -2511,7 +2520,8 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     hazard = jnp.where(below0, 0.0, jnp.where(terr_new == ROCK, 0.2, 0.0) + cliff_new)
     p_fall = cfg.fall_prob * hazard * (1 + state.injury) * jnp.where(is_night(state.t, cfg), 2.0, 1.0) \
         * (1 + cfg.sleepy_fall_mult * state.sleepiness)
-    fell = moving & (jax.random.uniform(keys[5], (n,)) < p_fall)
+    u_fall = jax.random.uniform(keys[5], (n,))
+    fell = moving & (u_fall < p_fall)
     severity = hazard * cfg.fall_severity * jax.random.exponential(jax.random.fold_in(keys[5], 1), (n,))
     fall_damage = jnp.where(fell, severity, 0.0)                      # can exceed 1: instant death
     injury = state.injury + cfg.fall_injury_ratio * fall_damage
@@ -2845,7 +2855,9 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         b_max = jnp.max(jnp.where(alive0[None, :], predators.bond, 0.0), axis=1)
         neutral = (b_max >= cfg.tame_calm) & (predators.anger <= 0)
         keen = jnp.where(neutral, keen * predators.temper * (1.0 - b_max), keen)
-    attack = can_attack & ~deterred & (jax.random.uniform(keys[9], target.shape) < keen)
+    u_att = jax.random.uniform(keys[9], target.shape)
+    attack = can_attack & ~deterred & (u_att < keen)
+    pred_odds = {"pred_target": target, "pred_p": jnp.where(can_attack & ~deterred, keen, 0.0), "pred_draw": u_att, "pred_bit": attack}
     bite = jnp.where(attack, SP["atk_dmg"][psp] + SP["venom"][psp], 0.0) \
         * jnp.where(down0[target], cfg.downed_hit_mult, 1.0)                    # a downed one is easy meat
     n_attacks = jnp.zeros(n).at[target].add(attack.astype(jnp.float32))
@@ -3130,8 +3142,13 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         * (1 - jnp.where(drinking, water_risk, 0.0)) \
         * (1 - cfg.contact_infection) ** sick_neighbors * (1 - bitten) \
         * (1 - cfg.corpse_infection) ** rot_near
-    newly_infected = alive0 & ~infected_now & \
-        (jax.random.uniform(keys[12], (n,)) < jnp.clip(p_inf * susceptibility, 0.0, 1.0))
+    u_inf = jax.random.uniform(keys[12], (n,))
+    p_inf_all = jnp.clip(p_inf * susceptibility, 0.0, 1.0)
+    newly_infected = alive0 & ~infected_now & (u_inf < p_inf_all)
+    odds = {"infect_water": jnp.where(drinking, water_risk, 0.0) * susceptibility, "infect_meat": eat_risk * susceptibility,
+            "infect_contact": (1 - (1 - cfg.contact_infection) ** sick_neighbors) * susceptibility,
+            "infect_bite": bitten * susceptibility, "infect_rot": (1 - (1 - cfg.corpse_infection) ** rot_near) * susceptibility,
+            "infect_p": jnp.where(alive0 & ~infected_now, p_inf_all, 0.0), "infect_draw": u_inf}
     infection = jnp.where(newly_infected, cfg.disease_duration,
                           jnp.maximum(state.infection - 1, 0)).astype(jnp.int32)
     recovered = alive0 & infected_now & (infection == 0)
@@ -3386,8 +3403,10 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         fertile_m = ~female & alive & adult & ~sick & (fx.get("fertile", 1.0) > 0)
         partner = jnp.argmax(pair, axis=1)
         k_c, k_b = jax.random.split(jax.random.fold_in(keys[0], 77))
-        conceive = jnp.any(pair, axis=1) & fertile_f & fertile_m[partner] \
-            & (jax.random.uniform(k_c, (n,)) < cfg.conception_prob)
+        u_con = jax.random.uniform(k_c, (n,))
+        could_conceive = jnp.any(pair, axis=1) & fertile_f & fertile_m[partner]
+        conceive = could_conceive & (u_con < cfg.conception_prob)
+        con_odds = {"conceive_p": jnp.where(could_conceive, cfg.conception_prob, 0.0), "conceive_draw": u_con}
         free = (~alive).sum() - (state.gestation > 0).sum()             # slots left for children
         could = conceive
         conceive = conceive & (jnp.cumsum(conceive) <= free)
@@ -3979,5 +3998,7 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         gathered_kind=took_kind if cfg.ecology else jnp.full(n, -1, jnp.int32),
         aim=jnp.where(hit_agent | hit_pred | hit_large | hit_small, aim, -1), blow_landed=blow_landed & hit_agent,
         how=jnp.where(is_strike, how, -1), shoved=tech["shoved"], thrown=tech["thrown"], grabbed=tech["grabbed"],
-        pinned=pinned, same_sex_mated=same_sex_mated, tamed=tamed.astype(jnp.int32), crowded=crowded)
+        pinned=pinned, same_sex_mated=same_sex_mated, tamed=tamed.astype(jnp.int32), crowded=crowded,
+        odds={**odds, "fall_p": jnp.where(moving, p_fall, 0.0), "fall_draw": u_fall, **pred_odds,
+              **(con_odds if cfg.reproduction else {"conceive_p": jnp.zeros(n), "conceive_draw": jnp.zeros(n)})})
     return next_state, reward, done, info

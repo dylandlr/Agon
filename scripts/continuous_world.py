@@ -681,6 +681,20 @@ def main():
                                     "temp": round(float(pv["body_temp"][i]), 3), "stress": round(float(pv["stress"][i]), 3),
                                     "sleepiness": round(float(pv["sleepiness"][i]), 3), "pain": round(float(pv["pain"][i]), 3)},
                            "action": E.ACTION_NAMES[int(an[i])], **minds_now[i]}
+                    # the ledger: every chance the world rolled against this one this tick, with its draw
+                    if hasattr(info, "odds"):
+                        O = info.odds
+                        rolled = {}
+                        for name_, pk, dk in (("sickness", "infect_p", "infect_draw"), ("fall", "fall_p", "fall_draw"),
+                                              ("conception", "conceive_p", "conceive_draw")):
+                            pv_ = float(np.asarray(O[pk])[i])
+                            if pv_ > 0:
+                                rolled[name_] = [round(pv_, 4), round(float(np.asarray(O[dk])[i]), 4)]
+                        tg, pp = np.asarray(O["pred_target"]), np.asarray(O["pred_p"])
+                        for j in np.flatnonzero((tg == i) & (pp > 0)):
+                            rolled[f"bite by predator {int(j)}"] = [round(float(pp[j]), 4), round(float(np.asarray(O["pred_draw"])[j]), 4)]
+                        if rolled:
+                            rec["rolled"] = rolled
                     mind_log.write(json.dumps(rec, separators=(",", ":")) + "\n")
             if args.learn:
                 r = reward if not hist.get("alpha") else (1 - hist["alpha"]) * reward + hist["alpha"] * reward.mean()

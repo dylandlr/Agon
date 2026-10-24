@@ -167,6 +167,15 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
                 best = e
         return best
 
+    O = {k: np.asarray(v) for k, v in info.odds.items()} if hasattr(info, "odds") and isinstance(info.odds, dict) else {}
+
+    def roll(i, p_key, draw_key):
+        """The chance the world rolled against agent i and the draw, as a record field and plain words."""
+        if p_key not in O:
+            return {}, None
+        p, u = float(O[p_key][i]), float(O[draw_key][i])
+        return {"chance": round(p, 4), "draw": round(u, 4)}, f"the chance was {p:.1%}, the draw {u:.3f}"
+
     def emit(i, kind, parents=(), own=None, **extra):
         """own: a cause with no parent event (the body's own state, or chance), written to `because`
         when no linked event is found, so a reader can tell "no trigger" from "not traced"."""
@@ -312,8 +321,15 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
                      **({"species": _fa.NAMES[sp]} if sp >= 0 else {}), **tool(i))
         if bool(info.attacked_by_predator[i]):
             sp = int(np.asarray(info.attacker_species)[i]) if hasattr(info, "attacker_species") else -1
-            emit(i, "predator_attack", health_loss=round(float(info.health_loss[i]), 4),
-                 **({"species": _fa.NAMES[sp]} if sp >= 0 else {}),
+            fx_, own = {}, None
+            if "pred_bit" in O:
+                js = [j for j in np.flatnonzero(O["pred_bit"]) if int(O["pred_target"][j]) == i]
+                if js:
+                    j = js[0]
+                    fx_ = {"chance": round(float(O["pred_p"][j]), 4), "draw": round(float(O["pred_draw"][j]), 4)}
+                    own = f"its chance of a bite was {float(O['pred_p'][j]):.1%}, the draw {float(O['pred_draw'][j]):.3f}"
+            emit(i, "predator_attack", own=own, health_loss=round(float(info.health_loss[i]), 4),
+                 **({"species": _fa.NAMES[sp]} if sp >= 0 else {}), **fx_,
                  **({"venom": True} if hasattr(info, "venomed") and bool(np.asarray(info.venomed)[i]) else {}))
         if hasattr(info, "gored") and float(np.asarray(info.gored)[i]) > 0:
             sp = int(np.asarray(info.gored_by)[i])
@@ -339,7 +355,8 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
                 own = "a steep edge" if steep else ("rough rock" if int(np.asarray(st.terrain)[r_, c_]) == E.ROCK else "the ground")
             else:
                 own = "the ground"
-            emit(i, "fall", own=own)
+            fx_, words = roll(i, "fall_p", "fall_draw")
+            emit(i, "fall", own=own + (f"; {words}" if words else ""), **fx_)
         if bool(info.newly_infected[i]):
             ps = []
             if same_tick.get((i, "drink")):
@@ -359,7 +376,14 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
                 for j in beside:
                     ps.append((mem.get(("death_of_life", j), (None,))[0], f"the rotting body of #{j} beside it"))
             own = "mosquito bites" if mosq > 0 else "source not traced"
-            emit(i, "infected", ps, own=own, **({"mosquitoes": round(mosq, 2)} if mosq > 0 else {}))
+            extra = {"mosquitoes": round(mosq, 2)} if mosq > 0 else {}
+            if "infect_p" in O:          # the ledger: the chance from each source this tick, and the draw
+                parts = {k[7:]: round(float(O[k][i]), 4) for k in ("infect_water", "infect_meat", "infect_contact", "infect_bite", "infect_rot")
+                         if float(O[k][i]) > 0}
+                extra.update(chance=round(float(O["infect_p"][i]), 4), draw=round(float(O["infect_draw"][i]), 4), sources=parts)
+                own = ("sources this tick: " + ", ".join(f"{k} {v:.1%}" for k, v in parts.items())
+                       + f"; the chance in all {float(O['infect_p'][i]):.1%}, the draw {float(O['infect_draw'][i]):.3f}") if parts else own
+            emit(i, "infected", ps, own=own, **extra)
         if bool(info.recovered[i]):
             emit(i, "recovered", [(pid(last(i, "infected")), "got over the illness")])
         if int(info.ignited[i]) > 0:
@@ -396,8 +420,9 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
     for i in range(n):
         if bool(info.conceived[i]):
             dad = int(st.father[i]) if st is not None else -1
+            fx_, _ = roll(i, "conceive_p", "conceive_draw")
             emit(i, "conceived", [(same_tick.get((i, "mated")), "mating"),
-                                  (same_tick.get((dad, "mated")), f"#{dad}, the father")], father=dad)
+                                  (same_tick.get((dad, "mated")), f"#{dad}, the father")], father=dad, **fx_)
         if bool(info.gave_birth[i]):
             emit(i, "gave_birth", [(pid(last(i, "conceived")), "the pregnancy")],
                  child=[int(c) for c in np.flatnonzero(info.born) if st is None or int(st.mother[c]) == i])
