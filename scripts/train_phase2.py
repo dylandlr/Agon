@@ -240,6 +240,9 @@ def main():
                 "deaths": {E.CAUSE_NAMES[c]: int(k) for c, k in enumerate(acc["cause"]) if c and k},
                 "deaths_by_season": dict(zip(["spring", "summer", "autumn", "winter"],
                                              (int(k) for k in acc["deaths_by_season"]))),
+                # where and who the cold killed: caught in the open, or frozen even in shelter; adults or children
+                "cold_deaths": dict(zip(["open_adult", "open_child", "sheltered_adult", "sheltered_child"],
+                                        (int(k) for k in acc["cold_deaths_split"]))),
                 # Global reward: all agents' base rewards (no alpha mixing, no moral sentiments) per world per day
                 # Mode-independent survival score: 0.01 per agent-tick alive, -1 per death, per world-day.
                 # Comparable across reward modes and alpha, unlike global reward, whose terms depend on the mode.

@@ -399,6 +399,15 @@ def make_train(env_cfg: EnvConfig, cfg: MAConfig):
         g = pop.genotype.patience if cfg.trait_gamma else jnp.full(n, cfg.gamma)
         return (g ** cfg.tick_scale)[:, None]                                               # (N, 1)
 
+    def _cold_split(died, info, states, ages_before):
+        """(4,) cold deaths: [open adult, open child, sheltered adult, sheltered child]."""
+        cold = died & (_swap_axes_nb(info.death_cause) == E.CAUSE_COLD)                   # (N, B)
+        terr = _swap_axes_nb(jax.vmap(lambda s: s.terrain[s.pos[:, 0], s.pos[:, 1]])(states))
+        sheltered = (terr == E.FOREST) | (terr == E.CAVE) | _swap_axes_nb(states.below)
+        child = (ages_before + _swap_axes_nb(states.birth_age)) < env_cfg.adult_years * env_cfg.ticks_per_bio_year
+        return jnp.stack([(cold & ~sheltered & ~child).sum(), (cold & ~sheltered & child).sum(),
+                          (cold & sheltered & ~child).sum(), (cold & sheltered & child).sum()])
+
     def update(runner, pop: Population):
         params, opt_state, states, obs, mask, reset_flag, carry, key, memory = runner
         init_carry = carry
@@ -454,6 +463,9 @@ def make_train(env_cfg: EnvConfig, cfg: MAConfig):
                 "cause": jnp.stack([(died & (_swap_axes_nb(info.death_cause) == c)).sum()
                                     for c in range(len(E.CAUSE_NAMES))]),
                 "deaths_by_season": jnp.stack([(died & (info.season[None, :] == q)).sum() for q in range(4)]),
+                # Cold deaths, split: in the open (grass, rock, ...) or sheltered (forest, cave, below);
+                # a child (under adult age) or an adult. Which it is decides what "learn winter" means.
+                "cold_deaths_split": _cold_split(died, info, states, ages_before),
                 "hits": info.hits.sum(),
                 "gifts": jnp.any(info.gifts, axis=-1).sum(),
                 "touches": jnp.any(info.touches, axis=-1).sum(),

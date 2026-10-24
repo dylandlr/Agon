@@ -140,6 +140,31 @@ retention loss (0.1) toward their own past behaviour. Added: an entropy floor
 `caveman_entropy_floor` and `caveman_no_retention` in `experiment.py validate`; a stall panel in
 the notebook. Not the world and not the brains.
 
+## Cold, from the thermal constants (2026-10-24)
+
+Society30 winter: 2 C mean, a 6 C daily swing, so -4 C at the coldest hour. Equilibrium body
+temperature is the thermal load: (air - 18) / 20, +0.15 resting, +0.05 per huddled neighbour
+(up to 3); damage below -0.7. The numbers:
+
+- Open ground at night: -1.10 standing, -0.95 resting, -0.80 resting with three huddled. Damage
+  in every case. No behaviour in the open survives a winter night; being there is the mistake.
+- Forest (air pulled halfway to comfort, 7 C): -0.55 standing alone, -0.40 resting, -0.25 resting
+  with three. Safe; with snow lying (-0.15) a standing loner sits exactly on the damage line and
+  resting or one neighbour clears it. A cold snap makes forest dangerous.
+- Cave (80% to comfort): -0.07 resting. Comfortable.
+
+Body temperature relaxes toward the load at 0.03 per tick over insulation, a time constant of
+about 16 hours, so damage comes from long exposure: days spent foraging in the open in winter,
+not one bad hour. The well-being shaping does pay for warmth (0.5 x warmth x 0.5: 0.143 at
+-0.3, 0.071 at -0.5, 0 at -0.7) and a night huddled in forest is worth about 0.05 over a night
+alone, against 0.147 for one drink when thirsty. So the signal exists but is slow and thin
+against the needs, and the real teacher is the -1 death a day or more after the mistake. That is
+a planning problem (be near forest before night, every winter night), which is what the world
+model is for, and the entropy floor is what lets a brain keep looking for it.
+
+Added to the run log and the notebook's stall panel: cold deaths split into open vs sheltered and
+adult vs child, so the next run says which failure it is instead of one number.
+
 ## Note on animals (2026-10-23)
 
 Animals now have a temperament, are neutral to strangers once tame, and aim their anger: a
