@@ -14,7 +14,7 @@ ENV = EnvConfig(grid_size=12, n_agents=3)
 
 
 def _x(cfg, t=3, b=2, seed=0):
-    D, A = E.obs_dim(cfg), E.N_ACTIONS + E.MSG_LEN * E.VOCAB
+    D, A = E.obs_dim(cfg), E.N_ACTIONS + E.EXTRA_LOGITS
     obs = jax.random.normal(jax.random.PRNGKey(seed), (t, b, D))
     return obs, jnp.zeros((t, b), bool), jnp.ones((t, b, A), bool)
 

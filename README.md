@@ -24,6 +24,7 @@ scripts/
   experiment.py     The thesis experiments, gate and report
   hierarchy.py      Dominance, linearity, steepness, stability, leadership, rank outcomes
   culture.py        Between-world differences, traditions, persistence, dialects
+  society.py        Bands, camps, sharing, joint hunts, division of labour, punishment, over the generations
 hprc/               Grace setup, benchmark, single-run and E0 array job scripts
   evaluate.py       Random vs scripted vs trained survival + record an episode
 tests/
@@ -188,7 +189,7 @@ they are the same either way; only the seasons stretch. With a real year:
   away. With discount 0.997 the effective horizon is ~330 ticks (7 days), so
   winter is invisible to the returns; even 0.9999 struggles at that range.
 - Each training run sees 9 times fewer winters for the same compute.
-- Lifespans (max_age 20,000 ticks, about 417 days) would cover barely one
+- Lifespans (deaths from age most likely about 20,000 ticks, about 417 days) would cover barely one
   year, not a lifetime of seasons.
 A real year is the right test once multi-horizon value heads, culture or
 evolution can carry seasonal knowledge; it is a stretch condition, not the
@@ -290,11 +291,31 @@ left burning is the only other way.
 ## Language and knowledge transfer
 
 Agents speak on a channel separate from their actions. Every tick each agent
-chooses an action (42, all generic) and a message: 3 symbols from a 16-symbol
-vocabulary, symbol 0 = silence. No symbol has a built-in meaning; speaking
-costs 0.0005 energy so noise is not free. Each listener hears the 3 nearest
-speakers in view: their symbols, where they stand, and its own memory of them.
-`env.step(state, actions, cfg, messages)`; omit `messages` for silence.
+chooses an action and, besides it, how a strike is delivered (part aimed at, limb and mode: one of 60), a message (4 symbols from a
+32-symbol vocabulary, symbol 0 first = silence) and the 4 symbols WRITE would put down. No symbol
+has a built-in meaning; speaking costs 0.0005 energy so noise is not free. Each listener hears
+the nearest speakers in view: their symbols, where they stand, and its own memory of them.
+`env.step(state, actions, cfg, out)` with `out` packed as [said x4, written x4, aim]
+(`env.OUT_SLOTS`; `policy.sample_outputs`); omit it for silence and torso blows. Brains start
+mostly silent (~9% speech).
+
+**Speech has its own branch of the brain.** Lowe et al. (2019) showed that when the message and
+the action come out of the same layers, speaker-side measures of meaning (speaker consistency,
+message-action mutual information) look healthy even with an untrained message head or scrambled
+messages. Messages and writing therefore come from their own hidden layer (`--msg-net branch`),
+with two alternatives: `stopgrad` (their learning does not shape the shared trunk) and `separate`
+(their own small network on the raw observation). The aim stays with the action. PPO clips each
+output on its own ratio (action, aim, said, written), so a message that moved a lot does not stop
+the action's update; an output that had no effect is left out of the ratio, the entropy bonus and
+imitation (the aim when not striking, the symbols after a silent first, the written symbols
+without WRITE). The log reports each output's clip fraction and KL (`per_output`).
+
+**Controls for whether messages mean anything** (train each from scratch, several seeds):
+`--channel none` (no one is heard), `--channel shuffled` (what is heard is other speakers'
+messages, shuffled each tick), `--msg-frozen` (speech never learns: the floor for any
+speaker-side number), and `--msg-net separate`. See `reports/Shared message action head.md`
+(and the project copy) for the protocol: listener-side influence by message intervention,
+per-token mutual information against a shuffled baseline, mark effects by age and by deletion.
 
 Social learning depends on language in three ways:
 - **Speech is copied with actions.** Imitation predicts the watched agent's
@@ -305,7 +326,7 @@ Social learning depends on language in three ways:
   flows faster through agents who talk while doing, so teaching can emerge
   without being coded.
 
-PPO treats the action and the message as one joint choice.
+PPO scores the action, aim, message and writing as separate outputs (above).
 
 **Speech attention and the teaching bonus are off by default.** In a matched
 pair of runs (614k agent-steps each), with them on, speech climbed from 136 to
@@ -313,6 +334,44 @@ pair of runs (614k agent-steps each), with them on, speech climbed from 136 to
 survival, violence and gifts. Watching and copying talkers more made talking
 spread on its own. Use `--speech-attention 2 --teach-bonus 1` to study that
 effect deliberately.
+
+## Grounded language and writing (an active language mode)
+
+`--language grounded` (EnvConfig.language_mode; the default stays "emergent", whose symbols mean
+nothing given: the thesis's emergent condition) gives the message channel a defined lexicon of 31
+words (`env.LEXICON`): things (water, food, meat, fire, wood, stone, shelter, predator, prey,
+waste), the eight directions, here / near / far, come, go away, give, help, follow, yes, no, me,
+you, many. A message is up to four words (MSG_LEN 4, VOCAB 32 in both modes).
+
+- **Understood, not just heard:** a phrase naming water or food with a direction (or "here"),
+  e.g. "water east far", puts that place into every listener's remembered map as heard (fresh
+  0.6, below what is seen; seeing the place overrides it). "No food west" clears it. So knowledge
+  passes by speech: one who found water can send others to it, and the given seek-water and
+  seek-food skills then lead them there. The rest (warnings, requests, yes and no) is heard but
+  carries no built-in effect: what it comes to mean is up to the listeners.
+- **Nothing is enforced:** what to say, when, to whom, and whom to believe is learned. A speaker
+  can be wrong or lie; listeners can learn whom to trust (they hear who spoke).
+- **Writing** (`--writing`): `WRITE` puts one's message (this tick's, else the last) on whatever is
+  where one stands. Anyone beside it reads it (the inscription is in their senses, and is
+  understood as speech is), and everyone sees from afar that something is written there.
+  - **It needs means.** The writer must hold either an edge (sharpness at least 0.5: flint,
+    obsidian, quartz, copper; a plain stone is not enough) or a pigment (ochre, coal).
+  - **It needs something that takes a mark:** a piece of wood lying there, a loose stone, a rock
+    face, or a tree's bark. Bare earth, sand, snow and water take none.
+  - **Cutting rock or stone needs a hard point** (hardness at least 0.7), so copper can cut wood
+    but not rock. Bark can be cut but not painted.
+  - **How long a mark lasts:** cut in wood or bark, 90 days; in stone, a year; drawn in pigment, 30
+    days.
+  - **A mark goes with its surface.** Carry off or burn the wood and the writing is gone.
+- **Signs are not an action.** Put a piece of wood down somewhere, cut a message into it, and it
+  stands there as a sign. Whether agents ever do that on purpose, where, and what they write on
+  it is left to learning.
+- **Playback:** on the map, speech shows by default as a small dark tag of the symbols said, so
+  the scene stays visible. The **Translate** button (**Text boxes** in emergent worlds) switches
+  to white boxes with the words, in English where the language is grounded. The log and the
+  inspectors always give the sound and, where grounded, the English. Writing is drawn small, on
+  what it is on: a board on a stake (a sign), a marked pebble, strokes on rock, a notch in bark,
+  ochre red when painted. What it says is in the tile inspector.
 
 ## The core experiment: group reward, counters, comparison
 
@@ -376,9 +435,9 @@ agent's dispositions:
   fortunes it could not influence. Impressions are also where hearsay and
   noticing others' moods can later plug in.
 
-**Scars and lasting injuries.** Wounds (blows, predator attacks, burns, falls;
+**Scars and lasting injuries.** Wounds (strikes, predator attacks, burns, falls;
 a fall on rock costs 0.05 health and adds 0.1 injury) leave scars, 0.5 per unit
-of health lost (about 0.07 per bare-handed blow), that
+of health lost (about 0.07 per bare-handed strike), that
 never fade and do no harm but are visible to others. Injury above 0.5 leaves a
 lasting part (half the excess, at most 0.35): injury heals down to that floor,
 so weaker strikes and costlier, riskier movement stay for life, but a lasting
@@ -423,13 +482,19 @@ part of felt well-being.
 ## Running the experiments (Colab or HPRC)
 
 `scripts/experiment.py` runs the thesis experiments with the "society" preset
-(`lifesim/presets.py`: 16 slots, 8 founders, reproduction, survival reward, 32 x 32 world,
+(`lifesim/presets.py`: 16 slots, 8 founders, reproduction, survival reward, a RimWorld-sized 250 x 250 world
+(16.7 km across at 1-minute ticks, 280 km^2; it was 32 x 32 until the plant ecology showed 4.6 km^2 cannot feed 16),
 192-tick rollouts, caveman slate, living world, world model), identically on any machine.
-The "tribe" preset (64 slots, 24 founders, 48 x 48) is for culture at a larger scale, at about
-4.5x the compute.
+The "tribe" preset (64 slots, 24 founders, 300 x 300, 400 km^2) is for culture at a larger scale.
+The "society30" preset (`--preset society30`) runs the same people on a 32 x 32 map at half-hour
+ticks: a cell is 2 km, the map 64 km across. That is 30x less compute per game day, so 100M
+agent-steps lives about 50 game years per training world instead of about 2, which leaves room
+for many generations. The scripted band persists there in 2 of 3 4-year worlds
+(`scripts/viability.py --preset society30`). Start emergence runs with it; the HPRC jobs take
+`PRESET=society30` (hprc/README.md).
 
 - `validate`: the preset; without sleep-consolidated learning; the blank slate; without the world
-  model; each followed by a 10-year continuous world.
+  model; each followed by a 30-year (1,200-day) continuous world.
 - `inheritance`: after `validate`, the caveman run's agents live on with learning, newborns
   inheriting a parent's learned brain or its inborn one (see below).
 - `core`: reward sharing alpha {0, 0.5, 1} x food {1.0, 0.4} x seeds {0, 1, 2}, 100M agent-steps
@@ -439,7 +504,8 @@ The "tribe" preset (64 slots, 24 founders, 48 x 48) is for culture at a larger s
   (`--which`, default all 17; 2 seeds each and a control with none).
 - `culture`: replicate worlds on one map with different histories, with (`social`) and without
   (`solitary`) learning by watching (`--replicates`, default 4 each); see "Hierarchy and culture".
-- `gate`: did anyone born in the validated caveman agents' continuous world grow up (15 days)?
+- `gate`: did anyone born in the validated caveman agents' continuous world grow up (15 years of
+  age: 600 days at the presets' 40 days per year)?
   `core`, `archetypes`, `inheritance` and `stress` refuse to start until it passes
   (`--skip-gate` overrides).
 - `report`: training results by condition and how each continuous world went.
@@ -450,7 +516,8 @@ with different code, and `experiment.py` stops before doing anything if a run it
 was made by other code. Keep one `--root` per code version: the notebook and the HPRC jobs use
 `runs/exp_<code version>`.
 
-**Training worlds run for 10 years** (`--episode-years`, preset 10), or until everyone in them
+**Training worlds run for 25 years** (`--episode-years`, preset 25; it was 10, too short for anyone
+born in one to grow up at 40 days per year of age), or until everyone in them
 has died, and a world cut off by the clock is bootstrapped from the value of the state it was
 cut off in, not treated as death (`ppo_multi.gae`; Pardo et al., 2018, "Time limits in
 reinforcement learning"). Before this, every training world restarted after one year and the
@@ -467,7 +534,10 @@ HPRC: `hprc/README.md`. Colab: `agon_eos_colab_a100.ipynb`.
 `scripts/viability.py` runs the experiment's world with hand-scripted agents that do what a
 competent forager band would: flee predators when alone and stand together otherwise, drink and
 eat before needs run low, sleep at night, take cover and huddle when cold or hot, mothers stay
-with nursing children, fed couples mate. No fire, tools, hunting or sharing. `--knowledge full`
+with nursing children, fed couples mate, and fed parents carry food to their hungry children under
+12 and drop it where they stand. No fire, tools, hunting, or sharing beyond one's own children.
+(Before 40-day biological years the script fed no one, which hardly mattered when a child was
+self-sufficient within days; at 40 days a year it left children to starve.) `--knowledge full`
 routes from the true map (an upper bound); `--knowledge own` uses only the caveman slate's given
 skills and what each agent has seen, which is what trained agents can do. If such a band cannot
 keep its numbers up, no training can, and the world is what needs fixing.
@@ -496,8 +566,8 @@ desert), are finite, and are picked up, carried, held, dropped, placed and struc
 
 | Property | What it does, through existing mechanics |
 |---|---|
-| hardness | a blow with it in hand lands harder; hard on hard can spark |
-| sharpness (flint, obsidian, metals) | blows land harder still; gathering meat or wood with an edge in hand takes up to 2x |
+| hardness | a strike with it in hand lands harder; hard on hard can spark |
+| sharpness (flint, obsidian, metals) | strikes land harder still; gathering meat or wood with an edge in hand takes up to 2x |
 | spark (pyrite, iron) | struck against something hard (flint), sparks are ~5x as likely: the classic fire kit |
 | fuel (coal) | burns 4x as long as wood and leaves the fire coal-hot |
 | heat | clay in any fire becomes fired clay; ores in a coal-hot fire become copper, tin, iron (slower); copper and tin heated together become bronze |
@@ -523,16 +593,105 @@ of its kind, all through mechanics rather than scripts:
 
 | Group | Species and what they do |
 |---|---|
-| small prey | rabbit (flees fast); fowl (runs two cells, half of blows miss); fish (in water, struck from the bank; most blows miss without a point); tortoise (slow, shelled) |
+| small prey | rabbit (flees fast); fowl (runs two cells, half of strikes miss); fish (in water, struck from the bank; most strikes miss without a point); tortoise (slow, shelled) |
 | large prey | deer (bounds two cells, loose herds); aurochs (herds; struck, may trample); boar (struck, often gores); horse (herds, runs two cells, wary); mammoth (huge, herds, tramples; feeds a band for days) |
 | predators | wolf (night hunter in packs: each extra wolf beside the prey cancels one defender); big cat (ambush: notices late, strikes hard, not deterred); bear (attacks only when struck or startled close by, mauls back, hibernates in winter); snake (barely moves, venomous bite); crocodile (lies in water and takes whoever stands at the edge) |
 
 Predators also hunt animals: any takes small prey on its cell, and wolves, big cats, bears and
-crocodiles take large prey (never a mammoth), leaving a carcass for scavengers. A slot's species is
+crocodiles take large prey (never a mammoth), leaving a carcass for scavengers. With
+`animal_hunting` (on) they also stalk it: a hunting predator chases the nearest quarry it notices,
+a person or small prey, and large prey once hunger has worn it below 75% of its hp
+(`stalk_hungry_hp`; always with `stalk_large`, off: with a handful of large-prey slots against six
+hunters, stalking at all times empties the herds within two months, since a slot refills in about 42
+days), and prey flee the nearest predator that could take them as they
+flee people (deer notice at 2 cells, a wolf at 5). Predators prefer their usual prey: choosing whom
+to chase, a person counts as 3 cells farther off (`prey_preference`), so a wolf with a deer in
+reach goes for the deer; a person beside it can still be attacked. Hunters take the easy ones: a
+kill is 3x as likely on prey caught asleep (`kill_asleep_mult`), 2x on a lame one
+(`kill_lame_mult`), and up to 3x on one worn down (`kill_weak_mult`, by the hp it has lost), so a
+herd loses its sleepers and its weak first. On the society30 world over 60 days (agents resting),
+herds hold at 75-85% of their slots and lose 3-6 animals to predators (0-1 before hungry stalking),
+and predators stay food-limited (about 6 deaths per 60 days among 6 slots). Animals sleep
+(`animal_sleep` 0.6) in one consolidated bout, not a coin flip each tick: a day-active animal
+sleeps a bout centred on midnight, a nocturnal one a bout centred on noon, the half-nocturnal big
+cat half of each; the bout is 60% of half a day (about 7 hours), and each slot's falls up to 1.8
+hours earlier or later than its neighbours' (`animal_sleep_jitter`), so a herd does not all drop off
+at once. A blow wakes it. A sleeper stays put, notices only what is beside it, dodges a fifth as
+well, and a sleeping predator neither hunts nor attacks: a deer is easiest to approach at night, a
+wolf safest to pass by day. Hibernation is separate. A slot's species is
 fixed, so each world keeps the same mix (slot 0 of each group is the classic rabbit, deer and
 wolf, which take the group's config values). 6 predators per 1,000 cells (was 1) so that each
 kind is present: on a 32 x 32 map, 2 wolves, 2 big cats, a bear and a crocodile. The scripted
 competent band still persists with them (viability.py: 2 of 2, 3 years).
+
+### The dead (decay, disease, burial)
+
+What one carries falls where one dies. Then the body decomposes (`rot`, 0 fresh to 1 bones): at 20 C
+it takes `decay_days` (20), half as long for every 10 C warmer, and all but stops when frozen. For its
+first 2 days it gives off nothing; then, rising over 3 more days and lasting until only bones are left,
+it gives off rot: flies gather, the ground and water by it foul (`corpse_foul`, five people's refuse a
+day), and the living beside it may catch sickness (`corpse_infection`, 0.4% a tick a body, about 17%
+a day). At bones it leaves bone where it lay. Earth or stone heaped on its cell (`bury_cover`, 3 units
+of loose stone, clay, limestone, basalt, gypsum or quicklime, put there with the ordinary place or drop
+acts) covers it and ends the rot; fire burns it to bones. Nothing says to bury, burn or avoid the dead:
+whether anyone does, and why (it seems to keep people well, or for no reason they could say), is theirs
+to come to. Agents see a body by how it looks (fresh, fading as it rots, nothing once covered or bones)
+and smell the rot in the foul channel. The recorder logs `body_covered` (with who heaped it),
+`body_burned` and `bones`.
+
+### Room in a cell
+
+Each cell holds `cell_room` (4) of body. A standing adult of the reference build takes 1, scaled by
+lean mass^(2/3), so a child takes less; lying down (asleep, downed or dead) takes twice that; a grave as
+much as one standing; bones none. Animals take room by kind (`fauna.ROOM`: rabbit 0.1, wolf 0.5, deer
+1.2, horse 2, mammoth 4; fish and bats none). A step into a cell without room for one fails
+(`StepInfo.crowded`, logged as a failed move "no room"), so a band spreads over neighbouring cells:
+four can stand together, two can lie together, and a crowd is a shape on the map, not a pile.
+Those already in a cell keep their place; those stepping in take what is left, in a random order each
+tick. Animals are not stopped by it but take their room. Agents see how full each cell in view is.
+Grouping still pays as before (warmth beside others, defenders against predators within one cell,
+striking the same animal together); room makes where each one stands something to coordinate.
+
+### Trees
+
+Each forest cell's trees are of one kind (lifesim/trees.py), from a real species: Scots pine, Norway
+spruce, silver birch, English oak, European beech, hazel, wild apple, white willow, juniper, wild
+olive. The kind is chosen by the cell's mean temperature and wetness, in stands. Each stand has an age:
+it grows toward its kind's height (fast young), falls past its lifespan (its wood on the ground, a
+seedling in its place) and is burned back by fire. Fruit and nut trees raise the cell's fruit and nut
+crop once half grown; dead wood falls by kind and size. The agents never see the kind, age or
+lifespan: only a stand's height and the tone of its leaves (two observation channels). The player
+draws each kind (cones, tall pines, white birches, hanging willows, round crowns in their own greens,
+apples in fruit, hazel bushes, junipers) at its height, and the cell inspector names the kind.
+
+### Taming (emergent)
+
+No act tames an animal (`taming`, on). Each animal is more or less at ease with each person, a bond
+from 0 to 1, built by what happens between them:
+
+- It eats food that person dropped where it stands (a grazer at dropped plants, a hungry predator at
+  dropped meat): +0.2 a meal (`tame_feed`). Hungry predators not chasing anything nose toward meat
+  beside them (`scavenge_seek`), as wolves came to camps for scraps.
+- That person is beside it doing it no harm: +0.002 a tick (`tame_company`).
+- That person strikes at it: the bond with them loses 80% (`tame_harm`), and its bond with everyone
+  else 40%: it grows wary of people.
+- Apart, it fades by half in 20 days (`tame_half_life_days`). A new animal in a slot, or a newborn
+  in a person's slot, starts at 0.
+
+Every gain is scaled by how readily the species takes to people (fauna.py `TAMEABLE`): wolf 1,
+boar and fowl 0.7, horse 0.6, aurochs 0.5, rabbit 0.4, deer 0.25, tortoise 0.2, big cat 0.15, bear
+and mammoth 0.1, and fish, bats, snakes and crocodiles 0. A wolf fed four times is at ease.
+
+At ease (`tame_calm` 0.5), it neither flees nor chases nor attacks that person. A tame predator
+beside its person counts as one more defender against a wild one (and never joins a wild pack
+against them), so a tame wolf turns a lone person into a pair that a single wolf will not attack.
+Closer still (`tame_follow` 0.7), it follows them when calm. People see how at ease the animals in
+view are with them (a fauna channel: in how they behave, they do not shy, they come up), and the
+recorder logs a `tamed` event when an animal comes to be at ease with someone. In the player a tame
+animal has a small heart over it, and the cell inspector says whom it is at ease with.
+
+Whether anyone ever tames anything is up to them: they have to learn, by habit or by imagining it
+(the world model's ideas), that leaving food for an animal and not hurting it pays.
 
 Bugs are fields: mosquitoes (marsh and water edges in warm seasons, worse at night, driven off by
 smoke) carry fever; flies on meat and bodies speed rot and sickness; bees keep hives of honey in
@@ -562,7 +721,7 @@ termites with a stick, firing clay, a coal fire, smelting, bronze, metal tools),
 physical prerequisites (no smelting without a coal-hot fire). It is a measuring lens: agents are
 never shown it, and nothing in the world gates on it. A block is discovered the first time anyone
 does it, established once several individuals or days do it, lost if it then goes unused for 40
-days. The recorder logs what was in hand for blows, gathering, fire feeding and ignition, so tool
+days. The recorder logs what was in hand for strikes, gathering, fire feeding and ignition, so tool
 use is observable.
 
 `scripts/tech_tree.py RUN` prints the tree (first by whom and when, spread, status) and relates
@@ -617,6 +776,62 @@ numbers before, at the worst and 40 days after, and the deaths during the shock.
 30-minute walk across, and huddling, groups standing against predators and contact infection all
 count neighbours within one cell. There is no crowding cost.
 
+## The player (playback page)
+
+The page is laid out as an app. The top bar holds the clock. The map fills the middle and its
+camera shows as many cells as the space allows. Below the map is the transport: step, play, speed,
+and a timeline that doubles as the scrub track (night is dark, deaths red, fires orange). A dock of
+tabs sits on the right: Inspect, Log, People, Language and World.
+
+- **Labels on the map.** Speech bubbles, names and crowd counts are laid out together on their own
+  sharp, screen-resolution layer, at people's drawn positions, so they follow walkers smoothly.
+  - Each label tries several places round its person. It takes the one that overlaps no other label
+    and covers the fewest figures, keeping last frame's place when it can and gliding to a new one
+    otherwise.
+  - A label that had to move keeps a leader line to its person.
+  - The selected or hovered speaker gets a full bubble: name, how the words sound, and the
+    translation, wrapped. Everyone else gets a one-line chip. Speech carries the speaker's name, so
+    names never sit on bubbles.
+  - Names that can't be placed without overlapping are dropped. The selected person's name tag also
+    says what it is doing and its most pressing feelings, coloured by need.
+- **Crowds.** People sharing a cell stand in formation slots: two side by side, three in a triangle,
+  four in a square, up to a 3 × 3 block, with lying people in front. Past nine, the rest stand
+  behind. The slots blend over the tick, so a crowd re-forms smoothly.
+  - Four or more in one cell get a count badge; clicking it opens that cell, with everyone in it.
+  - Clicking and hovering pick what is drawn under the pointer: a label or badge on top first, then
+    the figure whose painted pixels are there (the front one where figures overlap; in the pixel
+    look by each sprite's own alpha, in the painted look by drawing the candidates again at the
+    point), then, between figures, the nearest.
+  - Room slots: each cell is a 2 x 2 of slots, one per unit of room (a standing adult one, a child or
+    small animal half, someone lying down or a big animal a row), shared by people and animals, so
+    what is drawn is what the world counts. One alone stands in the middle.
+  - Field of view: the selected person's sight, by the observation's own rule. Outside the dashed
+    square is beyond their sight (shorter when sleepy, one cell asleep); inside, dimmed cells are hidden
+    from them now (at night beyond their night sight unless fire-lit; underground beyond touch and
+    torchlight). Toggle: Field of view.
+  - No idle motion: people stand still unless they act (no breathing bob), and the sleep "z", the
+    downed cross, fish, bats and snakes are still until they move.
+  - Hovering never moves anything: labels are laid out as if no one were hovered, and the hovered
+    person's card (what they are doing and feeling, and what they said) is laid on top, under them.
+  - Clicking someone, their name, their portrait in the colonist bar or their row always opens them
+    (it no longer toggles them off when already open); the inspector's close button or Escape closes
+    it. The colonist bar also brings them into view.
+  - The social web's lines run between drawn figures.
+- **Beds.** Where someone lay (asleep, down or dead), grass is pressed flat and yellowed in a
+  body-shaped oval. In snow it is a blue-grey hollow, in sand a scuffed dip. The mark deepens over
+  two hours of lying and springs back over eight.
+- **Mind card** (top of a person's inspector):
+  - What it chose and what came of it, with the target and place.
+  - The options it weighed, with the policy's own probabilities (the chosen one highlighted), and
+    what it leaned on.
+  - Feeling chips: needs past their trouble line, plus the last hour's stress sources.
+  - Every need as an exact percentage, with its trouble line marked.
+  - What it said, and who heard it.
+  - A plot of food, water, energy, rest, stress and health over the last day, with labelled axes,
+    gridlines, night shaded and a cursor at now.
+- **One colour per need everywhere:** water blue, food green, energy yellow, health red, stress
+  violet, rest indigo.
+
 ## Map overlays (playback)
 
 Like a colony sim's data views, the playback can dim the ground and paint one quantity over it.
@@ -664,9 +879,9 @@ lists the sounds and words said on it and within earshot (each symbol drawn as t
 ## Cause and effect
 
 Every event the recorder logs carries its causes (`parents`, with a plain-words `because`),
-taken from the simulation's mechanics rather than guessed from timing: a blow causes the
-victim's wound; striking back links to the blow being answered (within 2 days); a death links
-to what its cause names (the last blow for violence, the infection for disease, the slide into
+taken from the simulation's mechanics rather than guessed from timing: an act of aggression causes the
+victim's wound; striking back links to the aggression being answered (within 2 days); a death links
+to what its cause names (the last act of aggression for violence, the infection for disease, the slide into
 thirst or hunger for those, a mother's death for an orphan whose hunger began after it); an
 infection to the sick neighbour, the water or the raw meat it came from; taking food to whoever
 left it; a birth to the pregnancy and the mating; lameness to the wound that never healed,
@@ -683,11 +898,11 @@ one cause had several effects:
     python scripts/causal_story.py runs/exp/validate/caveman --agent 5 --from-day 40 --to-day 80
 
     Story 8: Y1 Spring D2 08:00 to Y1 Spring D5 05:00; 8 events; #3, #6
-    Y1 Spring D2 08:00 #6 struck #3 -> (#6's blow) 08:00 #3 was struck by #6 -> ...
+    Y1 Spring D2 08:00 #6 struck #3 -> (#6's act of aggression) 08:00 #3 was struck by #6 -> ...
       ↳ after Y1 Spring D2 08:00 #3 was struck by #6: -> (striking back at #6) Y1 Spring D4 07:30 #3 struck #6 -> ...
 
 It ends with every death traced back to its first recorded cause. Routine stories (a single
-blow and nothing after, thirst then a drink) are left out unless `--all`. A reused slot's later
+act of aggression and nothing after, thirst then a drink) are left out unless `--all`. A reused slot's later
 lives are written #5.2, #5.3. The playback inspector's event lists show each event's causes too.
 
 ## World model and ideas
@@ -732,7 +947,9 @@ the two, 3 seeds each; births.json records which brain each child got.
 - `blank`: primitive actions only (move, grasp, eat, drink, strike, touch, ...).
 - `caveman` (the "society" preset): plus four given survival skills, chosen like any action:
   `seek_water` (walk to water the agent remembers, then drink), `seek_food` (walk to remembered
-  plants, gather, eat; never raw meat), `flee` (step away from the nearest predator in sight) and
+  plants, gather, eat; never raw meat; it skips and leaves patches poorer than half the average
+  one it knows, `patch_leave`, after Charnov's marginal value theorem, so a band does not graze
+  one cell to the bone while a better one is known), `flee` (step away from the nearest predator in sight) and
   `seek_shelter` (walk to a forest or cave it has seen, then rest there: cover from cold and heat).
   Each tick a skill picks one step from the agent's own cognitive map and sight, never the true
   map, routing around water and away from steep ground; with nothing known it explores unseen
@@ -749,7 +966,7 @@ At that rate a whole training run may contain no such agent; raise the rate to s
 
 **Social web (playback):** the "Social web" toggle draws the relationships agents already have,
 read from their own memories and true kinship (it changes nothing in the world): gold dashed for
-kin, green for bonds (touch, food left near each other), red for blows, with groups, average
+kin, green for bonds (touch, food left near each other), red for contact aggression, with groups, average
 steps between group members, the most connected agent and who strikes most without being struck.
 
 ## Archetypes and emergent roles
@@ -796,7 +1013,7 @@ temperament, and where each injected archetype actually landed. The experiment r
 as of the tick being viewed: who it is (sex, age, generation, mother, archetype, what it is doing
 and saying), its body (health, size, strength, needs, sleepiness, temperature, injury, lasting
 injury, scars, sickness, stress, pregnancy, what it holds and carries), every inborn trait with
-its range, its relationships right now (kin, bonds, blows each way) and its history in this
+its range, its relationships right now (kin, bonds, aggression each way) and its history in this
 recording. A character viewer switches between **Anatomy** (a figure coloured by condition;
 hover or tap a part, brain, eyes, mouth, immune system, heart and lungs, stomach, womb, arms,
 legs or skin, to see what the body tracks there) and **Loadout** (what it looks like, what is in
@@ -815,7 +1032,7 @@ felt (the reward, and the part felt for others). "Now" shows the decision in mot
 shows earlier ones. There is no inner monologue: these are the real quantities behind each choice.
 
 **Social web cards:** hovering a line shows what lies between the two agents: what kind of tie it
-is (kin, bonded, rivals, one-sided blows), kinship, bond, blows each way, distance, both
+is (kin, bonded, rivals, one-sided aggression), kinship, bond, aggression each way, distance, both
 temperaments and anything notable (fighting despite close kinship, a strongly vengeful striker).
 The inspector heading is the agent's number until the agents themselves give it a name; mother,
 children and relationships link to those agents' own records.
@@ -842,14 +1059,37 @@ Agents are never told about rank or custom; these analyses read them from what h
 continuous world writes `trace.npz` (per tick: positions, alive, actions, speech, and whether a
 predator, large prey or fire was in view of each speaker) beside `lives.json` and the events.
 
+**Terms.** These follow the ethogram vocabulary of field primatology and behavioural ecology.
+- *Contact aggression*: one person strikes another and the strike lands (event `strike_agent`). The
+  one who strikes is the *actor* or *aggressor*; the one struck is the *recipient*.
+- *Third-party aggression*: aggression by someone outside the original pair.
+- *Exploratory act*: an act the actor's own policy rated under 5% likely. It was sampled, not
+  chosen.
+
+**Choices and exploratory acts.** Each act an agent makes is recorded with "p": how likely its own
+policy rated that act when it was sampled.
+- Recorded acts: contact aggression, touches, food left, gathering, eating, drinking, fire,
+  placing and writing, in playbacks and in a continuous world's events.
+- Why rare acts happen without intent: policies sample from ~78 actions and are trained with an
+  entropy bonus, so every allowed act keeps a little probability. Over thousands of decisions, rare
+  acts come up.
+- Checked on the trained grounded-language agents:
+  - none of the 31 strikes chosen in 4 recordings was among the actor's top three choices at the
+    time;
+  - the 2 acts of contact aggression in a fresh recording were rated 2.4% and 0.3% likely.
+- `hierarchy.py` and `society.py` leave exploratory aggression out, and report how many acts they
+  dropped.
+- The inspector marks an exploratory act as one, and gives each moment's likelihood in a
+  relationship's list of moments.
+
 **Hierarchy** (`scripts/hierarchy.py <world>`):
-- *Dominance* comes from decided encounters: blows struck, and supplants (one moves next to
-  another, who moves away at once while the first stays).
+- *Dominance* comes from decided encounters: contact aggression, and supplants (one moves next
+  to another, who moves away at once while the first stays).
 - *Per 40-day window:*
   - normalised David's scores (de Vries et al. 2006);
   - steepness;
   - Landau's linearity h', corrected for unknown and tied relations, with a randomisation p (de Vries 1995);
-  - despotism: the share of blows struck by the top individual.
+  - despotism: the share of acts of aggression by the top individual.
 - *Across windows:* rank stability.
 - *Rank against outcomes:* eating, matings, children, food taken from others' leavings, and
   lifespan, by Spearman correlation with a permutation p.
@@ -875,12 +1115,62 @@ predator, large prey or fire was in view of each speaker) beside `lives.json` an
 A candidate culture is one that differs between social worlds, persists past generations, holds
 beyond genes, and is weaker or absent in the solitary control.
 
+**Society** (`scripts/society.py <world> [--window-days 40] [--radius 1] [--json out.json]`)
+measures the rest of what makes a society, per window, beside the generations alive, so a world's
+course over the generations reads as one table. Each measure has a null model:
+- *Bands (fission-fusion).* People within one cell of each other are together.
+  - Per window: the typical group size (the size of the group the average person is in), the share
+    alone, the number of groups, and how often a person's companions change per day.
+  - Association: each pair's share of hours together. Its null keeps each person's daily rhythm
+    and the places they go, and breaks only who goes with whom (one track of the pair shifted by
+    whole days). The ratio over the null is company sought, not company from a shared water hole.
+  - Preferred companions are pairs above their own null's 95th percentile and at least 0.2,
+    counted against the 5% expected by chance. Bands are the connected groups of preferred
+    companions, and band stability is how well each band is found again in the next window.
+- *Places.*
+  - Home range: the cells holding 95% of a person's time.
+  - Camps: how often people sleep where they slept before (fidelity), and beside someone
+    (co-sleeping).
+  - Between bands: acts of aggression per 100 hours together, between bands against within.
+- *Sharing.*
+  - Food left and taken by another, per person-year.
+  - The share that goes to kin (pedigree r ≥ 0.25), against the kin share of the giver's company.
+  - Reciprocity: whether i gives to j as j gives to i (dyadic correlation, node-permutation p).
+- *Hunting together.* The share of large-prey kills with another hunter striking nearby in the
+  three ticks before, hunters per kill, and food taken from a hunter within a day of their kill.
+- *Division of labour* (Gorelick et al. 2004). Tasks: gathering, hunting, tending fire, nursing,
+  and leaving food for others.
+  - I(individual; task) / H(task), against each person doing as many acts drawn from the shared
+    mix.
+  - By sex: the female share of each task over her share of the people, with a permutation p.
+- *Punishment.* Is a striker struck by a third party within a day more often than when their own
+  record of being struck is shifted at random in time (keeping its rate and clustering)? Also: how
+  often those punishers are kin of the victim.
+- *Inequality.* Gini of eating and of children among adults.
+
+`tests/test_society.py` checks each measure on synthetic worlds:
+- It finds planted structure: two bands with camps, specialists, sex roles, reciprocal kin gifts,
+  answered aggression and joint hunts.
+- It finds none in worlds without it.
+- The punishment test raises a false alarm about 5% of the time on random aggression.
+- Caveat: the association p-value is approximate. When people drift with no home range, it runs
+  about twice too liberal (measured on synthetic loners). Use replicate worlds for firm
+  conclusions.
+
+In the player, the **Society** tab shows, descriptively, for the recording:
+- the groups at this moment;
+- the day's group size, time alone, gifts, joint kills, and aggression and aggression answered;
+- a small chart of each over the days;
+- who keeps company with whom.
+
+**Outline groups on the map** rings each group.
+
 ## Attachment: survival felt toward particular others
 
 Not a reward for love: the felt form of a survival fact. Agent i's attachment to j (0 to 1)
 grows with evidence that j keeps i alive: food j left that i took when hungry, warmth huddled beside j when
 cold, a predator attack held off with j beside, calm time together in view, intimacy, a living
-child they share, and milk (an infant toward its mother). It falls by 30% with each blow from j
+child they share, and milk (an infant toward its mother). It falls by 30% with each act of aggression from j
 and fades by half over 20 days apart. It acts only through survival:
 
 - j's visible condition counts in i's reward (care weight + attachment), through the same
@@ -911,7 +1201,7 @@ a physical quantity the world already has; none prescribes behaviour.
 | inborn | keen eyes 3%, poor eyesight 5%, robust 4%, frail 4%, iron stomach 3%, long-lived 2%, slow clotting 1%, cold-hardy 4%, infertile 2% | at birth; a child of a parent who has one gets it with its inherit chance (40-50%; infertile 0%), else the base chance |
 | age | stiff joints (past 45, 3%/yr), failing sight (past 50, 4%/yr) | a chance each tick, scaled to the yearly rate |
 | event | lame, chronic cough (10%), haunted (30%), hardened (20%) | lasting injury above 15%; surviving an illness; health falling through 15%; 48+ ticks of critical need survived |
-| use | enduring, heavy-handed | 1,500 moves walked; 200 blows struck |
+| use | enduring, heavy-handed | 1,500 moves walked; 200 strikes struck |
 
 Chronic cough and haunted can fade (2% and 1% a day). Rarity labels: common 10%+, uncommon 4%+,
 rare 1.5%+, very rare below. Agents observe their own conditions. The playback lists them in the
@@ -953,6 +1243,74 @@ both off in the base config):
   eat what is on one's own cell. Others see them lying as they see a sleeper, and decide whether to
   bring food (drop it on their cell), keep watch, or finish them; predators find them easy. Events
   "downed" (caused by the last wound) and "stood_up".
+- **Pain shock** (`pain_shock`, RimWorld's): pain is 0.6 x injury (the ache of standing wounds) plus
+  fresh pain, 2.5 x the health each wound takes, fading with a half-life of about 4 hours (`pain_fade`).
+  At `pain_shock` (0.8) / sqrt(pain_aversion) one drops, so the heritable trait that weighs pain also
+  sets how much one can take (a pain-averse 4.0 drops at 0.4; a stoic 0.25 holds to 0.99), and gets up
+  again once the fresh pain fades. A few quick blows, a bear's maul or a bad fall can now drop someone
+  who is not near death; fights end with people down more often than dead. `pain_shock=0` turns it off.
+- **Pain is felt and seen.** Each agent observes its own *felt* pain: pain over its own shock threshold,
+  so 1.0 is the point of shock whatever one's tolerance (the same hurt reads 0.5 to an average person and
+  1.0 to someone with pain_aversion 4). Others in view see it as a wince (felt pain, capped at 1), the
+  last of the social features. The world model predicts it among its body targets ("pain"), so an agent
+  can imagine that an action will hurt before taking it. The reward is unchanged: survival only, with
+  health lost felt through pain_aversion as before.
+- **Everyone stands differently toward pain.** `pain_aversion` (heritable, sensitised by trauma) sets
+  both how much one's own lost health hurts and where one drops in shock. **Sadism** (`sadism`, heritable
+  at 0.35, drawn skewed: most near 0, about one in ten above 0.5) is pleasure in the pain one inflicts:
+  in the survival reward it turns care for those one has struck negative (`care_sadism`), so their
+  visible decline, pain included, is felt as gain; in the acts reward it pays `sadism_reward` per unit of
+  hurt one's blows cause, habituating together with revenge. Pain shows: a wince lowers how someone
+  looks (visible condition, -0.5 x felt pain), so empathy, kin care, revenge and sadism all respond to
+  pain seen, not only to health lost; empathy also weighs a hurt by how loudly the hurt one feels it.
+  Masochism is not modelled as reward for one's own pain: the clinical sense is pleasure in pain in a
+  safe, chosen setting, which this world cannot represent, and a heritable reward for being hurt would
+  only be a trait for selection to remove (people born unable to feel pain mostly die young). Low
+  pain_aversion (high tolerance) is the part of that spectrum the world can express.
+- **Emotional pain (heartache)**: seeing others hurt, x empathy (cognitive empathy, seeing the wince,
+  is everyone's; feeling it is empathy's), and the death of someone one is attached to (grief, x
+  attachment) raise `heartache`, which fades with a half-life of about 11 hours, adds
+  `heartache_stress` to stress each tick (stress source "heartache"), and is felt (an own-body feature).
+  It is not physical pain and never sends one into shock.
+- **Chronic and phantom pain**: a lasting injury flares now and then with no new wound
+  (`phantom_prob` 2% per half hour at the worst lasting injury, adding `phantom_pain` 0.3 of fresh pain),
+  so the old-wounded live with recurring pain that can stack with a new hurt toward shock.
+- **Finishing off**: the downed cannot ward off or roll away, so blows and bites on them land at
+  `downed_hit_mult` (2x), and each person's blow on a downed one has `coup_prob` (0.15) of striking
+  something vital and killing outright (cause: violence). The "death" event carries `finished_off` when
+  the dead was down the tick before; "downed" carries `pain_shock` when pain alone dropped them.
+  RimWorld itself has no damage multiplier: a downed pawn cannot dodge or block, and dies when a vital
+  part is destroyed (neck, head, heart), blood runs out, or consciousness reaches zero. With body
+  parts (below) the vital-hit roll is off: finishing someone is aiming at the neck.
+- **Body parts and aimed blows** (`body_parts`, on): head, neck, torso, arms, legs. Every blow is
+  aimed (the brain's aim output). By part, the chance it lands on someone standing (head 60%, neck
+  45%, torso 90%, limbs 80%; the downed are always hit), how much of its force reaches health
+  (head 1.4x, neck 2x, torso 1x, arms 0.4x, legs 0.5x) and how much the part takes (fragility 1.5,
+  2, 1, 1.5, 1.5). A head at 0.6 knocks one out (down); a head or neck at 1 kills (counted to the
+  blow, else to the bite that did it). Hurt arms weaken (strength x (1 - 0.6 x damage)), hurt legs
+  slow (speed x (1 - 0.6 x damage)) and at 0.9 one cannot walk or delve. Predator bites land on a
+  part (throat 25%, torso 35%, ...); falls hurt the legs; parts heal as injuries do. Each agent
+  feels its own parts (five observation features). Animals: arms are forelegs; a blow to a leg or
+  foreleg lames the animal for two days (no running, half its steps), so hamstringing prey is a
+  choice: on a deer, the neck lands 44% of the time for 0.73 damage, the torso 90% for 0.25, a leg
+  78% for 0.07 and lames it. A blow's force: strength x (lean mass / an average adult's)^(2/3)
+  (muscle force follows cross-section) x practice (up to +25%, half of it after 200 strikes in a
+  life) x luck (lognormal, sd 0.25, and a 10% chance of a glancing blow at half force).
+- **Techniques** (`techniques`, on; push and hold need `body_parts`): a strike is one joint choice of
+  part x limb (hand, foot, head, body) x mode (strike, push, hold), 60 in all (`env.how_of`). There
+  are no named moves, only physics: a kick has 1.5x a punch's force (driven by the legs, so leg
+  damage weakens it), lands 0.8x as often (0.56x at a head or neck) and staggers the kicker 10% of
+  the time; a headbutt has 1.2x force and the striker's own head takes 30% of it; a shoulder or hip
+  uses the whole mass (x mass^(1/3) more) at 0.7x force but 1.15x accuracy. A push deals 0.2x and a
+  hold 0.1x of the damage. Pushes and holds are contests of leverage x strength x mass^(2/3) x
+  sound legs (someone down or staggered resists at 0.3x). A shove moves one a cell (into rough or
+  steep ground: a likely fall) and staggers one for a tick (no step, no blow, every blow lands); a
+  hold pins one next tick with the contest's chance and opens one to blows in that proportion; a
+  push on someone one held is a throw (1.5x the chance, 0.15 x force to the torso, two ticks on the
+  ground). Sequences are found, not given: hold the legs then push is a takedown, shove then strike
+  hits the staggered, hold then strike the pinned. The recorder names what happened after the fact
+  (punch, kick to the head, stomp, shove, body check, chokehold, leg hook, throw, trip throw, ...).
+  Each agent feels whether it is held or off balance (two observation features).
 - **Grazing** (`EnvConfig.grazing`): rabbits, fowl, tortoises, deer, aurochs, boar, horses and
   mammoths eat the plants where they stand (shared when a cell is crowded; a large grazer eats about
   seven times what a small one does) and drift toward the richest ground beside them; one that finds
@@ -966,9 +1324,94 @@ both off in the base config):
 **Clothing** (`EnvConfig.clothing`, on in the living world; `--no-clothing` for the ablation): very
 basic. Each founder starts with hides covering a different share of the body (from `clothing_min`, 0.1,
 to all of it); babies are born bare. Clothing keeps heat in when it is colder than comfort: body
-temperature drifts toward the cold more slowly, by 1 + 0.8 x coverage. It does not wear out and cannot
-yet be made, so children born in a run stay bare (making clothes from hides is the natural next step).
+temperature drifts toward the cold more slowly, by 1 + 0.8 x (coverage + insulation of what one carries)
+(and more again on a bed while asleep; see Byproducts). Worn clothing does not wear out and cannot yet
+be sewn, but a carried hide (insulation 0.35 each, feathers 0.04) wraps one the same way.
 Exported per agent as `clothing`; the playback dresses each person by it.
+
+**Byproducts** (`EnvConfig.byproducts`, on by default): the living world sheds things people can pick
+up, carry and place like any mineral. Nothing says what they are for; each does only what its physics
+allows, and finding a use is the agents' to discover (tech tree nodes `hides`, `bedding`, `bone_tools`,
+`hafting`, `spear_hunting`).
+
+| item | from | what it does |
+|---|---|---|
+| leaves | fall under trees (`leaf_fall`, 5x in autumn, up to `leaf_max` a cell), rot | tinder: a spark on leaves catches `tinder_mult` (3x) likelier; bedding |
+| fiber | foraging greens on grass or marsh (`fiber_per_greens`) | binding; tinder; a little bedding |
+| feathers | fowl kills, fowl eaten by predators, moulting (`molt_prob`) | light insulation and bedding |
+| hide | large game killed by people or taken by predators (deer 2, mammoth 4) | insulation 0.35 carried; good bedding |
+| bone | the same carcasses (mammoth 6) | hard (0.6) and fairly sharp (0.5): a tool and a point |
+| spear | **placing fiber** on a cell holding a stick (wood) and a point (anything with sharpness >= `haft_edge`, 0.5: flint, obsidian, bone) binds them into one | hardness 0.8, sharpness 0.9, and its length keeps a struck animal off: counter-attacks (gore, trample, maul) land `spear_reach` (50%) less |
+
+Sleeping on a cell with leaves, fiber, feathers or hides makes a bed (up to `bedding_max`) that keeps the
+cold out like clothing; event "bedded". Binding a spear is event "made" (product "spear", by hand).
+Organic items rot slowly (leaves fastest) and are never found as deposits.
+
+## Plant ecology and camp fouling (living world)
+
+`EnvConfig.ecology` and `EnvConfig.fouling`, on in the living world (`lifesim/ecology.py`). Before
+them, a cell's plants regrew at a fixed rate whatever was left, and one grasp took a whole unit
+(about 4,400 kcal) in one act, so a band could live forever on one cell beside water.
+
+**Four kinds of plant food**, the ones foragers live on, per cell, in food units (1 unit = one
+unit of plant food in hand, `cfg.plant_food_value` of satiety, ~4,400 kcal):
+
+| | Grows | Lasts | Gathering (kcal/h) |
+|---|---|---|---|
+| Greens | logistic, from what is left; spring flush | die back in winter | 500 |
+| Fruit | a crop in summer and autumn | rots within weeks out of season | 1,500 |
+| Nuts and seeds | the autumn mast | keep through winter | 1,000 (cracking included) |
+| Roots and tubers | logistic, slow (digging takes the plant) | all year, dormant in winter | 1,200; x1.5 with a digging stick |
+
+- **Where:** each biome has a standing crop it can hold (K) and a production rate (P) per km^2 for
+  each kind: forest is rich in nuts, fruit and roots; grass in greens, seeds and roots; marsh in
+  roots (cattail-like rhizomes); tundra in berries; desert and rock little. Patches vary
+  (lognormal richness per cell and kind, fixed per world). Amounts per cell are density x the
+  cell's area, so the ecology is the same per km^2 at any tick length (a cell is 2 km across at
+  30-minute ticks, 67 m at 1 minute).
+- **Reproduction:** greens and roots grow logistically (r S (1 - S/K), with r set so the maximum
+  sustained yield r K / 4 equals P), plus a seed bank and seed blowing in from neighbouring cells:
+  a patch picked bare comes back slowly, one left alone fills. Fruit and nuts come from trees and
+  shrubs that picking does not harm, as a seasonal crop up to what the patch holds. Rain speeds
+  growth, drought slows it, snow stops it; fire burns greens, fruit and nuts but roots survive.
+- **Gathering takes time:** one act is one tick of work, yielding the kind's return rate x the
+  share a type II functional response gives at this density (density / (density + half-density)).
+  A rich patch pays; a picked-over one barely does, so a band that stays eats its patch out and
+  has to move, as foragers do. Food dropped or placed lies loose (picked up whole) and spoils
+  slowly. Grazing animals eat greens and loose food, not roots.
+- **What agents see:** for each cell in view, how well each kind would gather there (four
+  channels), and waste; the old plants channel and the remembered map hold the best of these.
+- **Excretion** (`EnvConfig.excretion`, off unless asked for: `--excretion` in training and
+  export; runs recorded before the flag are replayed with it on): an urge builds as the body
+  processes food and water (`urge_rate` x (0.5 + hydration); 40% of that asleep at night), about
+  four to six reliefs a day. `RELIEVE` (from 15% urge) empties it where one stands and leaves
+  that much waste there (a full urge is 0.3 person-days). Past 70% the urge is stressful (a new
+  stress source); at 100% it happens anyway, wherever one is: soiling oneself adds stress and
+  wakes a sleeper. Infants under 2.5 have no control (no stress). Agents feel their own urge (a
+  body feature) and see waste on the ground; where to go, and whether to keep it away from the
+  water the band drinks, is left to learning. The log records each relief and says when it was
+  beside water.
+- **Camp fouling:** waste lies where people relieved themselves (person-days per km^2; without
+  excretion, people's refuse wherever they stay) and fades (20-day half-life, faster in rain).
+  Drinking beside it multiplies the infection chance by 1 + waste / 50 (at most 20). Agents can
+  see (smell) it.
+- **Scale consequence (why the presets' map is now 250 x 250):** at 1-minute ticks a 32 x 32 map is about 4.6 km^2. Its plants make
+  about 5,600 kcal a day (mean over the year; standing crop at most ~1.7 million kcal) against
+  38,400 kcal a day for the 16 people of the "society" preset: plants alone cannot feed them
+  there, which is the real arithmetic of a band that size in a village-sized area. At 5-minute
+  ticks the same grid is 114 km^2 (~140,000 kcal a day); at 30-minute ticks 4,096 km^2 (~5
+  million kcal a day), plentiful but spread out, and any one cell is eaten out in weeks. The
+  presets now use RimWorld's default map size, 250 x 250: at 1-minute ticks 280 km^2 and about
+  340,000 kcal a day of plant food, nine times what 16 people need. Scripted competent foragers
+  on the old 32 x 32 map all starved within 12 days; on it with the old fixed-rate plants they
+  did not, because those plants made ~500 times the realistic amount per km^2.
+- The figures are order-of-magnitude estimates in the range reported for foragers'
+  environments (return rates and population densities, e.g. Kelly, *The Lifeways of
+  Hunter-Gatherers*, 2013), chosen so a forest supports roughly 0.2-0.5 people per km^2
+  indefinitely and tundra or desert a tenth of that. They are knobs (`lifesim/ecology.py`), not
+  measurements. Energy is the only nutrient so far.
+- Playback: fruit shows as a bush in berry, nuts on the ground, greens as tufts, roots as a tuber
+  plant's leaves; waste as trodden dirt and flies. The tile inspector lists each kind 0-9.
 
 ## Caves: the underground layer
 
@@ -1024,11 +1467,11 @@ world, the exporter, viability and the benchmark; 30 is the calibration).
   (hunger, thirst, healing, sleep pressure, regrowth, spoilage, stress, rewards...) scale with the
   tick, chances per tick become 1 - (1 - p)^k, per-tick decays become d^k, and durations counted in
   ticks (illness, torches, fuel, memory and attachment half-lives, weather spells, episodes, lifespans)
-  stretch. Per **act** nothing changes: a blow, a bite, a drink, a step, a mating is the same act, so a
+  stretch. Per **act** nothing changes: a strike, a bite, a drink, a step, a mating is the same act, so a
   finer tick means more and shorter acts, as in a colony sim. Hard-coded rates in `env.py` go through
   `_k(cfg)`; the recorder's causal windows and every analysis read the world's own day length.
 - **Space** follows from one step per tick at walking pace: a cell is 67 m at 1-minute ticks, so a
-  32 x 32 map is a ~2 km village area, not a region. View radius 5 is ~335 m.
+  the presets' 250 x 250 map is 16.7 km across (280 km^2), a band's home range. View radius 5 is ~335 m.
 - **Learning:** gamma, gae_lambda, the patience gene and consolidation are given per 30 minutes and
   converted (`MAConfig.tick_scale`). A day (1,440 steps) no longer fits in a rollout, so sleep
   consolidation switches to a **pending change** (`consolidation="auto"` picks it whenever ticks are shorter than 30 minutes): each update computes the
@@ -1043,18 +1486,34 @@ world, the exporter, viability and the benchmark; 30 is the calibration).
 
 ## Playback: pacing, animation and colony-sim UI
 
+- **Refresh.** At most one draw per animation frame. Between ticks people glide at as many frames as
+  a frame's cost allows (60 a second when cheap, never under 20; measured in `window.__agonPerf()`),
+  not a fixed 30; a hover only asks for a draw on the next frame. Measured headless (software
+  rendering, 1400 x 950, a 44-person year-28 recording, frames a second while playing):
+
+  | | before | after |
+  |---|---|---|
+  | pixel, whole map | 22-24 | 27-33 |
+  | pixel, zoomed in | 29-32 | 47-55 |
+  | painted, whole map | under 1 (0.6, paused) | 20-32 |
+  | painted, zoomed in | not measured (the page stopped responding) | 37-43 |
+
+  The painted look drew the dead through a canvas filter (a full-canvas pass per body: in a year of
+  many deaths the page all but froze); they are now drawn in grey directly. A lying body's size was
+  measured by re-rendering its body model every frame; it is now cached.
+
 - **Speeds.** With short ticks the speeds are RimWorld's: 1x = 1.44 game minutes a second (a day in
   16 min 40 s), 3x, 6x and 15x (keys 1-4, or the buttons on the map). With 30-minute ticks they are
   1, 3, 6 and 15 ticks a second (RimWorld's rate would be one decision every 21 s).
-- **Animation.** People glide from cell to cell over each tick and bob as they step; a blow lunges
+- **Animation.** People glide from cell to cell over each tick and bob as they step; a strike lunges
   toward its target and a touch leans; the struck flash red; floating notes rise over people as things
   happen (+food, +water, gift, hit!, bitten!, ♥, born, †, ▼, ▲...); night falls and lifts over an
   hour with a warm tint at dusk and dawn, fires and torches lighting pools; names under people; corner
   brackets on the one selected.
 - **UI.** A portrait bar above the map (health and calm bars, pulsing red when someone is in danger;
-  click to inspect); letters down the map's side for what matters (deaths, births, attacks, blows,
+  click to inspect); letters down the map's side for what matters (deaths, births, attacks, aggression,
   conception, gifts, fire, going underground; click to jump there); a clock and speed controls on the
-  map. **Slow on danger** drops to 1x at a death, a predator attack, a blow or a birth.
+  map. **Slow on danger** drops to 1x at a death, a predator attack, an act of aggression or a birth.
 - **Pixel look**, studied from Mudborne: 16-pixel tiles drawn at exactly twice their size (the map
   is 32 px a cell in both looks); everything - people, animals, trees, rocks, the edges of patches and
   banks - outlined in one ink so it reads at a glance (a lifted slate teal `#203036`, as Mudborne's, never
@@ -1088,6 +1547,13 @@ world, the exporter, viability and the benchmark; 30 is the calibration).
   about 4 m long; body depth, leg length and leg thickness follow per-species shares. Small animals
   (rabbit, fowl, tortoise, fish, bat, snake) are drawn no smaller than a legibility floor (a 14-pixel
   body), so they are larger than life; everything from a wolf up is true to scale.
+- **Things on the ground take room only when big.** Items under half a metre (leaves, feathers, fiber,
+  bones, stone chips) are scattered detail with no outline; a hide (1.2 m) or a spear (1.8 m) is an
+  outlined object with a shadow in the lower half of its cell.
+- **Fish are under water**: drawn faint and water-tinted, clipped to the water cell, with a glint; a
+  crocodile in water shows only its top third. **Animals and trees**: on a forest cell animals stand
+  beside the trunk rather than inside it and a resting fowl perches in the crown; on rock small animals
+  stand on the boulder and large ones beside it.
 - **Depth and line of sight.** Trees, animals and people are drawn as one scene sorted by where each
   stands (each row of trees on its own strip), so a tree hides whoever stands behind it. Where a tree or
   a big animal (mammoth, aurochs, horse, bear) hides someone, the hidden part of them shows through as a
@@ -1099,7 +1565,7 @@ world, the exporter, viability and the benchmark; 30 is the calibration).
   inspector lists **what stresses it** over the last game hour by source (hurt, danger, unmet needs,
   loneliness, missing someone, sleep debt, darkness: `StepInfo.stress_from`, exported per agent as
   `sw`), and names ties under **Relationships** (mother, child, mate when they conceived together in
-  the recording, close kin, kin, friend for attachment of 0.3 or more without blows, rival for blows
+  the recording, close kin, kin, friend for attachment of 0.3 or more without aggression, rival for aggression
   without attachment). The downed lie with blood beside them and a red cross above; "is down" is a
   letter.
   **People are drawn from one body model** (`scripts/body_model.js`, inlined into the page): the map
@@ -1195,6 +1661,12 @@ Sleep is built in, as in people; how agents handle it is up to them.
   faster once sleep is deep (after 2 unbroken hours) and at night; about 8 hours
   a night keeps up. Past 0.95 (about 30 hours awake) an agent collapses asleep
   whatever it chose and cannot wake by choice until sleepiness is below 0.6.
+- **Sleep is honest.** One can only fall asleep with real sleep pressure: sleepiness of
+  0.3 by day (about 12 hours awake), 0.1 at night, when the body clock opens the gate
+  (`sleep_onset`, `sleep_onset_night`). Before this, choosing `SLEEP` at no sleepiness
+  still gave deep sleep's healing, calm and energy: the first living-world policy
+  (Oct 2026) chose it 57% of the time while asleep only 17%, and lay by the water. The
+  training log's `asleep_share_*` now counts real sleep, not the choice.
 - **The cost is awareness.** Asleep, an agent sees and hears only the cells next
   to it, cannot act (only sleep on, or `REST` to wake), and is woken by being
   struck, attacked, burned, touched or falling. Others can see who is asleep.
@@ -1238,12 +1710,21 @@ Sleep is built in, as in people; how agents handle it is up to them.
 ## Reproduction
 
 Off by default; `--reproduction` (with `--agents` as slots and `--founders`
-alive at the start) or `config.with_reproduction()` turns it on, at 1 day per
-biological year (adult about day 15, lifespan about 70 days).
+alive at the start) or `config.with_reproduction()` turns it on. The presets age people one year
+per 40-day year (`days_per_bio_year` 40, the same as the calendar): adults at 15 years (day 600),
+deaths from age most likely in the 70s (see *Senescence*). The config's own default is still 1 day
+per year of age, used by the tests and by runs made without a preset.
 
 **Time scale.** `--days-per-year` (calendar: seasons, climate) and `--days-per-bio-year`
-(age: growth, fertility, pregnancy, lifespan) set it; `config.with_time_scale()`. The default
-(40, 1) compresses both so winters and generations fit in a run. The `realtime` preset is
+(age: growth, fertility, pregnancy, lifespan) set it; `config.with_time_scale()`. The presets
+use (40, 40): a year of age per year of seasons. At 1 day per year of age (the earlier setting,
+still the config default) founders aged out within a year or two of seasons, before their children
+grew up. At 40, in society30 (half-hour ticks, 1,920 ticks a year): adults after 28,800 ticks
+(600 days); a 100M agent-step run of 64 slots in 8 worlds lives about 195,000 ticks per world, four
+25-year training episodes; continuous worlds default to 1,200 days (30 years), long enough for a
+child born early to grow up. Births come 40 times more slowly per day than at 1 day per year, while
+hunger, thirst, disease and predators kill at the same rate per day, so whether a band can still
+replace itself is checked with `viability.py` (default 1,200 days). The `realtime` preset is
 (365, 365): 365-day years, 9-month (274-day) pregnancies, adults at 15 calendar years. Its cost:
 a child is fertile after 262,800 ticks, while a 100M agent-step run of 16 agents in 32 worlds
 lives about 195,000 ticks per world, so no one born in training grows up and a 400-day
@@ -1258,18 +1739,70 @@ adulthood with it.
   An open offer is visible to others as *courting*, and lasts only while its maker stays
   with it (resting beside or touching the other): any other act withdraws it at once, so no
   one is ever mated without having chosen it themselves within the window. Coercion is not
-  modelled, on purpose. Then a 15% chance if she
+  modelled, on purpose. Then a chance per act set by the time scale (below) if she
   is 15-45, not pregnant, at least 85% of ideal weight, not sick and stress
   below 0.7, and he is not sick, and a slot is free.
+- **Fecundity follows the time scale.** A fertile couple mating regularly conceives within a
+  biological year with probability `conception_per_bio_year` (0.8: about 0.2 per cycle, with
+  missed cycles). One act stands for 1 / (`mating_acts_per_day` x days per biological year) of a
+  year, so the chance per act is 1 - 0.2^(that fraction): 80% at the default 1 day per year,
+  0.44% at real time. It was a flat 15% per act before, which at 1 day per year gave a woman one
+  or two chances a "year": trained bands bore about 2.8 children per world-year, and the first
+  A100 caveman world had 1 birth before its founders died of age. With the scripted band at
+  society30 the change took 160-day persistence (run locally) from 1 of 3 seeds to 3 of 3. `conception_prob`
+  set explicitly still wins.
+- **Nursing suppresses ovulation** (lactational amenorrhea): a woman with a living child younger
+  than `lactation_infertile_years` (2) cannot conceive; if the child dies, she can. With pregnancy
+  (0.75 years) and the wait to conceive (about 0.6 years at 0.8 a year) births come about 3.4
+  biological years apart, as among foragers (3-4). Without it, at 0.8 a year, scripted bands on
+  society30 bred to any slot count tried (64 included) and lived on thirst and disease deaths.
+  When a dead mother's slot takes a newborn, her surviving children are orphaned
+  (`mother` -1) rather than taking the newborn for their mother.
+- **Senescence: no fixed death age.** Dying of age is a Gompertz hazard, b·exp(b·(x − M)) a
+  biological year, with M = `max_bio_years` (70) the most likely age of death and b =
+  `senescence_rate` (0.085, the risk doubling about every 8 years: the range fitted to
+  hunter-gatherers by Gurven & Kaplan 2007, modal adult death about 72). x is age measured against
+  one's own lifespan (the inherited `lifespan` gene, "long-lived" 1.2x). From age alone about 1 in
+  800 die a year at 20, 1 in 100 at 45, 1 in 12 at 70; 84% of 15-year-olds reach 50, half pass 66,
+  1% pass 88. It is drawn once per biological day. Before, everyone died on the tick their gene
+  allowed (70 x gene, spread 10%), so a cohort born together died together, which with the slot
+  cap below made bands age out in waves. Hunger, cold, disease, predators and childbirth stay their
+  own causes, modelled as they happen.
+- **Slots, and no population cap in continuous worlds.** JAX compiles a world for fixed array
+  sizes, so a compiled world has `n_agents` slots and a child needs a free one. A continuous world
+  grows instead: when fewer than an eighth of its slots (at least 2) are free, the chunk ends, every
+  structure sized by the slots (world state, brains, optimiser moments, the learner's memory,
+  recurrent state, buffered experience) is copied into one twice the size, and the step is compiled
+  again (`lifesim/grow.py`; `--no-grow` keeps the size, `--grow-headroom` sets the threshold). Brains
+  do not depend on the slot count, so the same trained agents live on. New slots are unborn until a
+  child is born into one; the trace pads earlier ticks; each chunk's summary gives its `slots`.
+  The only limit is memory: some state grows with the square of the slots (memory of and
+  attachment to each other, kinship).
+  Training worlds keep a fixed cap, set high (`society30`: 64) and raised with `--agents`. A
+  conception the cap stopped is counted (`no_room` in the step info,
+  `conceptions_blocked_by_slot_cap` in training logs and viability runs, `blocked_by_slot_cap` in
+  continuous worlds); above zero in training, the cap, not food, water or disease, limited births.
 - **Pregnancy** lasts 0.75 biological years (36 ticks); she needs 30% more
   food and water. Childbirth kills the mother 1% of the time (2% if weak).
 - **Birth:** the child appears at the mother's cell in a free slot (never used
   first, else a dead agent's). Traits come from both parents through
   `genotype.inherit` (heritable with random variation); appearance blends
   theirs; others' memories of the slot's last occupant are cleared.
-- **Infants** under 1 year cannot walk or forage. Until 2, a child within one
+- **Infants** under 1 year cannot walk or forage. Until 2.5 (`nurse_years`), a child within one
   cell of its mother is nursed: its food and water are topped up and she pays
-  60% of what it takes.
+  60% of what it takes. An infant within one cell of its carer is carried (`carry_infants`): it
+  goes where she goes, and her steps cost more by its share of her weight. An orphan is nursed and
+  carried by the most closely related woman within reach who is nursing a child of her own
+  (`wet_nursing`; allomaternal nursing is common among foragers, e.g. the Aka and Efe), so a
+  mother's death no longer dooms her infant if another nursing woman stays by it.
+- **Needs follow the body and what it does** (`needs_by_size`, `activity_needs`): hunger and
+  thirst scale with lean mass to the 3/4 power (Kleiber's law), from one's own frame (height and
+  build genes) and growth against an average adult (a toddler about 0.57, a 9-year-old about 0.68,
+  a tall heavy-framed adult more than 1), times the metabolism gene, times what one is doing this
+  tick (sleep 0.9, rest 1.0, walking 1.6, gathering or working 1.3, fighting 2.0, all divided by
+  1.13 so that a typical day costs what it did before). Without it, a two-year-old
+  burned food at an adult's rate, and at 40-day biological years children starved: a scripted band
+  fell from 14 to 4 in 30 years, with one birth to a mother born in the world.
 - **Genetic survival:** in survival mode each agent's reward adds its living
   relatives' survival signal (+0.01 alive, -1 dying) times relatedness (true
   kinship, seen or not: 0.5 for parent, child or sibling, 0.25 for
@@ -1424,48 +1957,52 @@ assumptions; confirm with `module spider Python` and `sinfo -p gpu`.
 (`conv_impl="auto"`); both share one parameter layout, so checkpoints move
 between CPU and GPU.
 
-## Known limits and next steps
+## Current state, limits and next steps
 
-- **Discount factor 0.997.** Threats unfold over 200 to 500 ticks; 0.99 sees
-  about 100 ahead. At 2M steps 0.997 beat 0.99 (mean life 1,421 vs 1,256,
-  full-year survival 31% vs 23%), but one seed each and noisy, so unconfirmed.
-- **Convolutional encoder is the default.** At 820k steps it led the flat
-  encoder (1,263 vs 1,163 ticks mean life) after trailing early; one seed.
-- **Genotype is not observed** by the agent, matching the design: agents do
-  not know their genes; genes act through the body and the reward.
-- **Speed.** About 5,000 steps/sec on one CPU core with 64 environments of
-  64 x 64.
-  Resets are about 50 times costlier than steps, so finished environments
-  draw from a pool of worlds generated once per update. Use a GPU and more
-  environments for real runs.
-- **Phase 1 gate:** agents reliably survive a full seasonal cycle and the
-  simulation is fast enough. See the evaluation output for current status.
+Agon: Eos now has the multi-agent society simulator, not just the original
+single-agent survival prototype. The ecology branch includes:
 
-Next (Phase 2): multiple agents per world with the full primitive set
-(release, strike, touch, cache access, tokens, pointing), relationship
-memory in observations, per-agent parameters, and the E0 scarcity replication.
+- Per-agent recurrent PPO, partial observations, heritable traits, reproduction,
+  relationship memory, communication, attachment, and learning during sleep.
+- A world model for imagined outcomes and selectable survival skills.
+- A physical material system with gathering, crafting, fire, cooking, and
+  researchable technology. These behaviors are possible through generic
+  actions; the reward does not directly pay agents for using them.
+- Continuous worlds with growing population capacity, plus playback, causal
+  traces, and analyses for society, culture, hierarchy, and archetypes.
+- A living ecology with seasonal food, weather, caves, animals, and camp
+  fouling. The system-level checks in VALIDATION.md currently pass 9/9.
 
-- **Observation bug fixed (this version).** Since the observation grew to 11
-  channels, the code removing an agent from its own "other agents" channel
-  subtracted from the small-prey channel instead. Agents counted themselves as
-  company and saw a phantom -1 prey on their own cell. Earlier results ran
-  with this bug, and old checkpoints do not match the new action and
-  observation sizes anyway.
-- **Replay includes speech.** `record_episode` logs messages
-  (`messages.npy`) as well as actions, so runs with speech replay exactly.
-- **One extra compile per run.** The second `update` call retraces once
-  (array types settle after the first step), so expect two compiles at the
-  start of every run. Harmless, but worth fixing at the root later.
-- **Founder pretraining (deferred idea).** Train one survival brain in the
-  Phase 2 world and start every individual from it plus noise, so social
-  training begins with competent agents. Not implemented.
-- **Imagination uses today's options.** The world model predicts beliefs, rewards and the agent's
-  own state, not which actions will be possible; imagined habits choose among the actions possible
-  now. Its own-state predictions are unbounded and are clamped to valid ranges in the playback.
-- **Training brains belong to slots.** In training (B parallel worlds sharing one network per
-  slot) a newborn takes over its slot's network, whoever trained it. Only the continuous world
-  with `--learn` has true individual brains and real inheritance; read training as the lineage's
-  deep past.
-- **The slot count binds before food does.** A competent band fills its slots and stays there
-  (viability.py); food at 0.4 does not limit it. Pressure that makes cooperation pay needs either
-  scarcer food or more slots than the land can feed.
+The mechanical checks establish that key behaviors are possible and the
+environment is internally consistent. They do not establish that a trained
+population will discover those behaviors or sustain a society.
+
+**Next research gate:** run fresh validation on the current code with the
+society30 preset: benchmark the GPU, run the four validation conditions at
+100M agent-steps each, then test each trained policy in a 400-day continuous
+world. Run experiment.py gate and review the report before starting the core
+experiment. The gate should show that children born in the world grow up and
+that the population outlasts its founders. See hprc/README.md or the Colab
+notebook for resumable commands.
+
+After the gate passes, run the core 18-condition experiment: reward sharing
+alpha {0, 0.5, 1} x food abundance {1.0, 0.4} x three seeds. Compare survival,
+population persistence, cooperation, violence, hierarchy and cultural
+differences from the recorded runs.
+
+**Current limits**
+
+- Training uses recurrent PPO with fixed policy networks per slot. Continuous
+  worlds can retain and grow individual brains; training births inherit the
+  network associated with their slot rather than a parent's learned policy.
+- The agents act once per tick and send one message per tick. Long-running,
+  interruptible tasks and richer negotiated plans remain open design work.
+- The world model predicts beliefs, rewards, and the agent's own state, but
+  does not yet predict which actions will be available in imagined states.
+- The accelerated society30 calendar is for tractable learning and generational
+  experiments. It is not a real-time demographic model; use the real-time
+  preset for questions that depend on calendar-scale ages and rates.
+- Survival, society formation, and emergent technology remain empirical
+  questions. Passing unit tests or hand-scripted viability checks alone does
+  not answer them.
+

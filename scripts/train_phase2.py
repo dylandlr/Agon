@@ -79,6 +79,25 @@ def main():
                          "survival skills (seek water, seek food, flee)")
     ap.add_argument("--saint-rate", type=float, default=1e-6,
                     help="chance each founder or newborn is selfless toward anyone (rare altruism)")
+    ap.add_argument("--consolidation-ticks", type=float, default=8.0,
+                    help="deep sleep (per 30 minutes of game time) that must follow a step before it is "
+                         "learned in full; less sleep, a share of it")
+    ap.add_argument("--retention-coef", type=float, default=0.1,
+                    help="how strongly each sleep pulls the policy back toward old stored moments")
+    ap.add_argument("--channel", choices=["full", "none", "shuffled"], default="full",
+                    help="message channel control: none = no one is heard; shuffled = messages heard are "
+                         "other speakers', shuffled each tick (Lowe et al. 2019 controls)")
+    ap.add_argument("--msg-net", choices=["branch", "stopgrad", "separate"], default="branch",
+                    help="where speech and writing branch off the brain (policy.ActorCritic.msg_net)")
+    ap.add_argument("--msg-frozen", action="store_true",
+                    help="speech and writing never learn (their initial weights): the floor for speaker-side measures")
+    ap.add_argument("--memory-report", action="store_true",
+                    help="compile one update, print XLA's memory estimate for it, and exit")
+    ap.add_argument("--agent-chunk", type=int, default=0,
+                    help="compute the loss this many agents at a time (0: all at once); lowers memory, "
+                         "same gradients, ~30%% slower. Try 8 on a T4 or a CPU")
+    ap.add_argument("--lr", type=float, default=3e-4,
+                    help="base learning rate (each agent's is this x its lr_scale gene unless --no-agent-lr)")
     ap.add_argument("--ent-coef", type=float, default=0.005,
                     help="exploration: how strongly learning keeps choices varied (entropy bonus)")
     ap.add_argument("--world", choices=["classic", "living"], default="classic",
@@ -96,11 +115,32 @@ def main():
     ap.add_argument("--clothing", action=argparse.BooleanOptionalAction, default=True,
                     help="with --world living: founders start with hides covering some of the body (different "
                          "for each), babies are born bare; it keeps heat in (EnvConfig.clothing)")
+    ap.add_argument("--ecology", action=argparse.BooleanOptionalAction, default=True,
+                    help="with --world living: greens, fruit, nuts and roots that grow, spread and run out, and "
+                         "gathering that takes time (EnvConfig.ecology)")
+    ap.add_argument("--fouling", action=argparse.BooleanOptionalAction, default=True,
+                    help="with --world living: waste builds where people stay; drinking beside it risks "
+                         "infection (EnvConfig.fouling)")
+    ap.add_argument("--excretion", action=argparse.BooleanOptionalAction, default=False,
+                    help="with --world living: an urge to relieve oneself, RELIEVE, soiling (EnvConfig.excretion). "
+                         "Off by default: an optional complexity. The network's shape is the same either way, so a "
+                         "run trained without it can be continued with it")
+    ap.add_argument("--language", choices=["emergent", "grounded"], default="emergent",
+                    help="emergent: symbols mean nothing given; grounded: a defined lexicon (env.LEXICON) whose "
+                         "phrases about water and food with a direction are understood by listeners")
+    ap.add_argument("--writing", action="store_true",
+                    help="WRITE scratches one's message into the ground, read by anyone beside it")
     ap.add_argument("--archetypes", default="",
                     help="temperament profiles for the first founders, e.g. tyrant:1,saint:1 (lifesim/archetypes.py)")
     ap.add_argument("--world-model", action=argparse.BooleanOptionalAction, default=False,
                     help="a learned model of its own world that imagines a few ticks ahead before choosing "
                          "(ideas); on in the presets, --no-world-model for the ablation")
+    ap.add_argument("--share-trunk", action="store_true",
+                    help="one trunk (encoder, memory, world model) for the population, tied across the agents; "
+                         "policy, value, messages and trust stay each agent's own (MAConfig.share_trunk)")
+    ap.add_argument("--entropy-target", type=float, default=0.0,
+                    help="an entropy floor in nats (0 = off): the entropy bonus grows under it, shrinks above "
+                         "(MAConfig.entropy_target); the validate run collapsed to 0.07 of 4.4 and stopped learning")
     ap.add_argument("--predators", type=float, default=1.0,
                     help="x predator numbers and respawning (0 = predators that never attack)")
     ap.add_argument("--disease", type=float, default=1.0, help="x every chance of infection")
@@ -134,16 +174,21 @@ def main():
                         archetypes=archetypes.parse(args.archetypes))
     if args.world == "living":
         env_cfg = living_world(env_cfg, underground=args.underground, downed=args.downed, grazing=args.grazing,
-                               clothing=args.clothing)
+                               clothing=args.clothing, ecology=args.ecology, fouling=args.fouling,
+                               excretion=args.excretion)
     elif args.underground:
         raise SystemExit("--underground needs --world living (the cave mouths are a biome)")
+    import dataclasses as _dc
+    env_cfg = _dc.replace(env_cfg, language_mode=args.language, writing=args.writing, channel=args.channel)
     env_cfg = with_time_scale(env_cfg, args.days_per_year, args.days_per_bio_year)
     if args.reproduction:
         env_cfg = with_reproduction(env_cfg, n_founders=args.founders or None)
     env_cfg = with_threats(env_cfg, predators=args.predators, disease=args.disease, hazards=args.hazards)
     env_cfg = with_tick_minutes(env_cfg, args.tick_minutes)
     env_cfg = dataclasses.replace(env_cfg, max_steps=int(round(args.episode_years * env_cfg.year_length)))
-    cfg = MAConfig(num_worlds=args.worlds, num_steps=args.steps, total_ticks=args.ticks,
+    cfg = MAConfig(num_worlds=args.worlds, num_steps=args.steps, total_ticks=args.ticks, lr=args.lr, agent_chunk=args.agent_chunk,
+                   msg_net=args.msg_net, msg_frozen=args.msg_frozen,
+                   consolidation_ticks=args.consolidation_ticks, retention_coef=args.retention_coef,
                    encoder=args.encoder, gamma=args.gamma, trait_gamma=args.trait_gamma,
                    per_agent_lr=not args.no_agent_lr, seed=args.seed,
                    num_minibatches=min(4, args.worlds), imitation_coef=args.imitation,
@@ -151,6 +196,7 @@ def main():
                    alpha=args.alpha, msg_ent_coef=args.msg_ent_coef, ent_coef=args.ent_coef,
                    speech_attention=args.speech_attention, teach_bonus=args.teach_bonus,
                    sleep_learning=not args.no_sleep_learning, world_model=args.world_model,
+                   share_trunk=args.share_trunk, entropy_target=args.entropy_target,
                    day_ticks=env_cfg.day_length, tick_scale=env_cfg.tick_minutes / 30.0,
                    memory_span=env_cfg.day_length)
     out = Path(args.out)
@@ -158,6 +204,13 @@ def main():
 
     net, init, update = make_train(env_cfg, cfg)
     runner, pop = init(jax.random.PRNGKey(cfg.seed))
+    if args.memory_report:
+        ma = update.lower(runner, pop).compile().memory_analysis()
+        gb = lambda x: round(x / 2 ** 30, 2)
+        print(json.dumps({"temp_GiB": gb(ma.temp_size_in_bytes), "arguments_GiB": gb(ma.argument_size_in_bytes),
+                          "output_GiB": gb(ma.output_size_in_bytes), "agents": args.agents, "worlds": args.worlds,
+                          "agent_chunk": args.agent_chunk}))
+        return
     history, acc, start = [], None, 0
     ck_path = out / "checkpoint.pkl"
     if args.resume and ck_path.exists():
@@ -187,6 +240,9 @@ def main():
                 "deaths": {E.CAUSE_NAMES[c]: int(k) for c, k in enumerate(acc["cause"]) if c and k},
                 "deaths_by_season": dict(zip(["spring", "summer", "autumn", "winter"],
                                              (int(k) for k in acc["deaths_by_season"]))),
+                # where and who the cold killed: caught in the open, or frozen even in shelter; adults or children
+                "cold_deaths": dict(zip(["open_adult", "open_child", "sheltered_adult", "sheltered_child"],
+                                        (int(k) for k in acc["cold_deaths_split"]))),
                 # Global reward: all agents' base rewards (no alpha mixing, no moral sentiments) per world per day
                 # Mode-independent survival score: 0.01 per agent-tick alive, -1 per death, per world-day.
                 # Comparable across reward modes and alpha, unlike global reward, whose terms depend on the mode.
@@ -214,6 +270,7 @@ def main():
                 "deterred_per_1000": per_k(acc["deterred"]),
                 "in_company_share": round(float(acc["company"]) / alive, 3),
                 "births": int(acc["births"]), "conceptions": int(acc["conceptions"]),
+                "conceptions_blocked_by_slot_cap": int(acc.get("no_room", 0)),
                 "matings_per_1000": per_k(acc["matings"]),
                 "asleep_share_night": round(float(acc["asleep_night"]) / max(float(acc["alive_night"]), 1.0), 3),
                 "asleep_share_day": round(float(acc["asleep_day"]) / max(alive - float(acc["alive_night"]), 1.0), 3),
@@ -238,6 +295,10 @@ def main():
                 "sleep_memory": {"waiting_share": round(float(m["waiting_share"]), 3),
                                  "retention_kl": round(float(m["retention_kl"]), 5),
                                  "long_term_filled": round(float(m["long_term_filled"]), 3)},
+                # Per output (action, aim, said, written): share of updates clipped, and the KL moved
+                "per_output": {name: {"clip_fraction": round(float(m["clip_fraction"][j]), 4),
+                                      "approx_kl": round(float(m["approx_kl"][j]), 5)}
+                               for j, name in enumerate(["action", "how", "said", "written"])},
                 **({"world_model": {"own_state_error": round(float(m["wm_own"]), 5),
                                     "belief_error": round(float(m["wm_latent"]), 5),
                                     "reward_error": round(float(m["wm_reward"]), 5),

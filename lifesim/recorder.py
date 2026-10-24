@@ -27,6 +27,28 @@ from .config import EnvConfig
 PolicyFn = Callable
 
 
+def technique_name(part, limb, mode, thrown=False, shoved=False, grabbed=False, victim_down=False):
+    """A name for what a strike did, given after the fact (agents only choose limb, mode and part:
+    env.LIMBS, env.MODES). Names follow the physics, so new sequences show up as new names."""
+    L, M = E.LIMBS[limb], E.MODES[mode]
+    if M == "strike":
+        if victim_down:
+            return {"hand": "ground strike", "foot": "stomp", "head": "headbutt on the downed", "body": "body drop"}[L]
+        base = {"hand": "punch", "foot": "kick", "head": "headbutt", "body": "shoulder charge"}[L]
+        return f"{base} to the {part}" if part in ("head", "neck", "legs") else base
+    if M == "push":
+        if thrown:
+            return "trip throw" if part == "legs" else "throw"
+        base = {"hand": "shove", "foot": "push kick", "head": "butt", "body": "body check"}[L]
+        return base + (" (moved them)" if shoved else "")
+    if L == "head":
+        return "useless hold (a head cannot grip)"
+    name = {("hand", "neck"): "chokehold", ("hand", "head"): "head grab", ("hand", "arms"): "arm grab",
+            ("hand", "legs"): "leg grab", ("foot", "legs"): "leg hook"}.get((L, part),
+            {"hand": "grab", "foot": "foot hold", "body": "clinch"}[L])
+    return name + ("" if grabbed else " (broken)")
+
+
 @dataclass
 class Recording:
     cfg: EnvConfig
@@ -77,7 +99,8 @@ EVENT_PHASE = {
     "fed_fire": "social", "meat_to_heat": "social", "infected": "bodies", "recovered": "bodies",
     "burned": "bodies", "death": "deaths", "took_food": "gathering", "born": "deaths",
     "shock": "weather", "shock_end": "weather", "made": "fire", "preyed": "animals",
-    "hurt_by_prey": "strikes", "stung": "gathering",
+    "hurt_by_prey": "strikes", "stung": "gathering", "tamed": "animals",
+    "body_covered": "deaths", "body_burned": "deaths", "bones": "deaths",
 }
 
 
@@ -144,7 +167,18 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
                 best = e
         return best
 
-    def emit(i, kind, parents=(), **extra):
+    O = {k: np.asarray(v) for k, v in info.odds.items()} if hasattr(info, "odds") and isinstance(info.odds, dict) else {}
+
+    def roll(i, p_key, draw_key):
+        """The chance the world rolled against agent i and the draw, as a record field and plain words."""
+        if p_key not in O:
+            return {}, None
+        p, u = float(O[p_key][i]), float(O[draw_key][i])
+        return {"chance": round(p, 4), "draw": round(u, 4)}, f"P = {p:.1%}"
+
+    def emit(i, kind, parents=(), own=None, **extra):
+        """own: a cause with no parent event (the body's own state, or chance), written to `because`
+        when no linked event is found, so a reader can tell "no trigger" from "not traced"."""
         ev = {"id": f"{t}:{i}:{kind}", "t": t, "agent": int(i), "type": kind, "life": life.setdefault(int(i), 1),
               "pos": [int(info.pos[i, 0]), int(info.pos[i, 1])], **extra}
         if hasattr(info, "below") and bool(np.asarray(info.below)[i]):
@@ -152,6 +186,8 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
         ps = [(p, why) for p, why in parents if p]
         ev["parents"] = [p for p, _ in ps]
         ev["because"] = [why for _, why in ps]
+        if not ps and own:
+            ev["because"] = [own]
         events.append(ev)
         mem[i] = ev["id"]
         A.setdefault(int(i), {})[kind] = (ev["id"], t)
@@ -234,12 +270,28 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
             if what.get("what") == "honey" and pv is not None and cfg is not None and bool(pv.hive[p_i[0], p_i[1]]):
                 calm = float(np.asarray(E.fire_heat(pv.fire, cfg))[p_i[0], p_i[1]]) > 0
                 what.update(from_hive=True, smoke=calm)
+            if hasattr(info, "gathered_kind") and int(np.asarray(info.gathered_kind)[i]) >= 0:
+                kk = int(np.asarray(info.gathered_kind)[i])
+                what["plant"] = ("greens", "fruit", "nuts", "roots", "dropped food")[kk]
             emit(i, "gather", amount=round(float(info.gathered[i]), 4), **tool(i), **what)
         elif code == E.OUT_STRIKE_AGENT:
             victims = np.flatnonzero(hits[i]).tolist()
             answers = [(pid(A.get(i, {}).get(("struck_by", v))), f"striking back at #{v}") for v in victims
                        if A.get(i, {}).get(("struck_by", v)) and t - A[i][("struck_by", v)][1] <= retaliation]
-            ev = emit(i, "strike_agent", answers, victims=victims, **tool(i))
+            aimed = {}
+            if hasattr(info, "aim") and int(np.asarray(info.aim)[i]) >= 0:     # where it aimed; whether it landed
+                aimed = {"part": E.PARTS[int(np.asarray(info.aim)[i])], "landed": bool(np.asarray(info.blow_landed)[i])}
+            if hasattr(info, "how") and int(np.asarray(info.how)[i]) >= 0:     # how: limb, mode, and its name
+                _, lb, md = E.how_parts(int(np.asarray(info.how)[i]))
+                vs = [v for v in victims if 0 <= v < len(np.asarray(info.thrown))]
+                aimed.update(limb=E.LIMBS[lb], mode=E.MODES[md], technique=technique_name(
+                    E.PARTS[E.how_parts(int(np.asarray(info.how)[i]))[0]], lb, md,
+                    thrown=any(bool(np.asarray(info.thrown)[v]) for v in vs),
+                    shoved=any(bool(np.asarray(info.shoved)[v]) for v in vs),
+                    grabbed=any(bool(np.asarray(info.grabbed)[v]) for v in vs),
+                    victim_down=any(bool(np.asarray(prev.off_balance)[v] > 0) or bool(np.asarray(info.downed)[v]) for v in vs)
+                    if hasattr(prev, "off_balance") else False))
+            ev = emit(i, "strike_agent", answers, own="no blow to answer in the record", victims=victims, **tool(i), **aimed)
             same_tick[(i, "strike_agent")] = ev["id"]
         elif code == E.OUT_RELEASE:
             ev = emit(i, "release", near=np.flatnonzero(gifts[i]).tolist())
@@ -256,7 +308,9 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
                       [(pid(last(i, "starving")), "relief from hunger")] if A.get(i, {}).get("_starving") else [], **ate)
             same_tick[(i, "eat")] = ev["id"]
         elif code in (E.OUT_GATHER_LOST, E.OUT_STRIKE_ANIMAL, E.OUT_MOVE_FAILED):
-            ev = emit(i, E.OUTCOME_NAMES[code], **(tool(i) if code == E.OUT_STRIKE_ANIMAL else {}))
+            crowd = code == E.OUT_MOVE_FAILED and hasattr(info, "crowded") and bool(np.asarray(info.crowded)[i])
+            ev = emit(i, E.OUTCOME_NAMES[code], **(tool(i) if code == E.OUT_STRIKE_ANIMAL else {}),
+                      **({"crowded": True} if crowd else {}))
             same_tick[(i, E.OUTCOME_NAMES[code])] = ev["id"]
         for j in np.flatnonzero(gifts[:, i]):                   # took food that j had left
             emit(i, "took_food", [(pid(A.get(int(j), {}).get("release_food")), f"food #{int(j)} left")], giver=int(j))
@@ -267,8 +321,19 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
                      **({"species": _fa.NAMES[sp]} if sp >= 0 else {}), **tool(i))
         if bool(info.attacked_by_predator[i]):
             sp = int(np.asarray(info.attacker_species)[i]) if hasattr(info, "attacker_species") else -1
-            emit(i, "predator_attack", health_loss=round(float(info.health_loss[i]), 4),
-                 **({"species": _fa.NAMES[sp]} if sp >= 0 else {}),
+            fx_, own = {}, None
+            if "pred_bit" in O:
+                js = [j for j in np.flatnonzero(O["pred_bit"]) if int(O["pred_target"][j]) == i]
+                if js:
+                    j = js[0]
+                    fx_ = {"chance": round(float(O["pred_p"][j]), 4), "draw": round(float(O["pred_draw"][j]), 4)}
+                    w = [f"its kind {float(O['pred_base'][j]):.0%}"]
+                    if abs(float(O["pred_day"][j]) - 1) > 1e-6: w.append(f"time of day x{float(O['pred_day'][j]):g}")
+                    w.append(f"temperament x{float(O['pred_temper'][j]):.2f}")
+                    if abs(float(O["pred_wild"][j]) - 1) > 1e-6: w.append(f"wildness x{float(O['pred_wild'][j]):.2f}")
+                    own = f"P(bite) = {float(O['pred_p'][j]):.1%} ({', '.join(w)})"
+            emit(i, "predator_attack", own=own, health_loss=round(float(info.health_loss[i]), 4),
+                 **({"species": _fa.NAMES[sp]} if sp >= 0 else {}), **fx_,
                  **({"venom": True} if hasattr(info, "venomed") and bool(np.asarray(info.venomed)[i]) else {}))
         if hasattr(info, "gored") and float(np.asarray(info.gored)[i]) > 0:
             sp = int(np.asarray(info.gored_by)[i])
@@ -288,7 +353,20 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
     for i in range(n):
         p_i = [int(info.pos[i, 0]), int(info.pos[i, 1])]
         if bool(info.fell[i]):
-            emit(i, "fall")
+            if st is not None:
+                r_, c_ = int(info.pos[i, 0]), int(info.pos[i, 1])
+                steep = float(np.asarray(st.cliff)[r_, c_]) > 0
+                own = "a steep edge" if steep else ("rough rock" if int(np.asarray(st.terrain)[r_, c_]) == E.ROCK else "the ground")
+            else:
+                own = "the ground"
+            fx_, words = roll(i, "fall_p", "fall_draw")
+            if "f_hazard" in O:
+                w = [f"ground hazard {float(O['f_hazard'][i]):.2f}"]
+                if float(O["f_injury"][i]) > 1.001: w.append(f"injury x{float(O['f_injury'][i]):.2f}")
+                if float(O["f_night"][i]) > 1: w.append("night x2")
+                if float(O["f_sleepy"][i]) > 1.001: w.append(f"sleepiness x{float(O['f_sleepy'][i]):.2f}")
+                words = f"{words} ({', '.join(w)})"
+            emit(i, "fall", own=own + (f"; {words}" if words else ""), **fx_)
         if bool(info.newly_infected[i]):
             ps = []
             if same_tick.get((i, "drink")):
@@ -300,7 +378,27 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
                     if j != i and pv.alive[j] and pv.infection[j] > 0 and _cheb(pv.pos[j], pv.pos[i]) <= 1:
                         ps.append((pid(A.get(j, {}).get("infected")), f"close contact with sick #{j}"))
             mosq = float(np.asarray(info.mosquitoes)[i]) if hasattr(info, "mosquitoes") else 0.0
-            emit(i, "infected", ps, **({"mosquitoes": round(mosq, 2)} if mosq > 0.2 else {}))
+            # the other sources the world has (env.py, disease): a rotting body beside it, mosquito bites.
+            # With none of them, the source is not traced; the recorder says so rather than guess.
+            if prev is not None and cfg is not None and hasattr(prev, "rot"):
+                haz = np.asarray(E.corpse_hazard(prev, cfg))
+                beside = [j for j in range(n) if j != i and haz[j] > 0 and _cheb(pv.pos[j], pv.pos[i]) <= 1]
+                for j in beside:
+                    ps.append((mem.get(("death_of_life", j), (None,))[0], f"the rotting body of #{j} beside it"))
+            own = "mosquito bites" if mosq > 0 else "source not traced"
+            extra = {"mosquitoes": round(mosq, 2)} if mosq > 0 else {}
+            if "infect_p" in O:          # the ledger: the chance from each source this tick, and the draw
+                parts = {k[7:]: round(float(O[k][i]), 4) for k in ("infect_water", "infect_meat", "infect_contact", "infect_bite", "infect_rot")
+                         if float(O[k][i]) > 0}
+                extra.update(chance=round(float(O["infect_p"][i]), 4), draw=round(float(O["infect_draw"][i]), 4), sources=parts)
+                why = []
+                if float(O["f_drought"][i]) > 1: why.append("drought x2 on the water")
+                if float(O["f_marsh"][i]) > 1: why.append(f"marsh water x{float(O['f_marsh'][i]):g}")
+                if float(O["f_foul"][i]) > 1.001: why.append(f"fouled water x{float(O['f_foul'][i]):.2f}")
+                why.append(f"immunity {float(O['f_immunity'][i]):.2f}, resistance {float(O['f_resistance'][i]):.2f}")
+                own = (f"P(sickness) = {float(O['infect_p'][i]):.1%} from " + ", ".join(f"{k} {v:.1%}" for k, v in parts.items())
+                       + " (" + "; ".join(why) + ")") if parts else own
+            emit(i, "infected", ps, own=own, **extra)
         if bool(info.recovered[i]):
             emit(i, "recovered", [(pid(last(i, "infected")), "got over the illness")])
         if int(info.ignited[i]) > 0:
@@ -327,13 +425,19 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
         if bool(info.woken[i]):
             emit(i, "woken", [(pid(last(i, "struck_by_agent", "predator_attack", "burned", within=0)), "being disturbed")])
         if bool(info.mated[i]):
-            ev = emit(i, "mated")
+            same = bool(np.asarray(info.same_sex_mated)[i]) if hasattr(info, "same_sex_mated") else False
+            ev = emit(i, "mated", **({"same_sex": True} if same else {}))
             same_tick[(i, "mated")] = ev["id"]
+        if hasattr(info, "tamed") and int(np.asarray(info.tamed)[i]) >= 0:
+            # an animal came to be at ease with it (cfg.taming): fed by it, and done no harm
+            emit(i, "tamed", [(pid(A.get(i, {}).get("release_food")), "food it left")],
+                 animal=_fa.NAMES[int(np.asarray(info.tamed)[i])])
     for i in range(n):
         if bool(info.conceived[i]):
             dad = int(st.father[i]) if st is not None else -1
+            fx_, _ = roll(i, "conceive_p", "conceive_draw")
             emit(i, "conceived", [(same_tick.get((i, "mated")), "mating"),
-                                  (same_tick.get((dad, "mated")), f"#{dad}, the father")], father=dad)
+                                  (same_tick.get((dad, "mated")), f"#{dad}, the father")], father=dad, **fx_)
         if bool(info.gave_birth[i]):
             emit(i, "gave_birth", [(pid(last(i, "conceived")), "the pregnancy")],
                  child=[int(c) for c in np.flatnonzero(info.born) if st is None or int(st.mother[c]) == i])
@@ -371,7 +475,10 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
                         if d and d[1] >= A[i]["born"][1]:
                             ps.append((d[0], "its mother's death (no milk)"))
                     extra = {"air": round(float(info.ambient_temp[i]), 1)} if why else {}
-                    emit(i, name, ps, **extra)
+                    own = {"starving": f"satiety {float(st.satiety[i]):.2f}", "parched": f"hydration {float(st.hydration[i]):.2f}",
+                           "freezing": f"body temperature {float(st.body_temp[i]):+.2f}",
+                           "overheating": f"body temperature {float(st.body_temp[i]):+.2f}"}[name]
+                    emit(i, name, ps, own=own, **extra)
                     a[flag] = True
                 elif not bool(now):
                     a[flag] = False                         # out of danger: a new crossing is a new event
@@ -401,7 +508,10 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
             ps = [(pid(last(i, *kinds)), cause)] if kinds else []
             if not kinds or not ps[0][0]:
                 ps = [(mem.get(i), "the last thing that happened to it")]
-            ev = emit(i, "death", ps, cause=cause)
+            prev_down = mem.get("downed")
+            finished = prev_down is not None and i < len(prev_down) and bool(prev_down[i]) \
+                and cause in ("violence", "predation")              # killed where it lay (RimWorld: finished off)
+            ev = emit(i, "death", ps, cause=cause, **({"finished_off": True} if finished else {}))
             mem[("death_of_life", i)] = (ev["id"], t)
     # predators taking animals (the food chain beyond the agents)
     if hasattr(info, "small_preyed_by"):
@@ -422,22 +532,77 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
                 events.append({"id": f"{t}:world:made:{r}:{c}:{k}", "t": t, "agent": -1, "type": "made",
                                "product": mn.NAMES[int(k)], "pos": p, "parents": [parent] if parent else [],
                                "because": ["the fire's heat"] if parent else []})
+    # the dead: a body covered over (with who heaped earth or stone on it this tick), burned, or gone to bones
+    if st is not None and pv is not None and hasattr(st, "rot") and cfg is not None:
+        cov_now = np.asarray(E.body_cover(st, cfg)) >= cfg.bury_cover
+        cov_was = np.asarray(E.body_cover(pv, cfg)) >= cfg.bury_cover
+        acts_np = np.asarray(actions)
+        for j in np.flatnonzero(np.asarray(st.existed) & ~np.asarray(st.alive) & np.asarray(pv.existed) & ~np.asarray(pv.alive)):
+            p = [int(st.pos[j, 0]), int(st.pos[j, 1])]
+            death = mem.get(("death_of_life", int(j)))
+            parents = [death[0]] if death else []
+            if cov_now[j] and not cov_was[j] and float(st.rot[j]) < 1.0:
+                by = []
+                for i in range(n):
+                    a = int(acts_np[i]); tgt = None
+                    if E.PLACE_N <= a < E.PLACE_N + 8:
+                        d = np.asarray(E.MOVE_DELTAS)[a - E.PLACE_N + 1]; tgt = [int(st.pos[i, 0]) + int(d[0]), int(st.pos[i, 1]) + int(d[1])]
+                    elif a == E.RELEASE:
+                        tgt = [int(pv.pos[i, 0]), int(pv.pos[i, 1])]
+                    if tgt == p and bool(pv.alive[i]):
+                        by.append(i)
+                events.append({"id": f"{t}:world:body_covered:{j}", "t": t, "agent": -1, "type": "body_covered",
+                               "body": int(j), "by": by, "pos": p, "parents": parents, "because": ["the death"] if parents else []})
+            if float(pv.rot[j]) < 1.0 <= float(st.rot[j]):
+                burned = float(np.asarray(st.fire)[p[0], p[1]]) > 0 and not bool(st.below[j])
+                events.append({"id": f"{t}:world:{'body_burned' if burned else 'bones'}:{j}", "t": t, "agent": -1,
+                               "type": "body_burned" if burned else "bones", "body": int(j), "pos": p,
+                               "parents": parents, "because": ["the death"] if parents else []})
     # going underground and coming back up (cfg.underground)
     if hasattr(info, "delved"):
         for i in np.flatnonzero(np.asarray(info.delved)):
             down = bool(np.asarray(info.below)[i])
             emit(i, "went_underground" if down else "came_up",
                  **({"torch": bool(st.torch[i] > 0)} if st is not None else {}))
+    if hasattr(info, "bound"):                              # a point bound to a stick with fiber: a spear
+        for i in np.flatnonzero(np.asarray(info.bound)):
+            emit(i, "made", [(pid(last(i, "gather")), "what it had gathered")], product="spear", by_hand=True)
+    if hasattr(info, "bedded"):                             # lay down to sleep on leaves or a hide
+        now_bed = np.asarray(info.bedded)
+        was_bed = mem.get("bedded", np.zeros_like(now_bed))
+        if len(was_bed) < len(now_bed):
+            was_bed = np.concatenate([was_bed, np.zeros(len(now_bed) - len(was_bed), bool)])
+        for i in np.flatnonzero(now_bed & ~was_bed):
+            emit(i, "bedded")
+        mem["bedded"] = now_bed
     if hasattr(info, "downed"):                             # fell and cannot stand; got back up
         now_down = np.asarray(info.downed)
         was_down = mem.get("downed", np.zeros_like(now_down))
+        if len(was_down) < len(now_down):                 # the world grew its slots (lifesim/grow.py)
+            was_down = np.concatenate([was_down, np.zeros(len(now_down) - len(was_down), bool)])
         for i in np.flatnonzero(now_down & ~was_down):
+            shock = st is not None and float(st.health[i]) >= cfg.downed_health and float(st.injury[i]) < cfg.downed_injury
+            if st is not None and float(st.health[i]) < cfg.downed_health:
+                own = f"weakness: health {float(st.health[i]):.2f}, under the standing line of {cfg.downed_health:g}"
+            elif st is not None and float(st.injury[i]) >= cfg.downed_injury:
+                own = "bleeding hard"
+            elif shock:
+                own = "pain shock"
+            else:
+                own = "knocked out"
             emit(i, "downed", [(pid(last(i, "struck_by_agent", "predator_attack", "hurt_by_prey", "fall", "stung",
-                                        within=max(2, int(round(2 * per))))), "the wound")])
+                                        within=max(2, int(round(2 * per))))), "the wound")], own=own,
+                 **({"pain_shock": True} if shock else {}))
         for i in np.flatnonzero(was_down & ~now_down):
             if st is not None and bool(st.alive[i]):        # up again (not dead)
                 emit(i, "stood_up")
         mem["downed"] = now_down
+    if hasattr(info, "soiled"):                             # relieved itself, by choice or not
+        for i in np.flatnonzero(np.asarray(info.relieved) | np.asarray(info.soiled)):
+            r_, c_ = int(info.pos[i, 0]), int(info.pos[i, 1])
+            near_water = st is not None and bool(np.asarray(E.adjacent_to_water(st.terrain, np.array([[r_, c_]]), cfg))[0]) \
+                if cfg is not None else False
+            emit(i, "soiled" if bool(np.asarray(info.soiled)[i]) else "relieved", beside_water=near_water)
     for k in ("fires", "cooking"):                          # only recent ones can still be causes
         if len(mem.get(k, [])) > 200:
             mem[k] = mem[k][-200:]

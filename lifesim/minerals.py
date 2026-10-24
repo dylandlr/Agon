@@ -1,4 +1,4 @@
-"""Minerals, ores and metals: physical materials with properties, never recipes.
+"""Minerals, ores, metals and organic byproducts: physical materials with properties, never recipes.
 
 Each is a material like wood or stone: it lies in deposits where geology puts it, can be picked
 up, carried, held, dropped, placed on a neighbouring cell and struck with or against. What it does
@@ -53,6 +53,13 @@ MINERALS = [
     ("lead", (0.55, 0.56, 0.60), 0.6, 0.2, 0.1, 0.0, 0.0, None, 0.0, {}, (0, 0)),
     ("gold", (1.00, 0.82, 0.20), 1.0, 0.2, 0.1, 0.0, 0.0, None, 0.0, {}, (1, 2)),
     ("basalt", (0.20, 0.20, 0.23), 0.2, 0.9, 0.2, 0.1, 0.0, None, 0.0, {}, (2, 5)),
+    # Organic byproducts: never deposits; left by plants and animals (see ORGANIC below), or made
+    ("leaves", (0.66, 0.46, 0.20), 0.05, 0.0, 0.0, 0.0, 6.0, None, 0.0, {}, (0, 0)),
+    ("fiber", (0.74, 0.70, 0.46), 0.05, 0.0, 0.0, 0.0, 4.0, None, 0.0, {}, (0, 0)),
+    ("feather", (0.88, 0.86, 0.80), 0.3, 0.0, 0.0, 0.0, 1.0, None, 0.0, {}, (0, 0)),
+    ("hide", (0.52, 0.36, 0.22), 0.15, 0.05, 0.0, 0.0, 0.0, None, 0.0, {}, (0, 0)),
+    ("bone", (0.93, 0.90, 0.81), 0.2, 0.6, 0.5, 0.0, 0.0, None, 0.0, {}, (0, 0)),
+    ("spear", (0.60, 0.46, 0.30), 0.3, 0.8, 0.9, 0.0, 0.0, None, 0.0, {}, (0, 0)),
 ]
 NAMES = [m[0] for m in MINERALS]
 M = len(MINERALS)
@@ -69,6 +76,39 @@ FIRING = [(i, IDX[m[7][0]], m[7][1], m[7][2]) for i, m in enumerate(MINERALS) if
 ALLOY = (IDX["copper"], IDX["tin"], IDX["bronze"], 3.0)   # 3 copper + 1 tin -> 4 bronze, in coal-hot fire
 DEPOSIT_CHANCE = [[m[9].get(t, 0.0) for t in _T] for m in MINERALS]   # (M, N_TERRAIN)
 DEPOSIT_AMOUNT = [m[10] for m in MINERALS]
+
+# Organic byproducts of the living world, with what each physically is. Size is the length of one
+# unit in metres (how big it is drawn, and whether it takes room on the ground); insulation is how
+# much one carried unit keeps body heat in (a hide is a cloak; feathers and leaves stuffed in help a
+# little); bedding is how much a unit lying where one sleeps keeps the ground's cold off.
+#   leaves   litter under trees, heaviest in autumn; rots; dry tinder; bedding
+#   fiber    stems stripped from grasses and sedges while foraging; ties things
+#   feather  from fowl, killed or moulting; a little warmth carried
+#   hide     skin and fur of a killed mammal; carried it is a cloak; laid down it is bedding
+#   bone     from a carcass; hard, takes a point (an awl, a point to cut or scratch with)
+#   spear    made, not found: a point (anything that takes an edge) bound to a stick with fiber.
+#            Its length keeps a struck animal off: it fights back less often
+ORGANIC = {
+    "leaves": dict(size=0.08, insulation=0.02, bedding=0.12, tinder=1.0, rot=0.004,
+                   source="falls under trees, most in autumn; rots in weeks"),
+    "fiber": dict(size=0.4, insulation=0.0, bedding=0.03, tinder=0.6, rot=0.0005,
+                  source="stripped from grass and sedge stems while foraging greens"),
+    "feather": dict(size=0.15, insulation=0.04, bedding=0.05, tinder=0.2, rot=0.0,
+                    source="from fowl: a kill leaves several, and they moult where they live"),
+    "hide": dict(size=1.2, insulation=0.35, bedding=0.3, tinder=0.0, rot=0.0,
+                 source="the skin and fur of a killed mammal"),
+    "bone": dict(size=0.35, insulation=0.0, bedding=0.0, tinder=0.0, rot=0.0,
+                 source="left by a carcass"),
+    "spear": dict(size=1.8, insulation=0.0, bedding=0.0, tinder=0.0, rot=0.0,
+                  source="made: fiber placed where a stick and a point lie together binds them"),
+}
+_ROCK_SIZE = 0.08                                  # a loose mineral piece: a chip, a nugget, a lump
+SIZE = [ORGANIC[n]["size"] if n in ORGANIC else _ROCK_SIZE for n in NAMES]
+INSULATION = [ORGANIC.get(n, {}).get("insulation", 0.0) for n in NAMES]
+BEDDING = [ORGANIC.get(n, {}).get("bedding", 0.0) for n in NAMES]
+TINDER = [ORGANIC.get(n, {}).get("tinder", 0.0) for n in NAMES]
+ROT = [ORGANIC.get(n, {}).get("rot", 0.0) for n in NAMES]          # share lost per 30-minute tick, lying out
+IS_ORGANIC = [n in ORGANIC for n in NAMES]
 
 # Cave formations (cfg.underground): each cave system takes its kind from the land at its mouth,
 # and its walls hold minerals by kind (chance per passage cell; amounts as above, for minerals
@@ -116,8 +156,16 @@ def table():
             "galena": "heavy, shining lead ore; even a campfire smelts it to lead",
             "lead": "soft heavy metal; no use yet",
             "gold": "rare, soft, shining; no use but what people may come to give it",
-            "basalt": "dark hard lava stone; heavy and tough"}
+            "basalt": "dark hard lava stone; heavy and tough",
+            "leaves": "dry litter: tinder that catches a spark, a bed off the cold ground, a little warmth stuffed in",
+            "fiber": "grass and sedge stems: binds a point to a stick; tinder",
+            "feather": "light; carried, a little warmth",
+            "hide": "skin and fur: carried it is a cloak against the cold; laid down, a bed",
+            "bone": "hard, takes a point: cuts, scratches marks, strikes harder than a hand",
+            "spear": "a point bound to a stick: strikes with the point's edge, and a struck animal fights back less"}
     return [{"name": n, "color": "#%02x%02x%02x" % tuple(int(255 * x) for x in COLOR[i]), "lustre": LUSTER[i],
              "hardness": HARDNESS[i], "sharpness": SHARPNESS[i], "about": uses[n],
-             "found": ", ".join(f"{t} {100 * p:g}%" for t, p in MINERALS[i][9].items()) or "only made, never found"}
+             "found": (ORGANIC[n]["source"] if n in ORGANIC else
+                       ", ".join(f"{t} {100 * p:g}%" for t, p in MINERALS[i][9].items()) or "only made, never found"),
+             "size": SIZE[i], "organic": IS_ORGANIC[i]}
             for i, n in enumerate(NAMES)]

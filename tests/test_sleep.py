@@ -76,7 +76,7 @@ def test_exhaustion_forces_sleep_until_rested_enough():
 def test_asleep_one_sees_and_hears_only_what_is_adjacent():
     s = _world()
     s = s._replace(pos=s.pos.at[1].set(s.pos[0] + jnp.array([0, 3])))
-    s = s._replace(asleep=jnp.array([True, False]), last_msg=s.last_msg.at[1].set(jnp.array([3, 4, 0])[:E.MSG_LEN]))
+    s = s._replace(asleep=jnp.array([True, False]), last_msg=s.last_msg.at[1].set(jnp.zeros(E.MSG_LEN, jnp.int32).at[:2].set(jnp.array([3, 4]))))
     v, c, r = CFG.view_size, E.N_OBS_CHANNELS, CFG.view_radius
     win = np.asarray(E.observe(s, CFG)[0, :v * v * c]).reshape(v, v, c)
     assert win[r - 1:r + 2, r - 1:r + 2].sum() > 0

@@ -27,7 +27,7 @@ from . import env as E
 from . import genotype as gt
 from . import social
 from .config import EnvConfig
-from .policy import DECODE_INDEX, make_network
+from .policy import DECODE_INDEX, make_network, sample_outputs, split_logits
 
 
 @dataclass(frozen=True)
@@ -42,14 +42,30 @@ class MAConfig:
     gae_lambda: float = 0.95
     clip_eps: float = 0.2
     ent_coef: float = 0.005
-    # The message head has 3 x 16 symbols: up to 8.3 nats of entropy against ~3.7 for actions.
+    # An entropy floor (0 = off): the entropy bonus grows as a policy's entropy falls under the
+    # target and shrinks above it, coef = ent_coef * exp(gain * (target - entropy)), per agent and
+    # step. The validate run collapsed to 0.07 nats (of 4.4 possible) a sixth of the way in and
+    # learned nothing after; a floor keeps each brain trying things without making it dither.
+    entropy_target: float = 0.0
+    entropy_gain: float = 10.0
+    # Symbols said (4 x 32: up to 13.9 nats) and written: far more entropy than the 84 actions (~4.4).
     # At full weight the entropy bonus alone pushes agents to talk (randomly) more and more;
     # a smaller weight makes speech earn its place.
     msg_ent_coef: float = 0.0005
+    # Where speech and writing branch off the brain (policy.ActorCritic.msg_net): "branch",
+    # "stopgrad" or "separate"; msg_frozen keeps them at their initial weights (a control: what
+    # speaker-side measures show with no learning at all).
+    msg_net: str = "branch"
+    msg_frozen: bool = False
     vf_coef: float = 0.5
     max_grad_norm: float = 0.5
     update_epochs: int = 4
     num_minibatches: int = 4        # split over worlds
+    # Memory: 0 computes every agent's loss at once (fastest). k > 0 computes it k agents at a time
+    # and recomputes activations in the backward pass: the same gradients, with peak memory about
+    # k/N of the all-at-once pass, for ~30% more compute (a 64-agent society30 update asks ~19 GB
+    # all at once, beyond a T4 or a small CPU box).
+    agent_chunk: int = 0
     hidden: int = 128
     encoder: str = "conv"
     imitation_coef: float = 0.5     # 0 disables social learning
@@ -105,6 +121,13 @@ class MAConfig:
     # by a learned trust that starts at 0.
     world_model: bool = False
     wm_coef: float = 1.0
+    # One trunk for the population: the encoder, the GRU and the world model (perception and the
+    # physics of the world, the same for everyone) learn from everyone's experience; the policy,
+    # value, message heads and trust stay each agent's own. Done by tying: every agent keeps a
+    # copy, started identical, and the trunk's update is the mean over the agents who learned
+    # this round, so the copies never part. Checkpoints, inheritance and playback see the same
+    # shapes as before. The ablation against per-individual brains (claude/research/design-audit).
+    share_trunk: bool = False
     seed: int = 0
 
     @property
@@ -119,10 +142,10 @@ class Transition(NamedTuple):   # all fields (N, B, ...)
     action: jnp.ndarray
     value: jnp.ndarray
     reward: jnp.ndarray
-    log_prob: jnp.ndarray
+    log_prob: jnp.ndarray       # (N, B, 4) log-probs of action, aim, said, written (where each acted)
     obs: jnp.ndarray
     mask: jnp.ndarray
-    msg: jnp.ndarray            # (N, B, MSG_LEN) message emitted
+    msg: jnp.ndarray            # (N, B, OUT_SLOTS) [said..., written..., aim]
     spoke: jnp.ndarray          # (N, B) bool
     pos: jnp.ndarray            # (N, B, 2) where each agent stood (for who-sees-whom)
     health: jnp.ndarray         # (N, B) visible health (for the success bias)
@@ -220,6 +243,37 @@ def _scale_per_agent(updates, lrs):
     return jax.tree_util.tree_map(lambda u: u * lrs.reshape((-1,) + (1,) * (u.ndim - 1)), updates)
 
 
+# The modules of policy.ActorCritic that make up the trunk (MAConfig.share_trunk)
+TRUNK = ("conv1", "conv2", "conv3", "win_dense", "feat_dense", "in_dense", "mid_dense", "gru",
+         "dyn1", "dyn2", "rew_hidden", "rew_out", "dec_hidden", "dec_out")
+
+
+def _is_trunk(path):
+    return any(getattr(k, "key", None) in TRUNK for k in path)
+
+
+def _tie_trunk(tree, weights=None):
+    """Trunk leaves: the mean over the agent axis (weighted; by default over the agents whose
+    leaf is not all zero, i.e. who learned this round), broadcast back to every agent. Other
+    leaves unchanged."""
+    def one(path, x):
+        if not _is_trunk(path) or x.ndim < 1:
+            return x
+        w = weights
+        if w is None:
+            w = (jnp.abs(x).reshape(x.shape[0], -1).max(1) > 0).astype(x.dtype)
+        w = w.reshape((-1,) + (1,) * (x.ndim - 1))
+        mean = (x * w).sum(0, keepdims=True) / jnp.maximum(w.sum(0, keepdims=True), 1.0)
+        return jnp.broadcast_to(mean, x.shape)
+    return jax.tree_util.tree_map_with_path(one, tree)
+
+
+def _copy_trunk_from_first(params):
+    """Every agent's trunk set to agent 0's: identical copies to start the tie."""
+    return jax.tree_util.tree_map_with_path(
+        lambda path, x: jnp.broadcast_to(x[:1], x.shape) if _is_trunk(path) and x.ndim >= 1 else x, params)
+
+
 def _swap_axes_nb(x):
     """(B, N, ...) <-> (N, B, ...)"""
     return jnp.swapaxes(x, 0, 1)
@@ -227,22 +281,42 @@ def _swap_axes_nb(x):
 
 def make_train(env_cfg: EnvConfig, cfg: MAConfig):
     n, b = env_cfg.n_agents, cfg.num_worlds
-    net = make_network(env_cfg, cfg.hidden, cfg.encoder, messages=True, world_model=cfg.world_model)
-    A, M, L, V = E.N_ACTIONS, E.MSG_LEN * E.VOCAB, E.MSG_LEN, E.VOCAB
+    net = make_network(env_cfg, cfg.hidden, cfg.encoder, messages=True, world_model=cfg.world_model,
+                       msg_net=cfg.msg_net)
+    A, M, L, V = E.N_ACTIONS, E.EXTRA_LOGITS, E.MSG_LEN, E.VOCAB
     n_win = env_cfg.view_size ** 2 * E.N_OBS_CHANNELS
     dec_idx = jnp.asarray(DECODE_INDEX) + n_win               # own-state features the model predicts
 
     def full_mask(mask):
-        """Action mask plus all-True entries for the message logits."""
+        """Action mask plus all-True entries for the aim and symbol logits."""
         return jnp.concatenate([mask, jnp.ones(mask.shape[:-1] + (M,), bool)], axis=-1)
 
-    def split_logp(logits, action, msg):
-        """Joint log-prob of an action and a message, and their entropies."""
-        la = jax.nn.log_softmax(logits[..., :A])
-        lm = jax.nn.log_softmax(logits[..., A:].reshape(logits.shape[:-1] + (L, V)))
-        logp = jnp.take_along_axis(la, action[..., None], -1)[..., 0] \
-            + jnp.take_along_axis(lm, msg[..., None], -1)[..., 0].sum(-1)
-        return logp, la, lm
+    speak_on = 0.0 if (env_cfg.channel == "none" or cfg.msg_frozen) else 1.0
+    write_on = 0.0 if (not env_cfg.writing or cfg.msg_frozen) else 1.0
+
+    def live_masks(action, out):
+        """Where each output had an effect: the aim only on a strike; the symbols said after the first
+        only when the first was not silence; the written symbols only on WRITE. A factor with no
+        effect is left out of the ratio, the entropy bonus and imitation (it would only add noise)."""
+        f32 = jnp.float32
+        striking = ((action >= E.STRIKE_N) & (action < E.STRIKE_N + 8)).astype(f32)
+        said = jnp.concatenate([jnp.ones(out.shape[:-1] + (1,), f32),
+                                jnp.broadcast_to((out[..., :1] > 0).astype(f32), out.shape[:-1] + (L - 1,))], -1) * speak_on
+        written = jnp.broadcast_to(((action == E.WRITE).astype(f32) * write_on)[..., None], out.shape[:-1] + (L,))
+        return striking, said, written
+
+    def factor_logps(logits, action, out):
+        """Log-probs of the four outputs (action, aim, said, written), each only where it had an
+        effect (live_masks), and the pieces their entropies need."""
+        act, aim_l, sym = split_logits(logits)
+        la, lk, ls = jax.nn.log_softmax(act), jax.nn.log_softmax(aim_l), jax.nn.log_softmax(sym)
+        striking, said, written = live_masks(action, out)
+        tok = jnp.take_along_axis(ls, out[..., :2 * L, None], -1)[..., 0]                # (..., 2L)
+        lp = jnp.stack([jnp.take_along_axis(la, action[..., None], -1)[..., 0],
+                        jnp.take_along_axis(lk, out[..., 2 * L:2 * L + 1], -1)[..., 0] * striking,
+                        (tok[..., :L] * said).sum(-1), (tok[..., L:] * written).sum(-1)], -1)
+        live = jnp.stack([jnp.ones_like(striking), striking, said[..., 0], written[..., 0]], -1)
+        return lp, (la, lk, ls, live, said, written)
     adam = optax.adam(1.0, eps=1e-5)          # direction only; per-agent lr applied after
 
     def apply_agent(p, carry, obs, reset, mask):
@@ -275,6 +349,8 @@ def make_train(env_cfg: EnvConfig, cfg: MAConfig):
                  jnp.ones((1, b, A + M), bool))
         params = jax.vmap(lambda k: net.init(k, jnp.zeros((b, cfg.hidden)), dummy))(
             jax.random.split(k_net, n))
+        if cfg.share_trunk:
+            params = _copy_trunk_from_first(params)
         opt_state = adam.init(params)
         reset_flag = jnp.ones((n, b), bool)
         return (params, opt_state, states, obs, mask, reset_flag, carry, k_run, empty_memory(b, obs.shape[-1])), pop
@@ -295,8 +371,8 @@ def make_train(env_cfg: EnvConfig, cfg: MAConfig):
         """No tail yet (C context-only steps that reset memory) and an empty long-term store."""
         z = lambda *shape, dt=jnp.float32: jnp.zeros(shape, dt)
         tail = Transition(jnp.ones((C, n, nb), bool), z(C, n, nb, dt=bool), z(C, n, nb, dt=bool),
-                          z(C, n, nb, dt=jnp.int32), z(C, n, nb), z(C, n, nb), z(C, n, nb), z(C, n, nb, d),
-                          z(C, n, nb, A, dt=bool), z(C, n, nb, L, dt=jnp.int32), z(C, n, nb, dt=bool),
+                          z(C, n, nb, dt=jnp.int32), z(C, n, nb), z(C, n, nb), z(C, n, nb, 4), z(C, n, nb, d),
+                          z(C, n, nb, A, dt=bool), z(C, n, nb, E.OUT_SLOTS, dt=jnp.int32), z(C, n, nb, dt=bool),
                           z(C, n, nb, 2, dt=jnp.int32), z(C, n, nb), z(C, n, nb, dt=bool), z(C, n, nb, dt=bool),
                           z(C, n, nb), z(C, n, nb), z(C, n, nb), jnp.full((C, n, nb), 2, jnp.int32))
         res = Reservoir(z(n, R, d), z(n, R, A, dt=bool), z(n, R, cfg.hidden), z(n, R, dt=bool), z(n, R, A),
@@ -307,9 +383,30 @@ def make_train(env_cfg: EnvConfig, cfg: MAConfig):
         scale = pop.genotype.lr_scale if cfg.per_agent_lr else jnp.ones(n)
         return cfg.lr * scale
 
+    def scaled(updates, lrs):
+        """Each agent's update at its own learning rate; a shared trunk at the population's mean
+        rate (so the tied copies move together)."""
+        if not cfg.share_trunk:
+            return _scale_per_agent(updates, lrs)
+        mean_lr = jnp.full_like(lrs, lrs.mean())
+        return jax.tree_util.tree_map_with_path(
+            lambda path, u: u * (mean_lr if _is_trunk(path) else lrs).reshape((-1,) + (1,) * (u.ndim - 1)), updates)
+
+    def tied(grads):
+        return _tie_trunk(grads) if cfg.share_trunk else grads
+
     def gammas_of(pop: Population):
         g = pop.genotype.patience if cfg.trait_gamma else jnp.full(n, cfg.gamma)
         return (g ** cfg.tick_scale)[:, None]                                               # (N, 1)
+
+    def _cold_split(died, info, states, ages_before):
+        """(4,) cold deaths: [open adult, open child, sheltered adult, sheltered child]."""
+        cold = died & (_swap_axes_nb(info.death_cause) == E.CAUSE_COLD)                   # (N, B)
+        terr = _swap_axes_nb(jax.vmap(lambda s: s.terrain[s.pos[:, 0], s.pos[:, 1]])(states))
+        sheltered = (terr == E.FOREST) | (terr == E.CAVE) | _swap_axes_nb(states.below)
+        child = (ages_before + _swap_axes_nb(states.birth_age)) < env_cfg.adult_years * env_cfg.ticks_per_bio_year
+        return jnp.stack([(cold & ~sheltered & ~child).sum(), (cold & ~sheltered & child).sum(),
+                          (cold & sheltered & ~child).sum(), (cold & sheltered & child).sum()])
 
     def update(runner, pop: Population):
         params, opt_state, states, obs, mask, reset_flag, carry, key, memory = runner
@@ -324,10 +421,8 @@ def make_train(env_cfg: EnvConfig, cfg: MAConfig):
             carry, logits, value = v_apply(params, carry, obs[:, None], reset_flag[:, None],
                                            mask[:, None])
             logits, value = logits[:, 0], value[:, 0]                   # (N, B, A), (N, B)
-            k_act, k_msg = jax.random.split(k_act)
-            action = jax.random.categorical(k_act, logits[..., :A])
-            msg = jax.random.categorical(k_msg, logits[..., A:].reshape(logits.shape[:-1] + (L, V)))
-            log_prob, _, _ = split_logp(logits, action, msg)
+            action, msg = sample_outputs(k_act, logits)                    # msg: [said, written, aim]
+            log_prob = factor_logps(logits, action, msg)[0]                  # (N, B, 4)
             alive_before = _swap_axes_nb(states.alive)                  # (N, B)
             ages_before = _swap_axes_nb(states.age)
             nxt, reward, done, info = jax.vmap(lambda s, a, m: E.step(s, a, env_cfg, m))(
@@ -368,6 +463,9 @@ def make_train(env_cfg: EnvConfig, cfg: MAConfig):
                 "cause": jnp.stack([(died & (_swap_axes_nb(info.death_cause) == c)).sum()
                                     for c in range(len(E.CAUSE_NAMES))]),
                 "deaths_by_season": jnp.stack([(died & (info.season[None, :] == q)).sum() for q in range(4)]),
+                # Cold deaths, split: in the open (grass, rock, ...) or sheltered (forest, cave, below);
+                # a child (under adult age) or an adult. Which it is decides what "learn winter" means.
+                "cold_deaths_split": _cold_split(died, info, states, ages_before),
                 "hits": info.hits.sum(),
                 "gifts": jnp.any(info.gifts, axis=-1).sum(),
                 "touches": jnp.any(info.touches, axis=-1).sum(),
@@ -377,6 +475,7 @@ def make_train(env_cfg: EnvConfig, cfg: MAConfig):
                 "company": info.company.sum(),
                 "births": info.born.sum(),
                 "conceptions": info.conceived.sum(),
+                "no_room": info.no_room.sum(),
                 "matings": info.mated.sum(),
                 "asleep_night": (info.slept & night_b[:, None]).sum(),
                 "asleep_day": (info.slept & ~night_b[:, None]).sum(),
@@ -516,25 +615,42 @@ def make_train(env_cfg: EnvConfig, cfg: MAConfig):
             # Normalised by the new steps of this update (not the carried ones), so how much is
             # learned still scales with how much was slept on
             denom = jnp.maximum((tr.valid & (tr.stage == 0)).astype(jnp.float32).sum(), 1.0)
-            logp, logp_all, logp_msg = split_logp(logits, tr.action, tr.msg)
-            ratio = jnp.exp(logp - tr.log_prob)
+            lp, (logp_all, lk, ls, live, said, written) = factor_logps(logits, tr.action, tr.msg)
             wsum = jnp.maximum(w.sum(), 1e-8)
             mean = (adv * w).sum() / wsum
             std = jnp.sqrt((((adv - mean) ** 2) * w).sum() / wsum) + 1e-8
             an = (adv - mean) / std
-            pg = -jnp.minimum(ratio * an, jnp.clip(ratio, 1 - cfg.clip_eps, 1 + cfg.clip_eps) * an)
+            # Each output clipped on its own ratio (action, aim, said, written): a message that moved
+            # a lot does not freeze the action's update, nor the other way round
+            ratio = jnp.exp(lp - tr.log_prob)                                        # (T, B, 4)
+            surr = jnp.minimum(ratio * an[..., None],
+                               jnp.clip(ratio, 1 - cfg.clip_eps, 1 + cfg.clip_eps) * an[..., None])
+            pg = -(surr * live).sum(-1)
+            lw = live * w[..., None]
+            lws = jnp.maximum(lw.sum((0, 1)), 1e-8)
+            clipfrac = ((jnp.abs(ratio - 1) > cfg.clip_eps) * lw).sum((0, 1)) / lws    # per output
+            approx_kl = (((ratio - 1) - (lp - tr.log_prob)) * lw).sum((0, 1)) / lws
             v_clip = tr.value + jnp.clip(value - tr.value, -cfg.clip_eps, cfg.clip_eps)
             vf = 0.5 * jnp.maximum((value - tg) ** 2, (v_clip - tg) ** 2)
             ent = -(jnp.exp(logp_all) * jnp.where(tr.mask, logp_all, 0.0)).sum(-1)
-            ent_msg = -(jnp.exp(logp_msg) * logp_msg).sum((-1, -2))
-            per_step = pg + cfg.vf_coef * vf - cfg.ent_coef * ent - cfg.msg_ent_coef * ent_msg
+            ent_aim = -(jnp.exp(lk) * lk).sum(-1) * live[..., 1]
+            h_sym = -(jnp.exp(ls) * ls).sum(-1)                                        # (T, B, 2L)
+            speaks = jax.lax.stop_gradient(1.0 - jnp.exp(ls[..., 0, 0]))                # chance the first is not silence
+            ent_said = (h_sym[..., 0] + speaks * h_sym[..., 1:L].sum(-1)) * said[..., 0]
+            ent_written = (h_sym[..., L:] * written).sum(-1)
+            if cfg.entropy_target > 0:          # the floor: a bigger bonus the further under the target
+                ec = cfg.ent_coef * jnp.exp(jnp.clip(cfg.entropy_gain * (cfg.entropy_target - jax.lax.stop_gradient(ent)), -4.0, 4.0))
+            else:
+                ec = cfg.ent_coef
+            per_step = pg + cfg.vf_coef * vf - ec * (ent + ent_aim) \
+                - cfg.msg_ent_coef * (ent_said + ent_written)
             loss = (per_step * w).sum() / denom
             # Imitation: predict the watched agent's action from ITS observation, without
             # memory (hidden state reset each step: the observer did not live its history)
             # Words are copied along with actions: language can spread culturally
             _, d_logits, _ = net.apply(p, jnp.zeros_like(ic),
                                        (d_obs, jnp.ones(d_act.shape, bool), full_mask(d_mask)))
-            nll = -split_logp(d_logits, d_act, d_msg)[0]
+            nll = -factor_logps(d_logits, d_act, d_msg)[0].sum(-1)                   # each output only where it acted
             imit = (nll * d_w).sum() / jnp.maximum((d_w > 0).sum(), 1.0)
             loss = loss + cfg.imitation_coef * sl * imit
             wm = (jnp.float32(0.0),) * 3
@@ -545,19 +661,29 @@ def make_train(env_cfg: EnvConfig, cfg: MAConfig):
                     * tr.learn_w[:-1]
                 np_ = jnp.maximum(pair.sum(), 1.0)
                 lat = ((terms["z"][:-1] - jax.lax.stop_gradient(terms["h"][1:])) ** 2).mean(-1)
-                own = ((terms["own"][:-1] - tr.obs[1:][..., dec_idx]) ** 2).mean(-1)
+                # the own-state head learns the CHANGE over the tick, scaled (policy.own_scale): what the
+                # action did, not the level the belief already carries
+                own = ((terms["own"][:-1] - net.own_scale * (tr.obs[1:][..., dec_idx] - tr.obs[:-1][..., dec_idx])) ** 2).mean(-1)
                 rew = (terms["r"] - tr.reward) ** 2
                 wm = ((lat * pair).sum() / np_, (rew * w).sum() / denom, (own * pair).sum() / np_)
                 loss = loss + cfg.wm_coef * (wm[0] + wm[1] + wm[2])
             ret = retention(p, rs)
             loss = loss + cfg.retention_coef * ret
-            return loss, ((ent * w).sum() / denom, imit, wm, ret)
+            return loss, ((ent * w).sum() / denom, imit, wm, ret, clipfrac, approx_kl)
 
         def total_loss(params, ic, tr, adv, tg, d_obs, d_act, d_mask, d_msg, d_w):
             # Agent axis is 0 for params/ic/genes/the store, 1 for (T, N, B, ...) data
-            losses, (ents, imits, wm, ret) = jax.vmap(agent_loss, in_axes=(0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0))(
-                params, ic, tr, adv, tg, d_obs, d_act, d_mask, d_msg, d_w, social_w, res)
-            return losses.sum(), (ents.mean(), imits.mean(), tuple(x.mean() for x in wm), ret.mean())
+            if cfg.agent_chunk > 0:
+                lead = lambda x: jnp.moveaxis(x, 1, 0)
+                xs = (params, ic) + tuple(jax.tree_util.tree_map(lead, v)
+                                          for v in (tr, adv, tg, d_obs, d_act, d_mask, d_msg, d_w)) + (social_w, res)
+                losses, (ents, imits, wm, ret, cf, kl) = jax.lax.map(lambda a: jax.checkpoint(agent_loss)(*a), xs,
+                                                                     batch_size=cfg.agent_chunk)
+            else:
+                losses, (ents, imits, wm, ret, cf, kl) = jax.vmap(agent_loss, in_axes=(0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0))(
+                    params, ic, tr, adv, tg, d_obs, d_act, d_mask, d_msg, d_w, social_w, res)
+            return losses.sum(), (ents.mean(), imits.mean(), tuple(x.mean() for x in wm), ret.mean(),
+                                  cf.mean(0), kl.mean(0))
 
         lrs = lrs_of(pop)
 
@@ -582,9 +708,9 @@ def make_train(env_cfg: EnvConfig, cfg: MAConfig):
                 tr, a, tg, ic, d_obs, d_act, d_mask, d_msg, d_w = bt
                 grads, ent = jax.grad(total_loss, has_aux=True)(params, ic, tr, a, tg,
                                                                 d_obs, d_act, d_mask, d_msg, d_w)
-                grads = _per_agent_clip(grads, cfg.max_grad_norm)
+                grads = tied(_per_agent_clip(grads, cfg.max_grad_norm))
                 updates, opt_state = adam.update(grads, opt_state, params)
-                params = optax.apply_updates(params, _scale_per_agent(updates, lrs))
+                params = optax.apply_updates(params, scaled(updates, lrs))
                 return (params, opt_state), ent
 
             (params, opt_state), ents = jax.lax.scan(mb_step, (params, opt_state), batches)
@@ -614,13 +740,16 @@ def make_train(env_cfg: EnvConfig, cfg: MAConfig):
             earned = jnp.where(jnp.any(traj.died, 0), 1.0, jnp.minimum(slept / (cfg.consolidation_ticks / cfg.tick_scale), 1.0))
             share = earned.mean(1)                                                    # (N,)
             sh = lambda x: share.reshape((-1,) + (1,) * (x.ndim - 1))
-            step = _per_agent_clip(jax.tree_util.tree_map(lambda q: q * sh(q), pending), cfg.max_grad_norm)
+            step = tied(_per_agent_clip(jax.tree_util.tree_map(lambda q: q * sh(q), pending), cfg.max_grad_norm))
             updates, new_opt = adam.update(step, opt_state, params)
             on = share > 0
-            keep = lambda new, old: jax.tree_util.tree_map(
-                lambda a_, b_: jnp.where(on.reshape((-1,) + (1,) * (a_.ndim - 1)), a_, b_)
+            if cfg.share_trunk:                       # a tied trunk moves for everyone whenever anyone slept
+                on_all = jnp.broadcast_to(jnp.any(on), on.shape)
+            keep = lambda new, old: jax.tree_util.tree_map_with_path(
+                lambda path, a_, b_: jnp.where((on_all if cfg.share_trunk and _is_trunk(path) else on)
+                                               .reshape((-1,) + (1,) * (a_.ndim - 1)), a_, b_)
                 if (a_.ndim >= 1 and a_.shape[:1] == (n,)) else a_, new, old)
-            params = keep(optax.apply_updates(params, _scale_per_agent(updates, lrs)), params)
+            params = keep(optax.apply_updates(params, scaled(updates, lrs)), params)
             opt_state = keep(new_opt, opt_state)
             memory = memory._replace(pending=jax.tree_util.tree_map(lambda q: q * (1 - sh(q)), pending))
             graded_w = jnp.broadcast_to(earned[None], traj.reward.shape)
@@ -635,7 +764,9 @@ def make_train(env_cfg: EnvConfig, cfg: MAConfig):
                    "learned_share": (graded_w * fin).sum() / jnp.maximum(fin.sum(), 1),
                    "waiting_share": ((traj.stage == 0) & ~finalized & traj.valid).sum()
                    / jnp.maximum(((traj.stage == 0) & traj.valid).sum(), 1),
-                   "retention_kl": ents[3].mean(), "long_term_filled": res.filled.mean()}
+                   "retention_kl": ents[3].mean(), "long_term_filled": res.filled.mean(),
+                   # per output (action, aim, said, written): share of updates clipped, and the KL moved
+                   "clip_fraction": ents[4].reshape(-1, 4).mean(0), "approx_kl": ents[5].reshape(-1, 4).mean(0)}
         if cfg.world_model:
             metrics.update(wm_latent=ents[2][0].mean(), wm_reward=ents[2][1].mean(), wm_own=ents[2][2].mean(),
                            trust=params["params"]["trust"].mean())
@@ -652,7 +783,11 @@ def make_train(env_cfg: EnvConfig, cfg: MAConfig):
         def one(p, c0, obs, rst, mask):                                 # (B, H), (T, B, ...)
             _, out = net.apply(p, c0, (obs, rst, full_mask(mask)), method=net.trace)
             return out["h"], out["logits"]
-        h, logits = jax.vmap(one)(params, carry0, sw(traj.obs), sw(traj.reset), sw(traj.mask))   # (N, T, B, ...)
+        if cfg.agent_chunk > 0:                                         # a few agents at a time (memory)
+            h, logits = jax.lax.map(lambda a: one(*a), (params, carry0, sw(traj.obs), sw(traj.reset), sw(traj.mask)),
+                                    batch_size=cfg.agent_chunk)
+        else:
+            h, logits = jax.vmap(one)(params, carry0, sw(traj.obs), sw(traj.reset), sw(traj.mask))   # (N, T, B, ...)
         Tw = traj.reward.shape[0]
         carry_in = jnp.concatenate([carry0[:, None], h[:, :-1]], 1)     # (N, T, B, H): state going into each step
         tail = jax.tree_util.tree_map(lambda x: x[Tw - C:], traj)._replace(stage=next_stage) if C > 0 else None
@@ -693,20 +828,18 @@ def make_train(env_cfg: EnvConfig, cfg: MAConfig):
         since, and a newborn's steps begin with a reset, so its memory matches too."""
         sw = lambda x: jnp.swapaxes(x, 0, 1)                            # (T, N, ...) <-> (N, T, ...)
         _, logits, value = v_apply(params, init_carry, sw(traj.obs), sw(traj.reset), sw(traj.mask))
-        log_prob, _, _ = split_logp(sw(logits), traj.action, traj.msg)
+        log_prob = factor_logps(sw(logits), traj.action, traj.msg)[0]
         traj = traj._replace(value=sw(value), log_prob=log_prob)
         _, _, last_val = v_apply(params, end_carry, end_obs[:, None], end_reset[:, None], end_mask[:, None])
         return learn_core(params, opt_state, traj, init_carry, last_val[:, 0], key, pop, memory)
 
     def act(params, carry, obs, mask, reset, key):
         """One tick of acting, as in the rollout: obs (N, B, D), mask (N, B, A), reset (N, B).
-        Returns carry, action, message, joint log-prob, value."""
+        Returns carry, action, the packed outputs [said, written, aim], their log-probs (N, B, 4), value."""
         carry, logits, value = v_apply(params, carry, obs[:, None], reset[:, None], mask[:, None])
         logits, value = logits[:, 0], value[:, 0]
-        k_act, k_msg = jax.random.split(key)
-        action = jax.random.categorical(k_act, logits[..., :A])
-        msg = jax.random.categorical(k_msg, logits[..., A:].reshape(logits.shape[:-1] + (L, V)))
-        return carry, action, msg, split_logp(logits, action, msg)[0], value
+        action, msg = sample_outputs(key, logits)
+        return carry, action, msg, factor_logps(logits, action, msg)[0], value
 
     update = jax.jit(update)
     update.act = jax.jit(act)

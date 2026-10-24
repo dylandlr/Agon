@@ -34,6 +34,7 @@ import sys
 from pathlib import Path
 
 PHRASE = {
+    "bedded": "lay down to sleep on a bed of leaves or hide", "made": "bound a point to a stick with fiber: a spear",
     "gather": "picked up food", "gather_lost": "lost a scramble for food", "eat": "ate", "drink": "drank",
     "strike_animal": "struck an animal", "kill": "killed", "move_failed": "stumbled",
     "release": "left food on the ground", "predator_attack": "was attacked by a predator",
@@ -46,7 +47,7 @@ PHRASE = {
     "overheating": "began overheating", "took_food": "took food", "touch": "touched",
     "held_off_predator": "held off a predator with others beside it", "carried_salt_with_meat": "carried salt with its meat",
     "mutation": "a mutation",
-    "strike_agent": "a blow", "struck_by_agent": "being struck", "condition": "a lasting condition",
+    "strike_agent": "an act of aggression", "struck_by_agent": "being struck", "condition": "a lasting condition",
     "death": "a death", "weather": "the weather", "lightning_fire": "lightning"
 }
 def load_events(src: Path) -> list:
