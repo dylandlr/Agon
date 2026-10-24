@@ -137,6 +137,9 @@ def main():
                          "(ideas); on in the presets, --no-world-model for the ablation")
     ap.add_argument("--share-trunk", action="store_true",
                     help="one trunk (encoder, memory, world model) for the population, tied across the agents; "
+    ap.add_argument("--entropy-target", type=float, default=0.0,
+                    help="an entropy floor in nats (0 = off): the entropy bonus grows under it, shrinks above "
+                         "(MAConfig.entropy_target); the validate run collapsed to 0.07 of 4.4 and stopped learning")
                          "policy, value, messages and trust stay each agent's own (MAConfig.share_trunk)")
     ap.add_argument("--predators", type=float, default=1.0,
                     help="x predator numbers and respawning (0 = predators that never attack)")
@@ -193,7 +196,7 @@ def main():
                    alpha=args.alpha, msg_ent_coef=args.msg_ent_coef, ent_coef=args.ent_coef,
                    speech_attention=args.speech_attention, teach_bonus=args.teach_bonus,
                    sleep_learning=not args.no_sleep_learning, world_model=args.world_model,
-                   share_trunk=args.share_trunk,
+                   share_trunk=args.share_trunk, entropy_target=args.entropy_target,
                    day_ticks=env_cfg.day_length, tick_scale=env_cfg.tick_minutes / 30.0,
                    memory_span=env_cfg.day_length)
     out = Path(args.out)

@@ -42,6 +42,12 @@ class MAConfig:
     gae_lambda: float = 0.95
     clip_eps: float = 0.2
     ent_coef: float = 0.005
+    # An entropy floor (0 = off): the entropy bonus grows as a policy's entropy falls under the
+    # target and shrinks above it, coef = ent_coef * exp(gain * (target - entropy)), per agent and
+    # step. The validate run collapsed to 0.07 nats (of 4.4 possible) a sixth of the way in and
+    # learned nothing after; a floor keeps each brain trying things without making it dither.
+    entropy_target: float = 0.0
+    entropy_gain: float = 10.0
     # Symbols said (4 x 32: up to 13.9 nats) and written: far more entropy than the 84 actions (~4.4).
     # At full weight the entropy bonus alone pushes agents to talk (randomly) more and more;
     # a smaller weight makes speech earn its place.
@@ -620,7 +626,11 @@ def make_train(env_cfg: EnvConfig, cfg: MAConfig):
             speaks = jax.lax.stop_gradient(1.0 - jnp.exp(ls[..., 0, 0]))                # chance the first is not silence
             ent_said = (h_sym[..., 0] + speaks * h_sym[..., 1:L].sum(-1)) * said[..., 0]
             ent_written = (h_sym[..., L:] * written).sum(-1)
-            per_step = pg + cfg.vf_coef * vf - cfg.ent_coef * (ent + ent_aim) \
+            if cfg.entropy_target > 0:          # the floor: a bigger bonus the further under the target
+                ec = cfg.ent_coef * jnp.exp(jnp.clip(cfg.entropy_gain * (cfg.entropy_target - jax.lax.stop_gradient(ent)), -4.0, 4.0))
+            else:
+                ec = cfg.ent_coef
+            per_step = pg + cfg.vf_coef * vf - ec * (ent + ent_aim) \
                 - cfg.msg_ent_coef * (ent_said + ent_written)
             loss = (per_step * w).sum() / denom
             # Imitation: predict the watched agent's action from ITS observation, without

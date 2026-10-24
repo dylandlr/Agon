@@ -105,8 +105,11 @@ def items(kind, args=None):
         return [("full", base), ("no_sleep_learning", base + ["--no-sleep-learning"]),
                 ("caves", base + ["--underground"]), ("grounded_language", base + ["--language", "grounded"])]
     if kind == "validate":
-        return [("caveman", []), ("caveman_shared_trunk", ["--share-trunk"]),
-                ("caveman_no_world_model", ["--no-world-model"]),
+        # 0 the design; 1, 2 the stall ablations (claude/research/design-audit-learning.md: the policy
+        # collapsed to 0.07 nats and stopped improving a sixth of the way in); 3.. the older ablations
+        return [("caveman", []), ("caveman_entropy_floor", ["--entropy-target", "0.4"]),
+                ("caveman_no_retention", ["--retention-coef", "0"]),
+                ("caveman_shared_trunk", ["--share-trunk"]), ("caveman_no_world_model", ["--no-world-model"]),
                 ("caveman_no_sleep_learning", ["--no-sleep-learning"]), ("blank", ["--slate", "blank"])]
     if kind == "stress":
         return [(k, [s]) for k, s in STRESS]
