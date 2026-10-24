@@ -341,6 +341,12 @@ class State(NamedTuple):
     predators: Animals
 
 
+# Why a mating did not conceive (StepInfo.odds["conceive_block"], for the woman): 0 none (it could; chance
+# alone decided), then the first of these that applied
+CONCEIVE_BLOCKS = ["could", "not adult", "already pregnant", "nursing an infant", "past menopause", "too thin",
+                   "sick", "too stressed", "infertile", "the man infertile or sick"]
+
+
 class StepInfo(NamedTuple):
     outcome: jnp.ndarray        # (N,) outcome code
     died: jnp.ndarray
@@ -2522,6 +2528,8 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         * (1 + cfg.sleepy_fall_mult * state.sleepiness)
     u_fall = jax.random.uniform(keys[5], (n,))
     fell = moving & (u_fall < p_fall)
+    fall_odds = {"f_hazard": hazard, "f_injury": 1 + state.injury, "f_night": jnp.where(is_night(state.t, cfg), 2.0, 1.0) * jnp.ones(n),
+                 "f_sleepy": 1 + cfg.sleepy_fall_mult * state.sleepiness}
     severity = hazard * cfg.fall_severity * jax.random.exponential(jax.random.fold_in(keys[5], 1), (n,))
     fall_damage = jnp.where(fell, severity, 0.0)                      # can exceed 1: instant death
     injury = state.injury + cfg.fall_injury_ratio * fall_damage
@@ -2848,16 +2856,21 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     # a group stands off a hunter weighing its odds; not one with a grudge, which fights in anger
     aimed = (predators.anger > 0) & (predators.grudge >= 0)
     deterred = can_attack & (defenders >= 2) & (SP["ambush"][psp] == 0) & ~aimed
-    keen = SP["atk_p"][psp] * jnp.where(night | predators.below, 1.0, 1.0 - 0.5 * SP["nocturnal"][psp])   # caves are night
+    k_day = jnp.where(night | predators.below, 1.0, 1.0 - 0.5 * SP["nocturnal"][psp])      # caves are night
+    keen = SP["atk_p"][psp] * k_day
     keen = keen * (0.5 + predators.temper)                                                   # its own temperament
+    k_wild = jnp.ones_like(keen)
     if cfg.taming:
         # tame to someone and not provoked: neutral to strangers, biting only with its wildness
         b_max = jnp.max(jnp.where(alive0[None, :], predators.bond, 0.0), axis=1)
         neutral = (b_max >= cfg.tame_calm) & (predators.anger <= 0)
-        keen = jnp.where(neutral, keen * predators.temper * (1.0 - b_max), keen)
+        k_wild = jnp.where(neutral, predators.temper * (1.0 - b_max), 1.0)
+        keen = keen * k_wild
     u_att = jax.random.uniform(keys[9], target.shape)
     attack = can_attack & ~deterred & (u_att < keen)
-    pred_odds = {"pred_target": target, "pred_p": jnp.where(can_attack & ~deterred, keen, 0.0), "pred_draw": u_att, "pred_bit": attack}
+    pred_odds = {"pred_target": target, "pred_p": jnp.where(can_attack & ~deterred, keen, 0.0), "pred_draw": u_att, "pred_bit": attack,
+                 "pred_could": can_attack, "pred_deterred": deterred, "pred_base": SP["atk_p"][psp], "pred_day": k_day,
+                 "pred_temper": 0.5 + predators.temper, "pred_wild": k_wild, "pred_defenders": defenders.astype(jnp.float32)}
     bite = jnp.where(attack, SP["atk_dmg"][psp] + SP["venom"][psp], 0.0) \
         * jnp.where(down0[target], cfg.downed_hit_mult, 1.0)                    # a downed one is easy meat
     n_attacks = jnp.zeros(n).at[target].add(attack.astype(jnp.float32))
@@ -3121,15 +3134,19 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
 
     # ---------------------------------------------------------- disease
     susceptibility = (1 - state.immunity) / geno.disease_resistance * fx.get("infection", 1.0)
-    water_risk = cfg.water_infection * jnp.where(weather == DROUGHT, 2.0, 1.0)
+    w_drought = jnp.where(weather == DROUGHT, 2.0, 1.0)
+    water_risk = cfg.water_infection * w_drought
+    w_marsh = jnp.ones(n)
     if cfg.biomes:
-        water_risk = water_risk * jnp.where(open_water_beside(state.terrain, state.pos, cfg) | below0, 1.0,
-                                            cfg.marsh_infection_mult)          # a cave pool is open water
+        w_marsh = jnp.where(open_water_beside(state.terrain, state.pos, cfg) | below0, 1.0, cfg.marsh_infection_mult)
+        water_risk = water_risk * w_marsh                                      # a cave pool is open water
+    w_foul = jnp.ones(n)
     if cfg.fouling:                                       # waste beside the water one drinks from
         fp = jnp.pad(state.foul, 1)
         foul_near = jnp.max(jnp.stack([fp[1 + dr:1 + dr + g, 1 + dc:1 + dc + g] for dr in (-1, 0, 1) for dc in (-1, 0, 1)]), 0)
         dirty = jnp.minimum(1.0 + foul_near[state.pos[:, 0], state.pos[:, 1]] / cfg.foul_ref, cfg.foul_max_mult)
-        water_risk = water_risk * jnp.where(below0, 1.0, dirty)              # a cave pool is not fouled from above
+        w_foul = jnp.where(below0, 1.0, dirty)
+        water_risk = water_risk * w_foul                                       # a cave pool is not fouled from above
     infected_now = state.infection > 0
     near = (_cheb(lpa[:, None, :], lpa[None, :, :]) <= 1) & ~jnp.eye(n, dtype=bool)
     sick_neighbors = jnp.sum(near & (infected_now & alive0)[None, :], axis=1)
@@ -3148,7 +3165,10 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     odds = {"infect_water": jnp.where(drinking, water_risk, 0.0) * susceptibility, "infect_meat": eat_risk * susceptibility,
             "infect_contact": (1 - (1 - cfg.contact_infection) ** sick_neighbors) * susceptibility,
             "infect_bite": bitten * susceptibility, "infect_rot": (1 - (1 - cfg.corpse_infection) ** rot_near) * susceptibility,
-            "infect_p": jnp.where(alive0 & ~infected_now, p_inf_all, 0.0), "infect_draw": u_inf}
+            "infect_p": jnp.where(alive0 & ~infected_now, p_inf_all, 0.0), "infect_draw": u_inf,
+            # why the chance was what it was
+            "f_immunity": state.immunity, "f_resistance": geno.disease_resistance, "f_drought": jnp.broadcast_to(w_drought, (n,)),
+            "f_marsh": w_marsh, "f_foul": w_foul, "f_sick_neighbors": sick_neighbors.astype(jnp.float32)}
     infection = jnp.where(newly_infected, cfg.disease_duration,
                           jnp.maximum(state.infection - 1, 0)).astype(jnp.int32)
     recovered = alive0 & infected_now & (infection == 0)
@@ -3404,9 +3424,16 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         partner = jnp.argmax(pair, axis=1)
         k_c, k_b = jax.random.split(jax.random.fold_in(keys[0], 77))
         u_con = jax.random.uniform(k_c, (n,))
-        could_conceive = jnp.any(pair, axis=1) & fertile_f & fertile_m[partner]
+        mated_f = jnp.any(pair, axis=1)
+        could_conceive = mated_f & fertile_f & fertile_m[partner]
         conceive = could_conceive & (u_con < cfg.conception_prob)
-        con_odds = {"conceive_p": jnp.where(could_conceive, cfg.conception_prob, 0.0), "conceive_draw": u_con}
+        # for a woman who mated and could not conceive: the first reason that applies (CONCEIVE_BLOCKS)
+        block = jnp.select([~mated_f, ~adult, state.gestation > 0, has_infant, years >= cfg.menopause_years,
+                            weight < cfg.min_condition * bod["ideal_kg"], sick, state.stress >= cfg.stress_heal_block,
+                            fx.get("fertile", 1.0) <= 0, ~fertile_m[partner]],
+                           [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], 0)
+        con_odds = {"conceive_p": jnp.where(could_conceive, cfg.conception_prob, 0.0), "conceive_draw": u_con,
+                    "conceive_block": jnp.where(mated_f & ~could_conceive, block, 0).astype(jnp.int32)}
         free = (~alive).sum() - (state.gestation > 0).sum()             # slots left for children
         could = conceive
         conceive = conceive & (jnp.cumsum(conceive) <= free)
@@ -3999,6 +4026,7 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         aim=jnp.where(hit_agent | hit_pred | hit_large | hit_small, aim, -1), blow_landed=blow_landed & hit_agent,
         how=jnp.where(is_strike, how, -1), shoved=tech["shoved"], thrown=tech["thrown"], grabbed=tech["grabbed"],
         pinned=pinned, same_sex_mated=same_sex_mated, tamed=tamed.astype(jnp.int32), crowded=crowded,
-        odds={**odds, "fall_p": jnp.where(moving, p_fall, 0.0), "fall_draw": u_fall, **pred_odds,
-              **(con_odds if cfg.reproduction else {"conceive_p": jnp.zeros(n), "conceive_draw": jnp.zeros(n)})})
+        odds={**odds, "fall_p": jnp.where(moving, p_fall, 0.0), "fall_draw": u_fall, **fall_odds, **pred_odds,
+              **(con_odds if cfg.reproduction else {"conceive_p": jnp.zeros(n), "conceive_draw": jnp.zeros(n),
+                                                    "conceive_block": jnp.zeros(n, jnp.int32)})})
     return next_state, reward, done, info

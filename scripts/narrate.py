@@ -388,8 +388,32 @@ class Narrator:
                 + f", then {' > '.join(idea.get('plan', [])[1:4])}; expecting {exp}; trust {idea.get('trust', 0):+.3f}"
         rolled = r.get("rolled")
         if rolled:
-            line += ". The world rolled: " + "; ".join(
-                f"{k} {p:.1%} (draw {u:.3f}: {'it happened' if u < p else 'it did not'})" for k, (p, u) in rolled.items())
+            parts = []
+            for k_, v in rolled.items():
+                if isinstance(v, list):                                   # an older record: [p, draw]
+                    parts.append(f"P({k_}) = {v[0]:.1%}: {'it happened' if v[1] < v[0] else 'it did not'}")
+                    continue
+                why = v.get("why")
+                why_s = ""
+                if isinstance(why, dict):
+                    bits = []
+                    for wk, wv in why.items():
+                        if isinstance(wv, bool):
+                            if wv:
+                                bits.append(wk)
+                        elif wk.endswith(" x"):
+                            if abs(wv - 1.0) > 1e-6:
+                                bits.append(f"{wk[:-2]} x{wv:g}")
+                        else:
+                            bits.append(f"{wk} {wv:g}")
+                    why_s = " (" + ", ".join(bits) + ")" if bits else ""
+                elif isinstance(why, str):
+                    why_s = f" ({why})"
+                src = v.get("from")
+                src_s = " from " + ", ".join(f"{a_} {b_:.1%}" for a_, b_ in src.items()) if src else ""
+                out = "it happened" if v.get("happened") else ("not possible" if v.get("p", 0) == 0 else "it did not")
+                parts.append(f"P({k_}) = {v.get('p', 0):.1%}{src_s}{why_s}: {out}")
+            line += ". Odds: " + "; ".join(parts)
         return line + "."
 
     # ------------------------------------------------------------ the story

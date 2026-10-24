@@ -174,7 +174,7 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
         if p_key not in O:
             return {}, None
         p, u = float(O[p_key][i]), float(O[draw_key][i])
-        return {"chance": round(p, 4), "draw": round(u, 4)}, f"the chance was {p:.1%}, the draw {u:.3f}"
+        return {"chance": round(p, 4), "draw": round(u, 4)}, f"P = {p:.1%}"
 
     def emit(i, kind, parents=(), own=None, **extra):
         """own: a cause with no parent event (the body's own state, or chance), written to `because`
@@ -327,7 +327,11 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
                 if js:
                     j = js[0]
                     fx_ = {"chance": round(float(O["pred_p"][j]), 4), "draw": round(float(O["pred_draw"][j]), 4)}
-                    own = f"its chance of a bite was {float(O['pred_p'][j]):.1%}, the draw {float(O['pred_draw'][j]):.3f}"
+                    w = [f"its kind {float(O['pred_base'][j]):.0%}"]
+                    if abs(float(O["pred_day"][j]) - 1) > 1e-6: w.append(f"time of day x{float(O['pred_day'][j]):g}")
+                    w.append(f"temperament x{float(O['pred_temper'][j]):.2f}")
+                    if abs(float(O["pred_wild"][j]) - 1) > 1e-6: w.append(f"wildness x{float(O['pred_wild'][j]):.2f}")
+                    own = f"P(bite) = {float(O['pred_p'][j]):.1%} ({', '.join(w)})"
             emit(i, "predator_attack", own=own, health_loss=round(float(info.health_loss[i]), 4),
                  **({"species": _fa.NAMES[sp]} if sp >= 0 else {}), **fx_,
                  **({"venom": True} if hasattr(info, "venomed") and bool(np.asarray(info.venomed)[i]) else {}))
@@ -356,6 +360,12 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
             else:
                 own = "the ground"
             fx_, words = roll(i, "fall_p", "fall_draw")
+            if "f_hazard" in O:
+                w = [f"ground hazard {float(O['f_hazard'][i]):.2f}"]
+                if float(O["f_injury"][i]) > 1.001: w.append(f"injury x{float(O['f_injury'][i]):.2f}")
+                if float(O["f_night"][i]) > 1: w.append("night x2")
+                if float(O["f_sleepy"][i]) > 1.001: w.append(f"sleepiness x{float(O['f_sleepy'][i]):.2f}")
+                words = f"{words} ({', '.join(w)})"
             emit(i, "fall", own=own + (f"; {words}" if words else ""), **fx_)
         if bool(info.newly_infected[i]):
             ps = []
@@ -381,8 +391,13 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
                 parts = {k[7:]: round(float(O[k][i]), 4) for k in ("infect_water", "infect_meat", "infect_contact", "infect_bite", "infect_rot")
                          if float(O[k][i]) > 0}
                 extra.update(chance=round(float(O["infect_p"][i]), 4), draw=round(float(O["infect_draw"][i]), 4), sources=parts)
-                own = ("sources this tick: " + ", ".join(f"{k} {v:.1%}" for k, v in parts.items())
-                       + f"; the chance in all {float(O['infect_p'][i]):.1%}, the draw {float(O['infect_draw'][i]):.3f}") if parts else own
+                why = []
+                if float(O["f_drought"][i]) > 1: why.append("drought x2 on the water")
+                if float(O["f_marsh"][i]) > 1: why.append(f"marsh water x{float(O['f_marsh'][i]):g}")
+                if float(O["f_foul"][i]) > 1.001: why.append(f"fouled water x{float(O['f_foul'][i]):.2f}")
+                why.append(f"immunity {float(O['f_immunity'][i]):.2f}, resistance {float(O['f_resistance'][i]):.2f}")
+                own = (f"P(sickness) = {float(O['infect_p'][i]):.1%} from " + ", ".join(f"{k} {v:.1%}" for k, v in parts.items())
+                       + " (" + "; ".join(why) + ")") if parts else own
             emit(i, "infected", ps, own=own, **extra)
         if bool(info.recovered[i]):
             emit(i, "recovered", [(pid(last(i, "infected")), "got over the illness")])

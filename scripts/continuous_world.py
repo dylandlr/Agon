@@ -684,15 +684,28 @@ def main():
                     # the ledger: every chance the world rolled against this one this tick, with its draw
                     if hasattr(info, "odds"):
                         O = info.odds
+                        g_ = lambda k_, j_=i: round(float(np.asarray(O[k_])[j_]), 4)
                         rolled = {}
-                        for name_, pk, dk in (("sickness", "infect_p", "infect_draw"), ("fall", "fall_p", "fall_draw"),
-                                              ("conception", "conceive_p", "conceive_draw")):
-                            pv_ = float(np.asarray(O[pk])[i])
-                            if pv_ > 0:
-                                rolled[name_] = [round(pv_, 4), round(float(np.asarray(O[dk])[i]), 4)]
-                        tg, pp = np.asarray(O["pred_target"]), np.asarray(O["pred_p"])
-                        for j in np.flatnonzero((tg == i) & (pp > 0)):
-                            rolled[f"bite by predator {int(j)}"] = [round(float(pp[j]), 4), round(float(np.asarray(O["pred_draw"])[j]), 4)]
+                        if g_("infect_p") > 0:
+                            rolled["sickness"] = {"p": g_("infect_p"), "happened": bool(np.asarray(info.newly_infected)[i]),
+                                                  "from": {k_[7:]: g_(k_) for k_ in ("infect_water", "infect_meat", "infect_contact", "infect_bite", "infect_rot") if g_(k_) > 0},
+                                                  "why": {"immunity": g_("f_immunity"), "resistance": g_("f_resistance"), "drought x": g_("f_drought"),
+                                                          "marsh x": g_("f_marsh"), "fouling x": g_("f_foul"), "sick neighbours": g_("f_sick_neighbors")}}
+                        if g_("fall_p") > 0:
+                            rolled["fall"] = {"p": g_("fall_p"), "happened": bool(np.asarray(info.fell)[i]),
+                                              "why": {"ground hazard": g_("f_hazard"), "injury x": g_("f_injury"), "night x": g_("f_night"), "sleepiness x": g_("f_sleepy")}}
+                        if g_("conceive_p") > 0:
+                            rolled["conception"] = {"p": g_("conceive_p"), "happened": bool(np.asarray(info.conceived)[i])}
+                        elif int(np.asarray(O["conceive_block"])[i]) > 0:
+                            rolled["conception"] = {"p": 0.0, "happened": False, "why": E.CONCEIVE_BLOCKS[int(np.asarray(O["conceive_block"])[i])]}
+                        tg = np.asarray(O["pred_target"])
+                        for j in np.flatnonzero((tg == i) & (np.asarray(O["pred_could"]) | np.asarray(O["pred_deterred"]))):
+                            j = int(j)
+                            rolled[f"bite by predator {j}"] = {
+                                "p": g_("pred_p", j), "happened": bool(np.asarray(O["pred_bit"])[j]),
+                                "why": {"species base": g_("pred_base", j), "time of day x": g_("pred_day", j), "temperament x": g_("pred_temper", j),
+                                        "wildness x": g_("pred_wild", j), "deterred by a group": bool(np.asarray(O["pred_deterred"])[j]),
+                                        "defenders": g_("pred_defenders", j)}}
                         if rolled:
                             rec["rolled"] = rolled
                     mind_log.write(json.dumps(rec, separators=(",", ":")) + "\n")
