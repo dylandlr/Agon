@@ -167,7 +167,9 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
                 best = e
         return best
 
-    def emit(i, kind, parents=(), **extra):
+    def emit(i, kind, parents=(), own=None, **extra):
+        """own: a cause with no parent event (the body's own state, or chance), written to `because`
+        when no linked event is found, so a reader can tell "no trigger" from "not traced"."""
         ev = {"id": f"{t}:{i}:{kind}", "t": t, "agent": int(i), "type": kind, "life": life.setdefault(int(i), 1),
               "pos": [int(info.pos[i, 0]), int(info.pos[i, 1])], **extra}
         if hasattr(info, "below") and bool(np.asarray(info.below)[i]):
@@ -175,6 +177,8 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
         ps = [(p, why) for p, why in parents if p]
         ev["parents"] = [p for p, _ in ps]
         ev["because"] = [why for _, why in ps]
+        if not ps and own:
+            ev["because"] = [own]
         events.append(ev)
         mem[i] = ev["id"]
         A.setdefault(int(i), {})[kind] = (ev["id"], t)
@@ -278,7 +282,7 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
                     grabbed=any(bool(np.asarray(info.grabbed)[v]) for v in vs),
                     victim_down=any(bool(np.asarray(prev.off_balance)[v] > 0) or bool(np.asarray(info.downed)[v]) for v in vs)
                     if hasattr(prev, "off_balance") else False))
-            ev = emit(i, "strike_agent", answers, victims=victims, **tool(i), **aimed)
+            ev = emit(i, "strike_agent", answers, own="its own choice (no blow to answer)", victims=victims, **tool(i), **aimed)
             same_tick[(i, "strike_agent")] = ev["id"]
         elif code == E.OUT_RELEASE:
             ev = emit(i, "release", near=np.flatnonzero(gifts[i]).tolist())
@@ -329,7 +333,7 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
     for i in range(n):
         p_i = [int(info.pos[i, 0]), int(info.pos[i, 1])]
         if bool(info.fell[i]):
-            emit(i, "fall")
+            emit(i, "fall", own="the ground (a steep edge, or rough rock)")
         if bool(info.newly_infected[i]):
             ps = []
             if same_tick.get((i, "drink")):
@@ -341,7 +345,8 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
                     if j != i and pv.alive[j] and pv.infection[j] > 0 and _cheb(pv.pos[j], pv.pos[i]) <= 1:
                         ps.append((pid(A.get(j, {}).get("infected")), f"close contact with sick #{j}"))
             mosq = float(np.asarray(info.mosquitoes)[i]) if hasattr(info, "mosquitoes") else 0.0
-            emit(i, "infected", ps, **({"mosquitoes": round(mosq, 2)} if mosq > 0.2 else {}))
+            emit(i, "infected", ps, own="mosquitoes" if mosq > 0.2 else "it arose on its own (the base rate)",
+                 **({"mosquitoes": round(mosq, 2)} if mosq > 0.2 else {}))
         if bool(info.recovered[i]):
             emit(i, "recovered", [(pid(last(i, "infected")), "got over the illness")])
         if int(info.ignited[i]) > 0:
@@ -417,7 +422,9 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
                         if d and d[1] >= A[i]["born"][1]:
                             ps.append((d[0], "its mother's death (no milk)"))
                     extra = {"air": round(float(info.ambient_temp[i]), 1)} if why else {}
-                    emit(i, name, ps, **extra)
+                    own = {"starving": "not eating enough", "parched": "not drinking enough",
+                           "freezing": "the cold of the place and season", "overheating": "the heat of the place and season"}[name]
+                    emit(i, name, ps, own=own, **extra)
                     a[flag] = True
                 elif not bool(now):
                     a[flag] = False                         # out of danger: a new crossing is a new event
@@ -521,8 +528,16 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
             was_down = np.concatenate([was_down, np.zeros(len(now_down) - len(was_down), bool)])
         for i in np.flatnonzero(now_down & ~was_down):
             shock = st is not None and float(st.health[i]) >= cfg.downed_health and float(st.injury[i]) < cfg.downed_injury
+            if st is not None and float(st.health[i]) < cfg.downed_health:
+                own = f"weakness: health {float(st.health[i]):.2f}, under the standing line of {cfg.downed_health:g}"
+            elif st is not None and float(st.injury[i]) >= cfg.downed_injury:
+                own = "bleeding hard"
+            elif shock:
+                own = "pain shock"
+            else:
+                own = "knocked out"
             emit(i, "downed", [(pid(last(i, "struck_by_agent", "predator_attack", "hurt_by_prey", "fall", "stung",
-                                        within=max(2, int(round(2 * per))))), "the wound")],
+                                        within=max(2, int(round(2 * per))))), "the wound")], own=own,
                  **({"pain_shock": True} if shock else {}))
         for i in np.flatnonzero(was_down & ~now_down):
             if st is not None and bool(st.alive[i]):        # up again (not dead)

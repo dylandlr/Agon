@@ -214,7 +214,7 @@ class Narrator:
         if t == "downed":
             why = self.cause_text(e)
             self.down_since[k] = e["t"]
-            return f"{n} went down" + (f" from {why}" if why else ", too weak to stand") + "."
+            return f"{n} went down" + (f" from {why}" if why else "") + "."
         if t == "stood_up":
             since = self.down_since.pop(k, None)
             hrs = (e["t"] - since) / 2 if since is not None else None
@@ -227,6 +227,8 @@ class Narrator:
             why = self.cause_text(e).replace("the water it drank", "bad water")
             why = re.sub(r"sick #(\d+)", lambda m: "sick " + self.other(int(m.group(1))), why)
             self.sick_since[k] = e["t"]
+            if why.startswith("it arose"):
+                return f"{n} fell sick; the record names no source (it arose on its own)."
             return f"{n} fell sick" + (f" from {why}" if why else "") + "."
         if t == "recovered":
             since = self.sick_since.pop(k, None)
