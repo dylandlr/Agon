@@ -5,9 +5,9 @@
     python scripts/narrate.py DIR --from-day 30 --to-day 60 --agent 3
 
 Every sentence comes from an event in events.jsonl (lifesim/recorder.py) and the causes it
-carries. Routine (foraging, drinking, eating, sleeping, company) is told once per season as a
-summary; the notable (fights, sickness, animals, weather, hunger and cold, mating, births, deaths)
-is told day by day. People are named for reading, by slot and life (the names are not the
+carries, tick by tick: who gathered, drank, ate, slept, touched whom, and the notable (fights,
+sickness, animals, weather, hunger and cold, mating, births, deaths) with its causes. Nothing is
+left out; people doing the same thing at the same moment are named together. People are named for reading, by slot and life (the names are not the
 agents' own; their own naming, if any, is in summary.json): founders in the order of their slots,
 a later life in a slot gets the next unused name. Sex comes from lives.json when it is there.
 """
@@ -289,6 +289,50 @@ class Narrator:
             return f"What was left of {self.other(b)} was bones now." if b is not None else None
         return None
 
+    # ------------------------------------------------------------ routine, tick by tick
+    ROUTINE_VERB = {"drink": "drank", "eat": "ate", "fell_asleep": "lay down to sleep", "woken": "woke",
+                    "bedded": "bedded down on leaves", "release": "set down what {they} carried"}
+
+    def routine_clauses(self, evs) -> list[str]:
+        """The routine of one tick as clauses: people doing the same thing are named together."""
+        groups = collections.OrderedDict()
+        for e in evs:
+            t = e["type"]
+            if t == "gather":
+                what = e.get("plant") or e.get("what") or "food"
+                key = ("gather", {"dropped food": "picked up food others had dropped", "honey": "took honey",
+                                  "wood": "gathered dead wood", "leaves": "gathered leaves", "clay": "dug clay",
+                                  "nuts": "gathered nuts", "fruit": "picked fruit", "roots": "dug roots"}.get(what, f"gathered {what}"))
+            elif t == "touch":
+                key = ("touch", tuple(e.get("targets") or []))
+            elif t == "mated":
+                key = ("mated", e["t"])
+            else:
+                key = (t, None)
+            groups.setdefault(key, []).append(e)
+        out = []
+        for (t, extra), es in groups.items():
+            names = [self.who(e) for e in es]
+            if t == "mated":
+                if len(names) >= 2:
+                    out.append(f"{joined(names)} lay together")
+                continue
+            if t == "touch":
+                tg = joined(self.other(x) for x in extra) or "someone"
+                out.append(f"{joined(names)} reached out to {tg}")
+                continue
+            if t == "gather":
+                out.append(f"{joined(names)} {extra}")
+                continue
+            verb = self.ROUTINE_VERB.get(t, t)
+            if len(names) == 1:
+                k = es[0]["agent"]
+                verb = verb.format(they=self.people.he(k, es[0].get("life", 1)))
+            else:
+                verb = verb.format(they="they")
+            out.append(f"{joined(names)} {verb}")
+        return out
+
     # ------------------------------------------------------------ the story
     def story(self, from_day=None, to_day=None) -> str:
         P = self.people
@@ -300,8 +344,7 @@ class Narrator:
         say("")
         say(f"{len(founders)} of them at the start: {joined(founders)}. Names are for reading; the record calls them "
             + joined(f"#{s}" for s in self.founders) + ".")
-        say(f"From {first} to {last}.")
-        # group by season, then day
+        say(f"From {first} to {last}. Everything below is from the record, tick by tick (a tick is half an hour).")
         routine = {"gather", "drink", "eat", "fell_asleep", "bedded", "touch", "woken", "release", "mated"}
         seasons = collections.OrderedDict()
         for e in self.ev:
@@ -311,65 +354,49 @@ class Narrator:
                 continue
             if to_day is not None and day_index > to_day:
                 continue
-            seasons.setdefault((y, s), collections.OrderedDict()).setdefault(d, []).append(e)
+            seasons.setdefault((y, s), collections.OrderedDict()).setdefault(d, collections.OrderedDict()) \
+                .setdefault(e["t"], []).append(e)
         for (y, s), days in seasons.items():
             say("")
             say(f"YEAR {y}, {SEASONS[s].upper()}")
+            tally = collections.Counter()
+            for d, ticks in days.items():
+                say("")
+                say(f"Day {d}.")
+                for t, evs in ticks.items():
+                    hhmm = evs[0]["time"][-5:]
+                    notable = [ln for ln in (self.tell(e) for e in evs if e["type"] not in routine) if ln]
+                    rout = self.routine_clauses([e for e in evs if e["type"] in routine
+                                                 and (self.only is None or e["agent"] == self.only
+                                                      or self.only in (e.get("targets") or []))])
+                    for e in evs:
+                        tally[e["type"]] += 1
+                    if not notable and not rout:
+                        continue
+                    line = f"{hhmm}  "
+                    if rout:
+                        text = "; ".join(rout)
+                        line += text[0].upper() + text[1:] + "."
+                    if notable:
+                        line += (" " if rout else "") + " ".join(notable)
+                    say(line)
             say("")
-            # the season's routine, in one breath
-            rs = collections.Counter()
-            plants = collections.Counter()
-            mates = collections.Counter()
-            beds = set()
-            for d, evs in days.items():
-                for e in evs:
-                    if e["type"] in routine:
-                        rs[e["type"]] += 1
-                        if e["type"] == "gather":
-                            plants[{"dropped food": "food others had dropped"}.get(e.get("plant"), e.get("plant") or e.get("what") or "food")] += 1
-                        if e["type"] == "bedded":
-                            beds.add(e["agent"])
-                        if e["type"] == "mated":
-                            mates[(e["t"])] += 1
-            alive_now = [P.name(sl, self.lives.get(sl, 1)) for sl in self.founders if sl not in self.dead]
             bits = []
-            if rs["gather"]:
-                top = joined(k for k, _ in plants.most_common(3))
-                bits.append(f"they gathered {top} ({rs['gather']} times)")
-            if rs["drink"]:
-                bits.append(f"drank {rs['drink']} times")
-            if rs["eat"]:
-                bits.append(f"ate {rs['eat']} times")
-            if rs["fell_asleep"]:
-                bits.append(f"slept {rs['fell_asleep']} nights" + (f", {len(beds)} of them on bedding" if beds else ""))
-            if rs["touch"]:
-                bits.append(f"kept each other company ({rs['touch']} touches)")
-            pairs = sum(1 for v in mates.values() if v >= 2)
-            if pairs:
-                bits.append("lay together " + ("once" if pairs == 1 else f"{pairs} times"))
-            if bits:
-                say("The season's round: " + joined(bits) + ".")
-            # the days
-            quiet = 0
-            for d, evs in days.items():
-                lines = [ln for ln in (self.tell(e) for e in evs if e["type"] not in routine) if ln]
-                if not lines:
-                    quiet += 1
-                    continue
-                if quiet:
-                    say(f"({plural(quiet, 'quiet day')}.)")
-                    quiet = 0
-                say(f"Day {d}. " + " ".join(lines))
-            if quiet:
-                say(f"({plural(quiet, 'quiet day')} to the season's end.)")
-        # the end
+            if tally["gather"]:
+                bits.append(f"{tally['gather']} gatherings")
+            for k, w in (("drink", "drinks"), ("eat", "meals"), ("fell_asleep", "nights' sleep"), ("touch", "touches"),
+                         ("strike_agent", "blows struck"), ("infected", "infections"), ("predator_attack", "predator attacks"),
+                         ("death", "deaths")):
+                if tally[k]:
+                    bits.append(f"{tally[k]} {w}")
+            say(f"(The season in numbers: {joined(bits)}.)")
         say("")
         say("AFTER")
         say("")
         if self.dead:
-            tally = collections.Counter(c for c, _ in self.dead.values())
+            tal = collections.Counter(c for c, _ in self.dead.values())
             say("The dead: " + joined(f"{P.name(sl, self.lives.get(sl, 1))} ({c}, {tm})" for sl, (c, tm) in self.dead.items()) + ".")
-            say("By cause: " + joined(f"{c} {k}" for k, c in tally.most_common()) + ".")
+            say("By cause: " + joined(f"{c} {k}" for k, c in tal.most_common()) + ".")
         alive = [P.name(sl, self.lives.get(sl, 1)) for sl in self.founders if sl not in self.dead]
         say(("Still alive at the end: " + joined(alive) + ".") if alive else "No one was left.")
         return "\n".join(out)
