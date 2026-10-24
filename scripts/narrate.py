@@ -1,8 +1,15 @@
-"""A run's events as a story to read: story.txt from the recorder's own log, nothing invented.
+"""A run's events as a story to read: narrative.txt from the recorder's own log, nothing invented.
 
     python scripts/narrate.py runs/x/validate/caveman/continuous            # a continuous world
     python scripts/narrate.py runs/x/validate/caveman --out story.txt       # same (finds continuous/)
     python scripts/narrate.py DIR --from-day 30 --to-day 60 --agent 3
+    python scripts/narrate.py DIR --minds                  # every decision and thought, from minds.jsonl.gz
+
+With --minds (the continuous world writes minds.jsonl.gz unless --no-minds), each tick also gives,
+for every awake agent, the body it was in, the options it weighed with the policy's probabilities,
+what it chose and how likely it rated that, what the choice leaned on, and its ideas (the imagined
+future and what it expected of its body); the effect follows in the same tick's events. That is
+the whole trace: thought, decision, effect, cause.
 
 Every sentence comes from an event in events.jsonl (lifesim/recorder.py) and the causes it
 carries, tick by tick: who gathered, drank, ate, slept, touched whom, and the notable (fights,
@@ -38,6 +45,23 @@ def load_events(where: Path) -> list[dict]:
             with op(f, "rt") as fh:
                 return [json.loads(line) for line in fh if line.strip()]
     raise SystemExit(f"no events.jsonl in {where}")
+
+
+def load_minds(folder: Path):
+    """minds.jsonl.gz -> {t: {agent: record}}, or None when there is none."""
+    f = folder / "minds.jsonl.gz"
+    if not f.exists():
+        f = folder / "minds.jsonl"
+        if not f.exists():
+            return None
+    out = collections.defaultdict(dict)
+    op = gzip.open if f.suffix == ".gz" else open
+    with op(f, "rt") as fh:
+        for line in fh:
+            if line.strip():
+                r = json.loads(line)
+                out[r["t"]][r["agent"]] = r
+    return out
 
 
 def parse_time(stamp: str):
@@ -107,8 +131,9 @@ def plural(n, one, many=None):
 
 
 class Narrator:
-    def __init__(self, events, lives=None, only_agent=None):
+    def __init__(self, events, lives=None, only_agent=None, minds=None):
         self.ev = events
+        self.minds = minds
         self.by_id = {e["id"]: e for e in events}
         self.people = People(lives)
         self.only = only_agent
@@ -333,6 +358,31 @@ class Narrator:
             out.append(f"{joined(names)} {verb}")
         return out
 
+    def thought(self, r) -> str:
+        """One agent's decision this tick, as a line: the body, the options, the choice, the lean, the idea."""
+        k = r["agent"]
+        n = self.who({"agent": k, "life": self.lives.get(k, 1)})
+        b = r["body"]
+        state = f"food {b['food']:.2f} water {b['water']:.2f} energy {b['energy']:.2f} warmth {b['temp']:+.2f} health {b['health']:.2f}"
+        flags = [w for w, c in (("hungry", b["food"] < 0.3), ("thirsty", b["water"] < 0.3), ("tired", b["energy"] < 0.2),
+                                ("cold", b["temp"] <= -0.5), ("hot", b["temp"] >= 0.5), ("hurt", b["health"] < 0.4),
+                                ("in pain", b["pain"] > 0.5), ("stressed", b["stress"] > 0.7)) if c]
+        if r.get("asleep"):
+            return f"    {n} slept on ({state})."
+        opts = ", ".join(f"{a} {p:.0%}" for a, p in r.get("top", []))
+        p = r.get("p")
+        why = ", ".join(f"{g} {w:.0%}" for g, w in r.get("why", []))
+        line = f"    {n}" + (f", {' and '.join(flags)}," if flags else "") + f" ({state}) weighed {opts}; chose {r['action']}" \
+            + (f" ({p:.0%})" if p is not None else "") + f"; expected {r.get('value', 0):+.2f}"
+        if why:
+            line += f"; leaned on {why}"
+        idea = r.get("idea")
+        if idea:
+            exp = ", ".join(f"{k_} {v:+.2f}" for k_, v in idea.get("expects", {}).items()) or "no change"
+            line += f". Imagined: {idea['best']}" + (" (a new idea)" if idea.get("new") else "") \
+                + f", then {' > '.join(idea.get('plan', [])[1:4])}; expecting {exp}; trust {idea.get('trust', 0):+.3f}"
+        return line + "."
+
     # ------------------------------------------------------------ the story
     def story(self, from_day=None, to_day=None) -> str:
         P = self.people
@@ -347,15 +397,25 @@ class Narrator:
         say(f"From {first} to {last}. Everything below is from the record, tick by tick (a tick is half an hour).")
         routine = {"gather", "drink", "eat", "fell_asleep", "bedded", "touch", "woken", "release", "mated"}
         seasons = collections.OrderedDict()
-        for e in self.ev:
-            y, s, d, hhmm = parse_time(e["time"])
+        def place(stamp, t, e=None):
+            y, s, d, hhmm = parse_time(stamp)
             day_index = (y - 1) * 40 + s * 10 + d          # only for --from/--to; year length taken as 40 days
             if from_day is not None and day_index < from_day:
-                continue
+                return
             if to_day is not None and day_index > to_day:
-                continue
-            seasons.setdefault((y, s), collections.OrderedDict()).setdefault(d, collections.OrderedDict()) \
-                .setdefault(e["t"], []).append(e)
+                return
+            bucket = seasons.setdefault((y, s), collections.OrderedDict()).setdefault(d, collections.OrderedDict()) \
+                .setdefault(t, [])
+            if e is not None:
+                bucket.append(e)
+        for e in self.ev:
+            place(e["time"], e["t"], e)
+        if self.minds is not None:
+            for t, recs in self.minds.items():
+                place(next(iter(recs.values()))["time"], t)
+            for (y, s), days in seasons.items():
+                for d in days:
+                    days[d] = collections.OrderedDict(sorted(days[d].items()))
         for (y, s), days in seasons.items():
             say("")
             say(f"YEAR {y}, {SEASONS[s].upper()}")
@@ -364,14 +424,19 @@ class Narrator:
                 say("")
                 say(f"Day {d}.")
                 for t, evs in ticks.items():
-                    hhmm = evs[0]["time"][-5:]
+                    hhmm = (evs[0]["time"] if evs else next(iter(self.minds[t].values()))["time"])[-5:]
                     notable = [ln for ln in (self.tell(e) for e in evs if e["type"] not in routine) if ln]
                     rout = self.routine_clauses([e for e in evs if e["type"] in routine
                                                  and (self.only is None or e["agent"] == self.only
                                                       or self.only in (e.get("targets") or []))])
                     for e in evs:
                         tally[e["type"]] += 1
-                    if not notable and not rout:
+                    thoughts = []
+                    if self.minds is not None:
+                        for k, r in sorted(self.minds.get(t, {}).items()):
+                            if self.only is None or k == self.only:
+                                thoughts.append(self.thought(r))
+                    if not notable and not rout and not thoughts:
                         continue
                     line = f"{hhmm}  "
                     if rout:
@@ -379,7 +444,13 @@ class Narrator:
                         line += text[0].upper() + text[1:] + "."
                     if notable:
                         line += (" " if rout else "") + " ".join(notable)
-                    say(line)
+                    if thoughts:
+                        say(f"{hhmm}")
+                        out.extend(thoughts)
+                        if rout or notable:
+                            say("  -> " + line[7:])
+                    else:
+                        say(line)
             say("")
             bits = []
             if tally["gather"]:
@@ -405,17 +476,22 @@ class Narrator:
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("where", help="a run's continuous/ folder, the run folder, or an events.jsonl")
-    ap.add_argument("--out", default=None, help="write the story here (default: story.txt next to the events)")
+    ap.add_argument("--out", default=None, help="write the story here (default: narrative.txt next to the events, "
+                                                 "narrative_minds.txt with --minds; story.txt is causal_story's)")
     ap.add_argument("--from-day", type=int, default=None)
     ap.add_argument("--to-day", type=int, default=None)
     ap.add_argument("--agent", type=int, default=None, help="only what touches this slot")
+    ap.add_argument("--minds", action="store_true", help="every decision and thought too (needs minds.jsonl.gz)")
     args = ap.parse_args()
     where = Path(args.where)
     events = load_events(where)
     folder = (where / "continuous" if (where / "continuous").is_dir() else where) if where.is_dir() else where.parent
     lives = json.load(open(folder / "lives.json")) if (folder / "lives.json").exists() else None
-    text = Narrator(events, lives, args.agent).story(args.from_day, args.to_day)
-    out = Path(args.out) if args.out else folder / "story.txt"
+    minds = load_minds(folder) if args.minds else None
+    if args.minds and minds is None:
+        raise SystemExit(f"no minds.jsonl.gz in {folder}: run the continuous world without --no-minds")
+    text = Narrator(events, lives, args.agent, minds).story(args.from_day, args.to_day)
+    out = Path(args.out) if args.out else folder / ("narrative_minds.txt" if args.minds else "narrative.txt")
     out.write_text(text)
     print(text)
     print(f"\nwrote {out}")

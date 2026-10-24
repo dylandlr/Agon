@@ -434,6 +434,10 @@ def main():
     ap.add_argument("--seed", type=int, default=21)
     ap.add_argument("--out-dir", default=None)
     ap.add_argument("--no-playback", action="store_true", help="summaries only")
+    ap.add_argument("--no-minds", action="store_true",
+                    help="skip minds.jsonl.gz: by default every decision of every agent every tick is written there "
+                         "(the body it was in, the options and their probabilities, what it leaned on, its ideas), "
+                         "recorded chunk or not; scripts/narrate.py --minds reads it")
     ap.add_argument("--playback-every", type=int, default=1, help="write a playback page for every k-th chunk")
     ap.add_argument("--playback-days", type=float, default=None,
                     help="days of each recorded chunk kept in its playback (default: all of it at 30-minute "
@@ -575,6 +579,7 @@ def main():
         lives.start(int(i), 0, state, 0)
     summaries, last_event, births_log = [], {}, []
     event_log = gzip.open(out_dir / "events.jsonl.gz", "wt")       # scripts/causal_story.py reads it
+    mind_log = None if args.no_minds else gzip.open(out_dir / "minds.jsonl.gz", "wt")   # scripts/narrate.py --minds
     buf, buf_carry, reset_next = [], carry, np.ones(n, bool)
     trace = None if args.no_trace else Trace(env_cfg)
     memory = learner.empty_memory(1, E.obs_dim(env_cfg)) if args.learn else None
@@ -653,13 +658,30 @@ def main():
             obs, mask = observe(state)
             key, k = jax.random.split(key)
             rec_now = record and (t - t0) < pb_ticks
-            if rec_now:
+            if rec_now or mind_log is not None:
                 carry, a, msg, probs, value, why, ideas = think(params, carry, obs, mask, jnp.asarray(t == 0), k)
                 chosen_p = np.asarray(probs)[np.arange(n), np.asarray(a)]
             else:
                 carry, a, msg, chosen_p = policy(params, carry, obs, mask, jnp.asarray(t == 0), k)
             prev = state
             state, reward, _, info = step(state, a, msg)
+            if mind_log is not None:
+                # every decision, with the body it was made in (the state before the act) and what followed
+                minds_now = mind_records(probs, value, why, reward, info.moral_reward, ideas, a)
+                stamp = E.clock(t, env_cfg)["stamp"]
+                pv = {k_: np.asarray(getattr(prev, k_)) for k_ in ("alive", "asleep", "satiety", "hydration", "energy",
+                                                                  "health", "body_temp", "stress", "sleepiness", "pain", "pos")}
+                an = np.asarray(a)
+                for i in range(n):
+                    if not pv["alive"][i]:
+                        continue
+                    rec = {"t": t, "time": stamp, "agent": i, "pos": pv["pos"][i].tolist(), "asleep": bool(pv["asleep"][i]),
+                           "body": {"food": round(float(pv["satiety"][i]), 3), "water": round(float(pv["hydration"][i]), 3),
+                                    "energy": round(float(pv["energy"][i]), 3), "health": round(float(pv["health"][i]), 3),
+                                    "temp": round(float(pv["body_temp"][i]), 3), "stress": round(float(pv["stress"][i]), 3),
+                                    "sleepiness": round(float(pv["sleepiness"][i]), 3), "pain": round(float(pv["pain"][i]), 3)},
+                           "action": E.ACTION_NAMES[int(an[i])], **minds_now[i]}
+                    mind_log.write(json.dumps(rec, separators=(",", ":")) + "\n")
             if args.learn:
                 r = reward if not hist.get("alpha") else (1 - hist["alpha"]) * reward + hist["alpha"] * reward.mean()
                 col = lambda x: jnp.asarray(x)[:, None]
@@ -778,6 +800,8 @@ def main():
         while can_grow and G.free_slots(state) < room():
             grow_world()
     event_log.close()
+    if mind_log is not None:
+        mind_log.close()
     # the whole run as cause-and-effect stories (scripts/causal_story.py)
     from causal_story import load_events, tell
     lines, summary, n_stories = tell(load_events(out_dir / "events.jsonl.gz"), day_length=env_cfg.day_length)
