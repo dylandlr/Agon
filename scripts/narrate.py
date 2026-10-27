@@ -245,16 +245,18 @@ class Narrator:
         if t == "weather":
             w = e.get("weather")
             self.weather = w
+            why = self.cause_text(e)
+            tail = f" ({why})" if why else ""
             if w == "cold_snap":
                 self.snap_since = e["t"]
-                return "A cold snap set in."
+                return f"A cold snap set in{tail}."
             if w == "heat_wave":
-                return "A heat wave began."
+                return f"A heat wave began{tail}."
             if w == "drought":
-                return "The rains failed: drought."
+                return f"The rains failed: drought{tail}."
             if w == "clear":
-                return "The weather broke and cleared."
-            return f"The weather turned: {w}."
+                return f"The weather broke and cleared{tail}."
+            return f"The weather turned: {w}{tail}."
         if t == "freezing":
             air = e.get("air")
             why = self.cause_text(e)

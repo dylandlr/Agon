@@ -2378,7 +2378,8 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     change = timer <= 0
     clim = climate_offset(state.t, state.climate, cfg)
     warm = jnp.maximum(clim, 0.0) / max(cfg.climate_amp, 1e-6) if cfg.climate_cycle_years > 0 else 0.0
-    extreme = jax.random.uniform(keys[1]) < cfg.climate_volatility * (1 + 0.5 * warm)   # warm phases: more extremes
+    p_extreme = cfg.climate_volatility * (1 + 0.5 * warm)
+    extreme = jax.random.uniform(keys[1]) < p_extreme                                   # warm phases: more extremes
     # Which extremes are possible depends on the season
     extreme_w = jnp.array([[0.0, 0.0, 0.5, 0.5, 0.0],   # spring: drought, cold
                            [0.0, 0.0, 0.5, 0.0, 0.5],   # summer: drought, heat
@@ -2391,6 +2392,10 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     dur = jax.random.randint(keys[3], (), cfg.spell_min, cfg.spell_max)
     timer = jnp.where(change, dur, timer).astype(jnp.int32)
     weather_changed = change & (weather != state.weather)
+    # the world's own roll, for the ledger: when a spell ended, the chance of an extreme (and which were
+    # possible this season, with their shares) against a mild spell; the new spell's length
+    world_odds = {"spell_ended": change, "p_extreme": jnp.asarray(p_extreme, jnp.float32), "was_extreme": extreme,
+                  "weather_shares": probs, "spell_ticks": dur.astype(jnp.int32)}
     if cfg.dynamic_weather:
         clouds, snow, wind, raining, storms = update_weather(state, weather, season, jax.random.fold_in(keys[2], 51), cfg)
     else:
@@ -3513,6 +3518,7 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         strike_cell = jnp.stack([idx_s // g, idx_s % g])
         storm = jnp.any(storms)
     bolt = storm & (jax.random.uniform(k_fire[2]) < cfg.lightning_prob)
+    world_odds.update(storm=storm, p_lightning=jnp.where(storm, cfg.lightning_prob, 0.0))
     bolt_grid = jnp.zeros((g, g)).at[strike_cell[0], strike_cell[1]].set(bolt.astype(jnp.float32))
     p_spread = 1 - (1 - cfg.spread_prob * dryness) ** _neighbor_count(burning0)
     spread = jax.random.uniform(k_fire[3], (g, g)) < p_spread
@@ -4026,7 +4032,7 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         aim=jnp.where(hit_agent | hit_pred | hit_large | hit_small, aim, -1), blow_landed=blow_landed & hit_agent,
         how=jnp.where(is_strike, how, -1), shoved=tech["shoved"], thrown=tech["thrown"], grabbed=tech["grabbed"],
         pinned=pinned, same_sex_mated=same_sex_mated, tamed=tamed.astype(jnp.int32), crowded=crowded,
-        odds={**odds, "fall_p": jnp.where(moving, p_fall, 0.0), "fall_draw": u_fall, **fall_odds, **pred_odds,
+        odds={**odds, **world_odds, "fall_p": jnp.where(moving, p_fall, 0.0), "fall_draw": u_fall, **fall_odds, **pred_odds,
               **(con_odds if cfg.reproduction else {"conceive_p": jnp.zeros(n), "conceive_draw": jnp.zeros(n),
                                                     "conceive_block": jnp.zeros(n, jnp.int32)})})
     return next_state, reward, done, info

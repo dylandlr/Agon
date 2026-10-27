@@ -196,13 +196,26 @@ def extract_events(info: E.StepInfo, actions: np.ndarray, prev_last_event: dict,
     def pid(e):
         return e[0] if e else None
 
+    WO = {k: np.asarray(v) for k, v in info.odds.items()} if hasattr(info, "odds") and isinstance(info.odds, dict) else {}
     if bool(info.lightning):
-        ev = {"id": f"{t}:world:lightning", "t": t, "agent": -1, "type": "lightning_fire", "parents": [], "because": []}
+        ev = {"id": f"{t}:world:lightning", "t": t, "agent": -1, "type": "lightning_fire", "parents": [],
+              "because": [f"a storm; P(lightning) = {float(WO['p_lightning']):.1%} each tick of it"] if "p_lightning" in WO else []}
+        if "p_lightning" in WO:
+            ev["chance"] = round(float(WO["p_lightning"]), 4)
         events.append(ev)
         mem.setdefault("fires", []).append((ev["id"], t, None))
     if bool(info.weather_changed):
         ev = {"id": f"{t}:world:weather", "t": t, "agent": -1, "type": "weather",
               "weather": E.WEATHER_NAMES[int(info.weather)], "parents": [], "because": []}
+        if "p_extreme" in WO:
+            # the spell ended; an extreme or a mild spell was rolled, then which one by the season's shares
+            shares = {E.WEATHER_NAMES[k]: round(float(v), 2) for k, v in enumerate(WO["weather_shares"]) if float(v) > 0}
+            px = float(WO["p_extreme"])
+            ev.update(chance_extreme=round(px, 4), was_extreme=bool(WO["was_extreme"]), shares=shares,
+                      spell_ticks=int(WO["spell_ticks"]))
+            ev["because"] = [f"the spell ended; P(an extreme) = {px:.1%}, {'an extreme' if bool(WO['was_extreme']) else 'a mild spell'} "
+                             f"was rolled, then " + ", ".join(f"{k} {v:.0%}" for k, v in shares.items())
+                             + f"; this spell {int(WO['spell_ticks'])} ticks"]
         events.append(ev)
         mem["weather"] = (ev["id"], t, E.WEATHER_NAMES[int(info.weather)])
 
