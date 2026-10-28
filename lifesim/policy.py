@@ -6,7 +6,7 @@ owns its own copy of these parameters, stacked and vmapped.
 World model (world_model=True). The GRU state h is the agent's belief about its situation. A
 small dynamics network predicts the next belief from the current one and an action,
 h' ~ dyn(h, a); heads read a belief as the reward it expects and as its own needs (food, water,
-energy, health, warmth, stress, sleepiness). All of it is learned from the agent's own experience
+energy, health, warmth, stress, sleepiness, pain). All of it is learned from the agent's own experience
 (see ppo_multi: world-model loss), so it can only imagine what its own life has taught it.
 
 Ideas. At each decision the agent takes its few most likely actions and, for each, imagines a
@@ -27,8 +27,8 @@ import jax.numpy as jnp
 
 MASK_VALUE = -1e9
 # own-state features the world model decodes (indices into the body vector after the window)
-DECODE_NAMES = ["food", "water", "energy", "health", "body temperature", "stress", "sleepiness"]
-DECODE_INDEX = [0, 1, 2, 3, 5, 9, 19]
+DECODE_NAMES = ["food", "water", "energy", "health", "body temperature", "stress", "sleepiness", "pain"]
+DECODE_INDEX = [0, 1, 2, 3, 5, 9, 19, 23]
 
 
 class ScannedGRU(nn.Module):
@@ -86,11 +86,21 @@ class ActorCritic(nn.Module):
     view_size: int = 11
     channels: int = 11
     conv_impl: str = "patch"
-    msg_out: int = 0          # extra logits for the message channel (MSG_LEN x VOCAB), 0 = none
+    msg_out: int = 0          # logits for the symbols said and written (OUT_TOKENS x VOCAB), 0 = none
+    aim_out: int = 0          # logits for how a strike is delivered (env.N_HOW: part x limb x mode), 0 = none
+    # Where speech and writing branch off (Lowe et al. 2019: sharing the layers that pick the action
+    # makes messages look meaningful when they are not): "branch" their own hidden layer on the shared
+    # trunk; "stopgrad" the same, but their learning does not shape the trunk; "separate" their own
+    # small network from the raw observation (a control: no memory, no shared features).
+    msg_net: str = "branch"
     world_model: bool = False
     imagine_k: int = 6        # actions considered per decision
     imagine_h: int = 6        # ticks imagined for each
     imagine_gamma: float = 0.97
+    # The own-state head predicts the CHANGE in each need over the next tick, times this (a tick's
+    # change is a few hundredths: scaled up so what an action does is the whole signal, not a sliver
+    # of the level, which the belief already holds). Levels come back as now + the summed changes.
+    own_scale: float = 10.0
 
     def setup(self):
         if self.encoder == "conv":
@@ -104,13 +114,18 @@ class ActorCritic(nn.Module):
         self.mid_dense = nn.Dense(self.hidden)
         self.gru = ScannedGRU()
 
-        def head_bias(key, shape, dtype=jnp.float32):
-            # Start mostly silent: favour symbol 0 in the first message slot (~9% speech)
-            b = jnp.zeros(shape, dtype)
-            return b.at[self.n_actions].set(5.0) if self.msg_out else b
+        def silence_bias(key, shape, dtype=jnp.float32):
+            # Start mostly silent: favour symbol 0 in the first slot said. With 31 others at 0,
+            # a bias b gives speech 31 / (e^b + 31): 5.75 is ~9% (5.0 gave ~17%).
+            return jnp.zeros(shape, dtype).at[0].set(5.75)
         self.pol_hidden = nn.Dense(self.hidden)
-        self.pol_out = nn.Dense(self.n_actions + self.msg_out, kernel_init=nn.initializers.orthogonal(0.01),
-                                bias_init=head_bias)
+        self.pol_out = nn.Dense(self.n_actions + self.aim_out, kernel_init=nn.initializers.orthogonal(0.01))
+        if self.msg_out:
+            if self.msg_net == "separate":
+                self.msg_in = nn.Dense(self.hidden)
+            self.msg_hidden = nn.Dense(self.hidden)
+            self.msg_head = nn.Dense(self.msg_out, kernel_init=nn.initializers.orthogonal(0.01),
+                                     bias_init=silence_bias)
         self.val_hidden = nn.Dense(self.hidden)
         self.val_out = nn.Dense(1, kernel_init=nn.initializers.orthogonal(1.0))
         if self.world_model:
@@ -138,8 +153,22 @@ class ActorCritic(nn.Module):
             h = nn.relu(self.in_dense(obs))
         return nn.relu(self.mid_dense(h))
 
-    def policy_logits(self, h):
+    def action_logits(self, h):
+        """Logits of the action and of how a strike is delivered (part, limb, mode: env.how_parts)."""
         return self.pol_out(nn.relu(self.pol_hidden(h)))
+
+    def msg_logits(self, h, obs):
+        if self.msg_net == "separate":
+            x = nn.relu(self.msg_in(obs))
+        elif self.msg_net == "stopgrad":
+            x = jax.lax.stop_gradient(h)
+        else:
+            x = h
+        return self.msg_head(nn.relu(self.msg_hidden(x)))
+
+    def policy_logits(self, h, obs=None):
+        a = self.action_logits(h)
+        return jnp.concatenate([a, self.msg_logits(h, obs)], axis=-1) if self.msg_out else a
 
     def value_of(self, h):
         return self.val_out(nn.relu(self.val_hidden(h))).squeeze(-1)
@@ -153,12 +182,13 @@ class ActorCritic(nn.Module):
         return self.rew_out(nn.relu(self.rew_hidden(h))).squeeze(-1)
 
     def decode(self, h):
+        """The change in each need (DECODE_NAMES) expected over the next tick, times own_scale."""
         return self.dec_out(nn.relu(self.dec_hidden(h)))
 
     def habit(self, z, mask_a):
         """The action its habits would take in an imagined situation, among actions possible now
         (the model does not predict what will be possible, so today's options stand in)."""
-        return jnp.argmax(jnp.where(mask_a, self.policy_logits(z)[..., :self.n_actions], MASK_VALUE), axis=-1)
+        return jnp.argmax(jnp.where(mask_a, self.action_logits(z)[..., :self.n_actions], MASK_VALUE), axis=-1)
 
     def imagine(self, h, logits_masked, mask):
         """Imagined return of each of the k most likely valid actions: (cand (..., k), q (..., k))."""
@@ -181,16 +211,22 @@ class ActorCritic(nn.Module):
         and (with a world model) candidates and their imagined returns."""
         obs, resets, mask = x
         carry, h = self.gru(carry, (self.encode(obs), resets))
-        prior = jnp.where(mask, self.policy_logits(h), MASK_VALUE)
+        prior = jnp.where(mask, self.policy_logits(h, obs), MASK_VALUE)
         out = {"h": h, "prior": prior, "value": self.value_of(h)}
         logits = prior
         if self.world_model:
             cand, q = self.imagine(h, prior, mask)
             q = jax.lax.stop_gradient(q)                       # ideas are trained by the model loss only
             ok = jnp.take_along_axis(mask[..., :self.n_actions], cand, -1)   # fewer valid actions than k
-            mean = (q * ok).sum(-1, keepdims=True) / jnp.maximum(ok.sum(-1, keepdims=True), 1)
-            bias = self.trust * (q - mean) * ok
-            full = jnp.sum(jax.nn.one_hot(cand, self.n_actions + self.msg_out) * bias[..., None], axis=-2)
+            nok = jnp.maximum(ok.sum(-1, keepdims=True), 1)
+            mean = (q * ok).sum(-1, keepdims=True) / nok
+            # Standardised over the candidates: imagined returns differ by hundredths (a few ticks of
+            # a slowly changing life), so raw differences would need an enormous trust to move a
+            # logit, and trust's own gradient would be as small. Scaled, trust 1 means "one standard
+            # idea's worth of logit".
+            std = jnp.sqrt((((q - mean) ** 2) * ok).sum(-1, keepdims=True) / nok) + 1e-3
+            bias = self.trust * (q - mean) / std * ok
+            full = jnp.sum(jax.nn.one_hot(cand, self.n_actions + self.aim_out + self.msg_out) * bias[..., None], axis=-2)
             logits = jnp.where(mask, prior + full, MASK_VALUE)
             out.update(cand=cand, q=q)
             if self.is_initializing():
@@ -227,20 +263,26 @@ class ActorCritic(nn.Module):
         return. For the playback's Ideas view."""
         carry, out = self.trace(carry, x)
         z, a = out["h"], first_action
+        n_win = self.view_size ** 2 * self.channels
+        now = x[0][..., jnp.asarray(DECODE_INDEX) + n_win]           # the needs as observed now
+        level = now
         acts, states, rewards = [], [], []
         for _ in range(self.imagine_h):
             acts.append(a)
             z = self.dyn(z, a)
-            states.append(self.decode(z))
+            level = level + self.decode(z) / self.own_scale          # the level expected after this step
+            states.append(level)
             rewards.append(self.reward_of(z))
             a = self.habit(z, x[2][..., :self.n_actions])
-        return jnp.stack(acts, -1), jnp.stack(states, -2), jnp.stack(rewards, -1), self.decode(out["h"])
+        return jnp.stack(acts, -1), jnp.stack(states, -2), jnp.stack(rewards, -1), now
 
 
 def make_network(env_cfg, hidden: int = 128, encoder: str = "conv",
-                 conv_impl: str = "auto", messages: bool = False, world_model: bool = False) -> ActorCritic:
-    """messages=True adds MSG_LEN x VOCAB logits after the action logits; the mask
-    passed in must then cover them too (all True). conv_impl "auto" picks native convolutions
+                 conv_impl: str = "auto", messages: bool = False, world_model: bool = False,
+                 msg_net: str = "branch") -> ActorCritic:
+    """messages=True adds the aim and the symbols said and written after the action logits
+    (env.EXTRA_LOGITS; split_logits, sample_outputs); the mask passed in must then cover them too
+    (all True). conv_impl "auto" picks native convolutions
     on GPU/TPU and the patch path on CPU. world_model=True adds the dynamics, reward and
     own-state heads and imagination (see the module docstring)."""
     from . import env as E
@@ -249,4 +291,20 @@ def make_network(env_cfg, hidden: int = 128, encoder: str = "conv",
     return ActorCritic(n_actions=E.N_ACTIONS, hidden=hidden, encoder=encoder,
                        view_size=env_cfg.view_size, channels=E.N_OBS_CHANNELS,
                        conv_impl=conv_impl,
-                       msg_out=E.MSG_LEN * E.VOCAB if messages else 0, world_model=world_model)
+                       msg_out=E.OUT_LOGITS if messages else 0, aim_out=E.N_HOW if messages else 0,
+                       msg_net=msg_net, world_model=world_model)
+
+
+def split_logits(logits):
+    """(action (..., N_ACTIONS), how (..., N_HOW), symbols (..., OUT_TOKENS, VOCAB))."""
+    from . import env as E
+    A, K = E.N_ACTIONS, E.N_HOW
+    return logits[..., :A], logits[..., A:A + K], logits[..., A + K:].reshape(logits.shape[:-1] + (E.OUT_TOKENS, E.VOCAB))
+
+
+def sample_outputs(key, logits):
+    """An action and the packed rest, [said..., written..., aim] (env.OUT_SLOTS ints)."""
+    act, aim, sym = split_logits(logits)
+    ka, kb, kc = jax.random.split(key, 3)
+    out = jnp.concatenate([jax.random.categorical(kc, sym), jax.random.categorical(kb, aim)[..., None]], axis=-1)
+    return jax.random.categorical(ka, act), out

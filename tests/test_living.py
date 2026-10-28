@@ -65,7 +65,9 @@ def test_grazers_eat_the_ground_and_starve_without_it():
 
 
 def test_a_kill_sates_a_predator_and_hunger_weakens_it():
-    cfg = _calm(living_world(EnvConfig(grid_size=16, n_agents=1), downed=False))
+    # what a kill does, not how often one lands: no dozing, no hunting penalty on the odds
+    cfg = dataclasses.replace(_calm(living_world(EnvConfig(grid_size=16, n_agents=1), downed=False)),
+                              animal_sleep=0.0, hunt_kill_scale=1.0)
     s = E.reset(jax.random.PRNGKey(2), cfg)
     wolf, rabbit = fa.IDX["wolf"], fa.IDX["rabbit"]
     cell = jnp.array(np.argwhere(np.asarray(s.terrain) == E.GRASS)[0], jnp.int32)

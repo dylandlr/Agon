@@ -152,7 +152,7 @@ def _neighbor_pair(terrain):
 
 
 def test_large_prey_reward_teamwork_more_than_solo_effort():
-    cfg, s, _ = _quiet_world(n=2)
+    cfg, s, _ = _quiet_world(n=2, blow_luck=0.0, glancing_prob=0.0)   # one draw: no luck in it
     west, mid, east = _neighbor_pair(s.terrain)
     s = s._replace(genotype=s.genotype._replace(strength=jnp.ones(2)),
                    pos=jnp.asarray([west, east], jnp.int32))
@@ -167,7 +167,7 @@ def test_large_prey_reward_teamwork_more_than_solo_effort():
 
 
 def test_small_prey_kill_drops_meat_and_credits_hunter():
-    cfg, s, _ = _quiet_world(n=1)
+    cfg, s, _ = _quiet_world(n=1, blow_luck=0.0, glancing_prob=0.0, body_parts=False)   # one sure, plain blow
     west, mid, _ = _neighbor_pair(s.terrain)
     s = s._replace(pos=jnp.asarray([west], jnp.int32),
                    genotype=s.genotype._replace(strength=jnp.ones(1)))
@@ -339,7 +339,7 @@ def test_messages_are_heard_by_nearby_listeners_next_tick():
     cfg, s, _ = _quiet_world(n=2)
     west, mid, _ = _neighbor_pair(s.terrain)
     s = s._replace(pos=jnp.asarray([west, mid], jnp.int32))
-    msgs = jnp.array([[3, 0, 7], [0, 0, 0]])
+    msgs = jnp.zeros((2, E.MSG_LEN), jnp.int32).at[0, 0].set(3).at[0, 2].set(7)
     s2, _, _, info = E.step(s, jnp.array([E.REST, E.REST]), cfg, msgs)
     assert bool(info.spoke[0]) and not bool(info.spoke[1])
     obs = np.asarray(E.observe(s2, cfg))
@@ -347,11 +347,12 @@ def test_messages_are_heard_by_nearby_listeners_next_tick():
     win = obs[1, :v * v * c].reshape(v, v, c)
     spoke_ch = c - E.N_SOCIAL_FEATURES + E.N_MEM + E.N_APPEARANCE   # memory, appearance, then the spoke flag
     assert win[r, r - 1, spoke_ch] == 1.0                    # the speaker's cell shows it spoke
-    heard = obs[1, v * v * c + E.N_BODY_FEATURES - E.HEARD_FEATURES: v * v * c + E.N_BODY_FEATURES - E.HEARD_FEATURES + E.HEARD_FEATURES]
+    h0 = v * v * c + E.N_BODY_FEATURES - E.READ_FEATURES - E.HEARD_FEATURES   # heard, then what one reads
+    heard = obs[1, h0:h0 + E.HEARD_FEATURES]
     slot = heard[: E.MSG_LEN * E.VOCAB].reshape(E.MSG_LEN, E.VOCAB)
-    assert slot[0, 3] == 1 and slot[1, 0] == 1 and slot[2, 7] == 1 and slot.sum() == 3
+    assert slot[0, 3] == 1 and slot[1, 0] == 1 and slot[2, 7] == 1 and slot.sum() == E.MSG_LEN
     np.testing.assert_allclose(heard[E.MSG_LEN * E.VOCAB: E.MSG_LEN * E.VOCAB + 2], [0.0, -1.0 / r])
-    assert obs[0, v * v * c + E.N_BODY_FEATURES - E.HEARD_FEATURES: v * v * c + E.N_BODY_FEATURES - E.HEARD_FEATURES + E.HEARD_FEATURES].sum() == 0  # silent partner
+    assert obs[0, h0:h0 + E.HEARD_FEATURES].sum() == 0  # silent partner
     # Speaking costs a little energy
     quiet, *_ = E.step(s, jnp.array([E.REST, E.REST]), cfg)
     assert float(s2.energy[0]) < float(quiet.energy[0])
@@ -773,8 +774,10 @@ def test_survival_mode_pays_nothing_for_acts():
     assert np.isclose(float(r_touch[1]), float(r_other[1]), atol=1e-6)      # touched: nothing extra
 
 
-def test_survival_mode_cannot_be_farmed_by_juggling_food():
+def _juggle(effort_costs=True):
+    import dataclasses
     cfg, s = _survival_world(empathy=[1.0, 1.0], reciprocity=[1.0, 1.0])
+    cfg = dataclasses.replace(cfg, activity_needs=effort_costs and cfg.activity_needs)
     west, mid, _ = _neighbor_pair(s.terrain)
     s = s._replace(pos=jnp.asarray([west, west], jnp.int32), plants=jnp.zeros_like(s.plants),
                    meat=jnp.zeros_like(s.meat), memory=s.memory.at[:, :, E.MEM_GAVE_NEAR_ME].set(2.0),
@@ -795,9 +798,17 @@ def test_survival_mode_cannot_be_farmed_by_juggling_food():
             a = a[::-1]
         s, r, _, _ = step(s, jnp.array(a))
         idle += g ** k * float(r.sum())
-    # Felt changes telescope, so the return depends only on how well off agents end up. Bodies end
-    # the same either way, so passing the same food back and forth earns nothing extra.
+    return juggle, idle
+
+
+def test_survival_mode_cannot_be_farmed_by_juggling_food():
+    # Felt changes telescope, so the return depends only on how well off agents end up: passing the
+    # same food back and forth earns nothing extra. With effort free, exactly nothing; with
+    # activity_needs it costs a little (grasping and releasing is work, holding is rest).
+    juggle, idle = _juggle(effort_costs=False)
     assert abs(juggle - idle) < 1e-3
+    juggle, idle = _juggle(effort_costs=True)
+    assert juggle < idle + 1e-3
 
 
 def test_survival_mode_feels_body_needs_and_others_fates():
@@ -930,7 +941,7 @@ def test_a_death_is_felt_on_seeing_the_body():
     assert float(info.moral_reward[0]) < -cfg.care_empathy * cfg.death_penalty   # grief on finding the body
     v, r, c = cfg.view_size, cfg.view_radius, E.N_OBS_CHANNELS
     win = np.asarray(obs_before[0, :v * v * c]).reshape(v, v, c)
-    assert win[..., E.CH_BODIES].sum() == 1.0                      # and the body is visible
+    assert 0.99 < win[..., E.CH_BODIES].sum() <= 1.0              # and the body is visible (fresh: barely begun to rot)
     s, _, _, info = step(s)
     assert abs(float(info.moral_reward[0])) < 1e-6                      # felt once, not every tick
 

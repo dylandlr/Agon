@@ -128,3 +128,23 @@ def test_seek_shelter_walks_to_a_remembered_forest_and_rests_there():
     blind = s._replace(mind_map=jnp.zeros_like(s.mind_map))
     _, _, _, info = step(blind)
     assert int(info.skill[0]) == 4
+
+
+def test_seek_food_leaves_a_thinned_patch_for_a_better_known_one():
+    """Charnov's marginal value theorem (cfg.patch_leave): a patch much poorer than the average one
+    knows is left, not grazed to the bone; with patch_leave=0 the old skill stays and gathers."""
+    import dataclasses
+    s = _world()
+    r, c = map(int, np.asarray(s.pos[0]))
+    far = (r, c + 5) if c + 5 < CFG.grid_size else (r, c - 5)
+    thin = 0.15 * CFG.plant_max                                     # above the 10% floor, far below average
+    plants = s.plants.at[r, c].set(thin).at[far].set(0.9 * CFG.plant_max)
+    mm = jnp.zeros_like(s.mind_map).at[0, r, c, 1].set(thin / CFG.plant_max).at[0, far[0], far[1], 1].set(0.9) \
+        .at[0, r, c, 2].set(1.0).at[0, far[0], far[1], 2].set(1.0)
+    s = s._replace(plants=plants, mind_map=mm, satiety=jnp.full(2, 0.4), hand=jnp.full(2, E.PLANT, jnp.int32),
+                   inv=jnp.zeros_like(s.inv))
+    _, _, _, info = E.step(s, jnp.array([E.SEEK_FOOD, E.REST]), CFG)
+    assert E.OUTCOME_NAMES[int(info.outcome[0])] == "move"
+    old = dataclasses.replace(CFG, patch_leave=0.0)
+    _, _, _, info = E.step(s, jnp.array([E.SEEK_FOOD, E.REST]), old)
+    assert E.OUTCOME_NAMES[int(info.outcome[0])] == "gather"

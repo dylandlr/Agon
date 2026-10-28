@@ -220,9 +220,21 @@ def test_experiment_conditions():
     spec.loader.exec_module(ex)
     core = ex.items("core")
     assert len(core) == 18 and len({n for n, _ in core}) == 18
-    assert [n for n, _ in ex.items("validate")] == ["caveman", "caveman_no_sleep_learning", "blank",
-                                                    "caveman_no_world_model"]
+    assert [n for n, _ in ex.items("validate")] == [
+        "caveman", "caveman_entropy_floor", "caveman_no_retention", "caveman_shared_trunk", "caveman_no_world_model",
+        "caveman_no_sleep_learning", "blank", "caveman_entropy_floor_high", "caveman_floor_no_retention"]
     inh = ex.items("inheritance")
     assert len(inh) == 6 and {e[0] for _, e in inh} == {"parent", "innate"}
     from lifesim.presets import PRESETS
     assert PRESETS["society"]["world_model"] and PRESETS["tribe"]["agents"] == 64
+
+
+def test_presets_age_people_no_faster_than_a_year_per_40_days():
+    """Biological years last at least 40 days in every preset, and a training episode is long
+    enough for a child born early in it to reach adulthood (15 years of age)."""
+    from lifesim.presets import PRESETS
+    for name, p in PRESETS.items():
+        bio, cal = p.get("days_per_bio_year", 1.0), p.get("days_per_year", 40)
+        assert bio >= 40, name
+        if name != "realtime":                      # realtime: one generation only, by design
+            assert p["episode_years"] * cal >= 15 * bio + 100, name

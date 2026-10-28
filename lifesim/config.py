@@ -98,9 +98,15 @@ class EnvConfig:
     max_age: int = 20000
     senescence_start: float = 0.6   # (unused since the body model; kept for old configs)
 
-    # Body. Biological age runs on its own clock: max_age ticks = max_bio_years,
+    # Body. Biological age runs on its own clock: max_age ticks = max_bio_years (a scale, not a
+    # limit: see senescence_rate),
     # so one biological year is ~286 ticks (~6 simulated days) by default.
-    max_bio_years: float = 70.0
+    max_bio_years: float = 70.0     # the most likely age of death from senescence (not a limit)
+    # Senescence: a Gompertz hazard b exp(b (age - max_bio_years)) a biological year. b 0.085 doubles
+    # the risk about every 8 years, the range fitted to hunter-gatherers (Gurven & Kaplan 2007, whose
+    # modal age of adult death is about 72). From senescence alone about 1 in 800 die a year at 20,
+    # 1 in 100 at 45, 1 in 12 at 70; about 84% of 15-year-olds reach 50, and half live past 66.
+    senescence_rate: float = 0.085
     # Days per biological year with reproduction (with_reproduction): 1 compresses a life into
     # about 70 days so generations fit in a run; 365 is real time (9-month pregnancies, adults at 15
     # calendar years). With days_per_year this sets the whole time scale (see with_time_scale).
@@ -114,7 +120,16 @@ class EnvConfig:
     n_founders: int = 0                # 0: every slot is a founder (no births possible)
     adult_years: float = 15.0          # fertile from this biological age
     menopause_years: float = 45.0
-    conception_prob: float = 0.15      # per mutual mating between fertile adults
+    conception_prob: float = 0.15      # per mutual mating between fertile adults (with_reproduction sets it from the two below)
+    # Fecundity under compressed biological time. A fertile couple mating regularly conceives within
+    # a biological year with probability conception_per_bio_year (about 0.2 per menstrual cycle gives
+    # ~0.9 a year; 0.8 allows for cycles missed). An act of mating in game time stands for
+    # 1 / (mating_acts_per_day x days_per_bio_year) of a biological year, so at 1 day per biological
+    # year one act carries most of a year's chance (0.8), and in real time (365 days per year) about
+    # 0.4% an act. Before this, 0.15 an act held at every compression: at 1 day per year a woman had
+    # one or two chances per "year", and trained bands bore too few children to outlive their founders.
+    conception_per_bio_year: float = 0.8
+    mating_acts_per_day: float = 1.0
     mate_window: int = 4               # ticks a choice to mate stays open for a partner (1: same tick only)
     min_condition: float = 0.85        # a woman thinner than this share of ideal weight does not conceive
     gestation_years: float = 0.75
@@ -123,13 +138,72 @@ class EnvConfig:
     infant_years: float = 1.0          # cannot walk or forage
     mutation_rate: float = 0.01        # chance per trait per birth of a de novo mutation
     mutation_size: float = 2.5         # its size, in population standard deviations (up or down)
-    nurse_years: float = 2.0           # mother nurses within 1 cell until this age
+    nurse_years: float = 2.5           # mother nurses within 1 cell until this age (foragers wean at ~2.5-3)
+    wet_nursing: bool = True           # an orphan is nursed by the closest kin among women nursing their own
+    carry_infants: bool = True         # an infant within 1 cell of its carer is carried as she moves
+    carry_cost: float = 1.0            # her steps cost x (1 + carry_cost x infant's share of her weight)
+    # Children need less: food and water needs scale with body mass to the 3/4 power (Kleiber's law),
+    # so a toddler needs a bit over half of what an adult does (on this body model's sizes) and an
+    # adult is unchanged. Off, every age needs an adult's share.
+    needs_by_size: bool = True
+    # ... and with each person's own frame (height and build genes: lean mass^0.75 against an average
+    # adult's), and with what they do this tick: physical activity levels, as multiples of resting
+    # needs (sleep a little below, walking well above, fighting most). activity_norm divides them so
+    # that a typical forager's day (about 40% asleep, 30% resting, 25% walking, 5% working or
+    # fighting) costs what it did before. Hunger and thirst alike (exertion sweats).
+    activity_needs: bool = True
+    activity_sleep: float = 0.9
+    activity_rest: float = 1.0
+    activity_walk: float = 1.6
+    activity_work: float = 1.3      # gathering, placing, writing
+    activity_strike: float = 2.0
+    activity_norm: float = 1.13
+    # A blow's force: strength x (lean mass / an average adult's)^(2/3) (muscle force follows its
+    # cross-section), x practice (up to +practice_max, half of it after practice_half strikes in a
+    # life: technique), x luck (lognormal, sd blow_luck; a glancing_prob chance of half force).
+    blow_by_mass: bool = True
+    practice_max: float = 0.25
+    practice_half: float = 200.0
+    blow_luck: float = 0.25
+    glancing_prob: float = 0.1
+    # Techniques (env.LIMBS x env.MODES; needs body_parts for push and hold): no named moves, only
+    # what each limb and mode does. Per limb (hand, foot, head, body):
+    techniques: bool = True
+    limb_force: tuple = (1.0, 1.5, 1.2, 0.7)      # a kick ~1.5x a punch's peak force; body also x mass^(1/3)
+    limb_accuracy: tuple = (1.0, 0.8, 0.85, 1.15) # x the part's chance to land
+    kick_high_accuracy: float = 0.7               # x again for a kick at a head or neck
+    kick_balance: float = 0.1                     # a kick's chance to leave the kicker staggered (x (1 + leg damage))
+    headbutt_recoil: float = 0.3                  # share of a landed headbutt's blow one's own head takes
+    limb_push: tuple = (0.8, 1.0, 0.5, 1.4)       # leverage in a push (a shoulder or hip shoves best)
+    limb_grip: tuple = (1.0, 0.25, 0.0, 0.6)      # leverage in a hold (hands grip; a head cannot)
+    # Per mode (strike, push, hold): the share of the blow's damage dealt
+    mode_damage: tuple = (1.0, 0.2, 0.1)
+    # A push or hold is a contest: leverage x strength x lean mass^(2/3) x sound legs against the
+    # other's; someone down or staggered resists at unsteady_resist. A shove moves one a cell (into
+    # rough or steep ground: a fall, shove_fall_mult x that cell's hazard) and staggers one for
+    # shove_ticks; a push on someone one held last tick is a throw (throw_leverage x the chance):
+    # throw_damage x the thrower's force to the torso, and throw_ticks on the ground. A hold pins:
+    # next tick one steps only past its grip (the contest's chance), and blows land as on the downed
+    # in that proportion.
+    unsteady_resist: float = 0.3
+    shove_fall_mult: float = 3.0
+    shove_ticks: int = 1
+    throw_leverage: float = 1.5
+    throw_damage: float = 0.15
+    throw_ticks: int = 2
+    lactation_infertile_years: float = 2.0   # a mother cannot conceive while her child is younger (0: off)
     nurse_rate: float = 0.03           # food and water a nursing child can take per tick
     nurse_cost: float = 0.6            # share of what the child takes that the mother pays
     prime_until_years: float = 35.0
     base_height_cm: float = 165.0
     ideal_bmi: float = 22.0
     fat_gain_kg: float = 0.01        # per tick when well fed, up to 115% of ideal weight
+    # Catch-up growth: a child or youth below its frame's lean weight (stunted by hunger earlier)
+    # regrows toward it while fed, closing the gap with this time constant in biological years
+    # (catch-up growth after malnutrition is real, if often incomplete). Without it, a child hungry
+    # for a while stayed thin for life and the next generation could not conceive.
+    catch_up_years: float = 1.0
+    catch_up_until_years: float = 20.0
     fat_burn_kg: float = 0.08        # per tick when starving, down to 80% of ideal weight
     satiety_per_kg: float = 0.05     # burning 1 kg of reserves restores this much satiety
 
@@ -150,13 +224,107 @@ class EnvConfig:
     # Clothing (very basic): each founder starts with hides covering some share of the body, from
     # clothing_min to all of it, different for each; babies are born bare. It keeps heat in when it is
     # colder than comfort (body temperature drifts toward the cold more slowly: x 1 + insulation x
-    # coverage). It does not wear out and cannot yet be made, so children born in a run stay bare.
+    # coverage). It does not wear out. Children born bare can keep warm with what they carry: hides
+    # and feathers (byproducts below) count toward coverage while carried.
     clothing: bool = False
+    # Byproducts of the living world (lifesim/minerals.py ORGANIC): leaf litter under trees, fiber
+    # from foraging grasses, feathers, hides and bones from kills, a spear bound from a stick, a point
+    # and fiber. Carried hides and feathers keep warm; leaves and hides under a sleeper are a bed;
+    # leaves and fiber are tinder for sparks; a spear's length keeps a struck animal off.
+    byproducts: bool = True
+    leaf_fall: float = 0.004           # units per forest cell per 30-minute tick (x autumn_leaf_mult in autumn)
+    autumn_leaf_mult: float = 5.0
+    leaf_max: float = 3.0
+    fiber_per_greens: float = 0.5      # fiber per unit of greens foraged on grass or marsh
+    molt_prob: float = 0.004           # a feather per fowl per 30-minute tick
+    tinder_mult: float = 3.0           # a spark catches this much more readily on dry leaves or fiber
+    bedding_max: float = 0.6           # at most this much added insulation from what one lies on
+    haft_edge: float = 0.5             # how sharp a point must be to bind into a spear
+    spear_reach: float = 0.5           # a struck animal fights back this much less against a spear
+    # Plant ecology (lifesim/ecology.py): greens, fruit, nuts and roots per cell, from biome densities
+    # per km^2 times the cell's area; logistic regrowth and seed spread, seasonal crops, gathering
+    # that takes time and pays less where food is thin. Off by default (the classic plants: one stock
+    # per cell regrowing at a fixed rate); on in the living world.
+    ecology: bool = False
+    kcal_per_day: float = 2400.0       # an active forager's daily need: what hunger takes in a day
+    loose_food_spoil: float = 0.05     # per day: plant food left lying on the ground
+    # Camp fouling: where people stay, waste builds up (person-days per km^2), and drinking near it
+    # risks infection: the infection chance per drink is water_infection x (1 + foul / foul_ref, at
+    # most foul_max_mult). It fades with time, faster in rain. (Why foragers move camp, besides food.)
+    fouling: bool = False
+    # Excretion (on in the living world): an urge builds as the body processes food and water (more
+    # when well watered, less asleep at night), relieved by RELIEVE wherever one stands, which leaves
+    # waste there (the fouling above, which then comes only from this). Past full, it happens anyway:
+    # soiling oneself is stressful and wakes a sleeper. Infants have no control. Choosing where to go
+    # (away from the water one drinks) is left to learning.
+    # Language (lifesim/env.py LEXICON): "emergent" (symbols mean nothing given) or "grounded" (a
+    # defined lexicon; phrases about water and food with a direction are understood by listeners and
+    # put into their remembered maps). writing: WRITE puts one's message on what is here, read by
+    # anyone beside it, if one holds the means (lifesim/env.py write_means): an edge (sharpness >=
+    # write_edge; on stone a point of hardness >= write_hard) or a pigment (ochre, coal), and a surface
+    # (wood lying here, which makes a sign, a loose stone, a rock face, a tree's bark; not bare
+    # ground). Cut in wood or bark it lasts mark_days, in stone mark_days_rock; drawn in pigment
+    # mark_days_paint (weather wears it off).
+    language_mode: str = "emergent"
+    writing: bool = False
+    # The message channel, for the communication controls (Lowe et al. 2019): "full"; "none" (no one
+    # is ever heard: every message is silence); "shuffled" (each tick the messages heard are those of
+    # other speakers, shuffled among them, so content is cut from its speaker's state).
+    channel: str = "full"
+    heard_recency: float = 0.6         # how fresh a heard place is in one's map (seen is 1)
+    mark_days: float = 90.0
+    mark_days_rock: float = 365.0
+    mark_days_paint: float = 30.0
+    write_edge: float = 0.5            # flint 0.8, obsidian 1.0, quartz 0.6, copper 0.6; a plain stone 0.2 is not enough
+    write_hard: float = 0.7            # the point's hardness needed to cut stone (flint 1.0, obsidian 0.7, quartz 0.9)
+    sign_min: float = 0.5              # how much wood (or stone) lying here makes a surface to write on
+    excretion: bool = False
+    urge_rate: float = 0.06            # per tick at 30 minutes, x (0.5 + hydration): ~4-6 reliefs a day
+    urge_sleep_mult: float = 0.4       # made more slowly asleep (the body holds it at night)
+    relieve_min: float = 0.15          # nothing to go with less than this
+    urge_stress: float = 0.01          # stress per tick at full urge (from 0.7 up)
+    soil_stress: float = 0.08          # stress from soiling oneself (per time)
+    waste_per_urge: float = 0.3        # person-days of waste in a full urge
+    infant_continence_years: float = 2.5
+    foul_ref: float = 50.0             # person-days per km^2 that double the risk from water nearby
+    foul_max_mult: float = 20.0
+    foul_half_life_days: float = 20.0
+    foul_rain_mult: float = 3.0        # fades this much faster while it rains
     clothing_min: float = 0.1
     clothing_insulation: float = 0.8
     downed: bool = False
     downed_health: float = 0.2      # health below this
     downed_injury: float = 0.8      # or injury at or above this (bleeding hard)
+    # Pain shock (RimWorld's): pain = pain_per_injury x injury + fresh pain (pain_per_wound x health a
+    # wound takes, fading by pain_fade per 30 minutes). At pain_shock / sqrt(pain_aversion) one drops
+    # (only with downed on) and gets up again once the fresh pain fades. 0 turns shock off.
+    pain_shock: float = 0.8
+    pain_per_injury: float = 0.6
+    pain_per_wound: float = 2.5
+    pain_fade: float = 0.08        # half-life about 4 hours
+    # Finishing off: blows and bites on the downed land square (x downed_hit_mult) and each blow from
+    # a person has coup_prob of striking something vital and killing outright (RimWorld has no
+    # multiplier: its downed simply cannot dodge or block, and die when a vital part is destroyed)
+    downed_hit_mult: float = 2.0
+    coup_prob: float = 0.15         # only without body_parts (with them, a blow to the neck finishes)
+    # Body parts (env.PARTS: head, neck, torso, arms, legs). Every blow is aimed at one (the brain's
+    # aim output). By part: the chance it lands on someone standing (the downed are always hit), how
+    # much of its force reaches health, and how much damage the part itself takes per unit of blow.
+    # A head at concussion_at drops one (knocked out); a head or neck at 1 kills; hurt arms weaken
+    # (strength x (1 - arm_weakness x damage)), hurt legs slow (speed x (1 - leg_lameness x damage))
+    # and at legs_unusable one cannot walk. Parts heal as injuries do. Predator bites land on a part
+    # drawn from bite_parts; falls hurt the legs. For animals arms are forelegs, and a leg or foreleg
+    # blow lames the animal for animal_lame_ticks (no running, half its steps).
+    body_parts: bool = True
+    part_hit: tuple = (0.6, 0.45, 0.9, 0.8, 0.8)
+    part_lethality: tuple = (1.4, 2.0, 1.0, 0.4, 0.5)
+    part_fragility: tuple = (1.5, 2.0, 1.0, 1.5, 1.5)
+    concussion_at: float = 0.6
+    arm_weakness: float = 0.6
+    leg_lameness: float = 0.6
+    legs_unusable: float = 0.9
+    bite_parts: tuple = (0.1, 0.25, 0.35, 0.15, 0.15)
+    animal_lame_ticks: int = 96     # calibration ticks (2 days at half-hour ticks)
 
     # Disease (SIR-style per agent)
     disease_duration: int = 96      # 2 days (was 200: with no healing while sick, a 0.8 health loss
@@ -285,7 +453,7 @@ class EnvConfig:
 
     # ------------------------------------------------------------ moral sentiments
     # Weights on each agent's heritable moral traits (all in [0, 1]); see genotype.
-    empathy_weight: float = 0.5      # per unit of health a visible other loses
+    empathy_weight: float = 0.5      # per unit of health a visible other loses, x how much it shows (sqrt pain_aversion)
     kin_weight: float = 0.5          # same, scaled by appearance similarity
     inequity_weight: float = 0.01    # per tick, per unit of mean satiety gap to visible others
     reciprocity_reward: float = 0.05 # repaying someone who gave you food (fades with repetition)
@@ -386,6 +554,59 @@ class EnvConfig:
     skills: bool = False
     skill_search_steps: int = 64       # route-planning sweeps (enough for any path on a 32 x 32 world)
     skill_cliff_avoid: float = 20.0    # a fully steep cell counts as this many steps on a route
+    animal_sleep: float = 0.6          # share of its resting half of the day an animal sleeps (0: never)
+    animal_hunting: bool = True        # predators chase prey they can take; prey flee such predators
+    prey_preference: float = 3.0       # a predator choosing whom to chase counts a person this many cells farther
+    stalk_large: bool = False          # predators also stalk large prey (8 slots against 6 hunters: herds collapse)
+    hunt_kill_scale: float = 0.3       # with animal_hunting: x predator kill chances per meeting (more meetings)
+    # Room: each cell holds this much body (a standing adult of the reference build is 1, scaled by
+    # lean mass^(2/3); lying down twice that; animals by species, fauna.ROOM). A step into a cell without
+    # room fails, so a band must spread over neighbouring cells and a crowd is a shape, not a pile.
+    # Seen: how full each cell in view is. 0: no limit.
+    cell_room: float = 4.0
+    # The dead: what one carries falls where one dies, and the body decomposes (faster when warm, all
+    # but stopped when frozen), giving off rot while it lasts: flies, foul ground and water, and
+    # sickness to those beside it. Earth or stone heaped on it (bury_cover units of loose stone, clay,
+    # limestone, basalt, gypsum or quicklime on its cell) or fire ends that. No act buries the dead.
+    decay_days: float = 20.0           # days at 20 C from death to bones (half as long per 10 C warmer)
+    rot_fresh: float = 0.1             # decay below this: fresh, gives off nothing yet (2 days at 20 C)
+    rot_ramp: float = 0.15             # then rising to full rot over this much more
+    rot_frozen: float = 0.05           # x decay at or below 0 C
+    bury_cover: float = 3.0            # loose earth or stone on a body's cell that covers it
+    corpse_infection: float = 0.004    # chance a tick of catching sickness from a fully rotting body beside one
+    corpse_foul: float = 5.0           # foul a rotting body adds a day (one person's refuse is 1)
+    body_bones: float = 2.0            # bone left where a body has rotted or burned away
+    # Taming, emergent: no act tames. Each animal is more or less at ease with each person (a bond,
+    # 0..1), built when it eats food that person dropped and, slowly, from that person's harmless
+    # company; a blow from them (and, less, from anyone) breaks it; it fades apart. At ease
+    # (tame_calm), it neither flees nor hunts that person; a tame predator beside them stands off wild
+    # ones as a defender; closer still (tame_follow) it follows them. Species differ (fauna TAMEABLE).
+    taming: bool = True
+    tame_feed: float = 0.2             # bond gained each tick it eats what that person dropped (x tameable)
+    tame_company: float = 0.002        # gained each tick that person is beside it doing it no harm (x tameable)
+    tame_harm: float = 0.8             # share of its bond with a striker lost to a blow (half that with anyone)
+    tame_half_life_days: float = 20.0  # bonds fade by half in this many days
+    tame_drop_window_days: float = 1.0  # food dropped within this long counts as fed by the dropper
+    tame_calm: float = 0.5             # at or above: at ease with that person
+    tame_follow: float = 0.7           # at or above: follows that person (cfg.tame_follow_prob of its steps)
+    tame_follow_prob: float = 0.6
+    # A tame animal (at ease with someone) is neutral to everyone else: unprovoked, it chases and
+    # attacks strangers only with its wildness, temper x (1 - its strongest bond), so a calm,
+    # well-kept one is near harmless and a hot one with a thin bond is still dangerous. Struck, or
+    # with its person struck beside it, it is provoked (anger) and fights as a wild one, never its
+    # person. Each animal has its own temperament (Animals.temper, 0..1, 0.5 usual): hot ones are
+    # keener to attack and fight back (x 0.5..1.5) and slower to trust (bond gains x 1.5..0.5), so
+    # they take more keeping to be safe. It runs in families: inherited at respawn from a living
+    # one of its kind, a little changed. Agents cannot see it; they learn each animal.
+    temper_spread: float = 0.2         # standard deviation of temperament in a fresh population
+    temper_mutation: float = 0.1       # standard deviation of a newcomer's temperament about its parent's
+    scavenge_seek: float = 0.6         # a hungry predator not chasing anything steps toward meat beside it
+    stalk_hungry_hp: float = 0.75     # a predator below this share of its hp stalks large prey too (0: never)
+    animal_sleep_jitter: float = 0.075  # each slot's sleep bout starts up to this share of a day early or late
+    kill_asleep_mult: float = 3.0      # x a predator's kill chance on prey caught asleep
+    kill_lame_mult: float = 1.0        # + this x on lame prey (x2 in all)
+    kill_weak_mult: float = 2.0        # + this x the share of its hp the prey has lost (x3 at none left)
+    patch_leave: float = 0.5           # seek-food skips and leaves patches poorer than this x the known average (0: off)
     # A rare temperament: selflessness weighs others' visible fortunes like one's own, kin or not,
     # so such an agent may give up its last food or its life for a stranger. Most agents have none;
     # each founder or newborn has it with probability saint_rate (not inherited; arises anew).
@@ -403,6 +624,11 @@ class EnvConfig:
     sleep_deep_ticks: int = 4          # ticks of unbroken sleep to reach deep sleep (2 h)
     sleep_day_efficiency: float = 0.7
     sleep_forced: float = 0.95
+    # Sleep is honest: one can only fall asleep with real sleep pressure (lower at night, when the
+    # body clock opens the gate). Lying down without it is rest, nothing more: no deep sleep, no sleep
+    # healing or calm. (Before this, choosing sleep at no sleepiness gave sleep's benefits for free.)
+    sleep_onset: float = 0.3           # sleepiness needed to fall asleep by day (~12 h awake)
+    sleep_onset_night: float = 0.1     # ... at night
     sleep_wake_block: float = 0.6
     sleep_energy: float = 0.01         # extra energy per tick of deep sleep, beyond resting
     sleep_stress_relief: float = 0.01  # stress removed per tick of deep sleep
@@ -418,6 +644,19 @@ class EnvConfig:
     habituation_half_life: int = 48  # ticks for a repeated feeling to recover half its strength (1 day)
     gift_window: int = 20            # dropped food taken by someone else within this many ticks is a gift
     revenge_reward: float = 0.05     # per strike on someone who has struck oneself
+    sadism_reward: float = 0.5       # per unit of health one's blows take from someone, x how much it shows;
+                                     # x the sadism trait; habituates with revenge (satisfaction in striking)
+    # Emotional pain (heartache): seeing others hurt (x empathy) and losing those one is attached to.
+    # It fades over days, raises stress by heartache_stress per tick, and is felt (observed); it is not
+    # physical pain and never sends one into shock.
+    heartache_empathy: float = 1.0   # per unit of health visible others lose to wounds (x how it shows), x empathy
+    heartache_grief: float = 0.8     # per death of someone one is attached to, x attachment
+    heartache_fade: float = 0.03     # per 30 minutes (half-life about 11 hours)
+    heartache_stress: float = 0.002  # stress per tick at full heartache: settles stress near 0.2, like
+                                     # loneliness (0.4) and below the healing block (0.7); 0.01 blocked healing
+    # Phantom and chronic pain: a lasting injury flares now and then, with no new wound
+    phantom_prob: float = 0.02       # chance per 30 minutes at full lasting injury (x lasting / max)
+    phantom_pain: float = 0.3        # fresh pain a flare adds
 
     # ------------------------------------------------------------ observation
     view_radius: int = 5
@@ -439,6 +678,7 @@ class EnvConfig:
     care_kin: float = 0.5            # extra weight, x kin care x appearance similarity
     care_reciprocity: float = 0.5    # extra weight for those who have fed you, x reciprocity
     care_revenge: float = 0.5        # negative weight for those who have struck you, x vengefulness
+    care_sadism: float = 0.5         # negative weight for those you have struck, x sadism: their pain pleases
     care_inequity: float = 0.01      # envy and guilt over gaps in felt well-being (cost only)
     # Attachment: survival felt toward particular others. i's attachment to j (0..1) grows with
     # evidence that j keeps i alive (food j left that i took when hungry, warmth huddled beside j when cold,
@@ -498,8 +738,8 @@ class EnvConfig:
     # Nominal physical scale, derived from rules the world already has. One move per tick at a
     # walking pace of 4 km/h makes a cell 2 km across at 30-minute ticks (67 m at 1 minute); the altitude cooling (6 C over the
     # map's full relief) at the usual 6.5 C per km makes the relief about 900 m. Close-range rules
-    # (striking or huddling with someone in a neighbouring cell) do not fit a 2 km cell: the scale
-    # is nominal, for describing tiles, and no rule uses it.
+    # (striking or huddling with someone in a neighbouring cell) do not fit a 2 km cell. The plant
+    # ecology (ecology=True) and camp fouling use it: their amounts are per km^2 times a cell's area.
     walk_kmh: float = 4.0
     lapse_c_per_km: float = 6.5
 
@@ -529,11 +769,14 @@ class EnvConfig:
 
 def with_reproduction(cfg: "EnvConfig", n_founders: int | None = None, **kw) -> "EnvConfig":
     """A config for worlds with births: by default 1 day per biological year (adult about day 15,
-    lifespan about 70 days; days_per_bio_year changes it), founders filling half the slots unless
+    deaths from age most likely about day 70; days_per_bio_year changes it), founders filling half the slots unless
     n_founders is given."""
     import dataclasses
     founders = n_founders if n_founders is not None else max(2, cfg.n_agents // 2)
     dpby = kw.pop("days_per_bio_year", cfg.days_per_bio_year)
+    if "conception_prob" not in kw:            # per act, from the yearly chance and how much time an act stands for
+        acts = max(dpby * kw.get("mating_acts_per_day", cfg.mating_acts_per_day), 1.0)
+        kw["conception_prob"] = round(1.0 - (1.0 - kw.get("conception_per_bio_year", cfg.conception_per_bio_year)) ** (1.0 / acts), 4)
     return dataclasses.replace(cfg, reproduction=True, n_founders=founders, days_per_bio_year=dpby,
                                max_age=int(round(cfg.day_length * dpby * cfg.max_bio_years)), **kw)
 
@@ -565,10 +808,11 @@ _PER_TICK_AMOUNT = (       # added or lost per tick: x k
     "sleep_pressure", "sleep_recovery", "sleep_energy", "sleep_stress_relief", "sleep_debt_stress",
     "attach_warmth", "attach_company", "attach_coparent", "attach_nurse", "attach_shared_threat",
     "attach_absence", "attach_calm", "dark_stress", "guano_rate", "evaporation", "rain_use", "rain_drink",
-    "snow_rate", "snow_melt", "move_cost", "graze_small", "graze_large", "graze_starve", "predator_starve")
+    "snow_rate", "snow_melt", "move_cost", "graze_small", "graze_large", "graze_starve", "predator_starve", "urge_rate", "urge_stress",
+    "heartache_stress", "tame_feed", "tame_company")
 _PER_TICK_CHANCE = (       # a chance each tick: 1 - (1 - p) ** k
     "contact_infection", "mosquito_infection", "spread_prob", "lightning_prob", "predator_prey_kill_prob",
-    "predator_large_kill_prob", "small_prey_respawn", "large_prey_respawn", "predator_respawn",
+    "predator_large_kill_prob", "corpse_infection", "small_prey_respawn", "large_prey_respawn", "predator_respawn",
     "predator_attack_prob", "prey_bolt_prob", "den_prob", "front_prob", "wind_change_prob", "conception_prob",
     "meat_spoil_ground", "meat_spoil_inventory", "cooked_spoil_ground", "cooked_spoil_inventory", "char_rate",
     "thermal_rate", "fall_prob")
@@ -611,5 +855,6 @@ def living_world(cfg: "EnvConfig", **kw) -> "EnvConfig":
     """The 'living' world: biomes, dynamic weather and a 3-year climate cycle, with the downed (too
     hurt to stand) and grazing animals whose numbers follow their food."""
     import dataclasses
-    kw = {"downed": True, "grazing": True, "clothing": True, **kw}       # living things: the downed, and grazers that eat the land
+    # Excretion stays off unless asked for (an optional complexity: urge, relieving oneself, soiling).
+    kw = {"downed": True, "grazing": True, "clothing": True, "ecology": True, "fouling": True, "excretion": False, **kw}
     return dataclasses.replace(cfg, biomes=True, dynamic_weather=True, climate_cycle_years=3.0, **kw)
