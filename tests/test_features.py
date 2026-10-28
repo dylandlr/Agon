@@ -220,8 +220,9 @@ def test_experiment_conditions():
     spec.loader.exec_module(ex)
     core = ex.items("core")
     assert len(core) == 18 and len({n for n, _ in core}) == 18
-    assert [n for n, _ in ex.items("validate")] == ["caveman", "caveman_no_sleep_learning", "blank",
-                                                    "caveman_no_world_model"]
+    assert [n for n, _ in ex.items("validate")] == [
+        "caveman", "caveman_entropy_floor", "caveman_no_retention", "caveman_shared_trunk", "caveman_no_world_model",
+        "caveman_no_sleep_learning", "blank", "caveman_entropy_floor_high", "caveman_floor_no_retention"]
     inh = ex.items("inheritance")
     assert len(inh) == 6 and {e[0] for _, e in inh} == {"parent", "innate"}
     from lifesim.presets import PRESETS

@@ -110,7 +110,10 @@ def items(kind, args=None):
         return [("caveman", []), ("caveman_entropy_floor", ["--entropy-target", "0.4"]),
                 ("caveman_no_retention", ["--retention-coef", "0"]),
                 ("caveman_shared_trunk", ["--share-trunk"]), ("caveman_no_world_model", ["--no-world-model"]),
-                ("caveman_no_sleep_learning", ["--no-sleep-learning"]), ("blank", ["--slate", "blank"])]
+                ("caveman_no_sleep_learning", ["--no-sleep-learning"]), ("blank", ["--slate", "blank"]),
+                # 7, 8: tuning of the stall fix, run only after 1 and 2 are read
+                ("caveman_entropy_floor_high", ["--entropy-target", "0.8"]),
+                ("caveman_floor_no_retention", ["--entropy-target", "0.4", "--retention-coef", "0"])]
     if kind == "stress":
         return [(k, [s]) for k, s in STRESS]
     if kind == "inheritance":
