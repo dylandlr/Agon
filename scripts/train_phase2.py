@@ -141,6 +141,10 @@ def main():
     ap.add_argument("--entropy-target", type=float, default=0.0,
                     help="an entropy floor in nats (0 = off): the entropy bonus grows under it, shrinks above "
                          "(MAConfig.entropy_target); the validate run collapsed to 0.07 of 4.4 and stopped learning")
+    ap.add_argument("--entropy-boost-max", type=float, default=4.0,
+                    help="the floor's bonus is at most ent_coef x exp(this); 4 = 55x (MAConfig.entropy_boost_max). "
+                         "history.json logs the bonus actually applied (entropy_coef): at the ceiling and still "
+                         "under the target means the ceiling is what holds it")
     ap.add_argument("--predators", type=float, default=1.0,
                     help="x predator numbers and respawning (0 = predators that never attack)")
     ap.add_argument("--disease", type=float, default=1.0, help="x every chance of infection")
@@ -196,7 +200,7 @@ def main():
                    alpha=args.alpha, msg_ent_coef=args.msg_ent_coef, ent_coef=args.ent_coef,
                    speech_attention=args.speech_attention, teach_bonus=args.teach_bonus,
                    sleep_learning=not args.no_sleep_learning, world_model=args.world_model,
-                   share_trunk=args.share_trunk, entropy_target=args.entropy_target,
+                   share_trunk=args.share_trunk, entropy_target=args.entropy_target, entropy_boost_max=args.entropy_boost_max,
                    day_ticks=env_cfg.day_length, tick_scale=env_cfg.tick_minutes / 30.0,
                    memory_span=env_cfg.day_length)
     out = Path(args.out)
@@ -287,6 +291,7 @@ def main():
                 "kills": {"small_prey": int(acc["kills"][0]), "large_prey": int(acc["kills"][1]),
                           "predator": int(acc["kills"][2])},
                 "entropy": round(float(m["entropy"]), 3),
+                "entropy_coef": round(float(m["entropy_coef"]), 5),
                 "imitation_loss": round(float(m["imitation_loss"]), 3),
                 "watched_fraction": round(float(m["watched_fraction"]), 3),
                 "learned_share": round(float(m["learned_share"]), 3),

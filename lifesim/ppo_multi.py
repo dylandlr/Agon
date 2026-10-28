@@ -48,6 +48,7 @@ class MAConfig:
     # learned nothing after; a floor keeps each brain trying things without making it dither.
     entropy_target: float = 0.0
     entropy_gain: float = 10.0
+    entropy_boost_max: float = 4.0   # the bonus is at most ent_coef * exp(this) (log units); 4 = 55x
     # Symbols said (4 x 32: up to 13.9 nats) and written: far more entropy than the 84 actions (~4.4).
     # At full weight the entropy bonus alone pushes agents to talk (randomly) more and more;
     # a smaller weight makes speech earn its place.
@@ -639,9 +640,9 @@ def make_train(env_cfg: EnvConfig, cfg: MAConfig):
             ent_said = (h_sym[..., 0] + speaks * h_sym[..., 1:L].sum(-1)) * said[..., 0]
             ent_written = (h_sym[..., L:] * written).sum(-1)
             if cfg.entropy_target > 0:          # the floor: a bigger bonus the further under the target
-                ec = cfg.ent_coef * jnp.exp(jnp.clip(cfg.entropy_gain * (cfg.entropy_target - jax.lax.stop_gradient(ent)), -4.0, 4.0))
+                ec = cfg.ent_coef * jnp.exp(jnp.clip(cfg.entropy_gain * (cfg.entropy_target - jax.lax.stop_gradient(ent)), -4.0, cfg.entropy_boost_max))
             else:
-                ec = cfg.ent_coef
+                ec = cfg.ent_coef + 0.0 * ent
             per_step = pg + cfg.vf_coef * vf - ec * (ent + ent_aim) \
                 - cfg.msg_ent_coef * (ent_said + ent_written)
             loss = (per_step * w).sum() / denom
@@ -669,7 +670,7 @@ def make_train(env_cfg: EnvConfig, cfg: MAConfig):
                 loss = loss + cfg.wm_coef * (wm[0] + wm[1] + wm[2])
             ret = retention(p, rs)
             loss = loss + cfg.retention_coef * ret
-            return loss, ((ent * w).sum() / denom, imit, wm, ret, clipfrac, approx_kl)
+            return loss, ((ent * w).sum() / denom, imit, wm, ret, clipfrac, approx_kl, (ec * w).sum() / denom)
 
         def total_loss(params, ic, tr, adv, tg, d_obs, d_act, d_mask, d_msg, d_w):
             # Agent axis is 0 for params/ic/genes/the store, 1 for (T, N, B, ...) data
@@ -677,13 +678,13 @@ def make_train(env_cfg: EnvConfig, cfg: MAConfig):
                 lead = lambda x: jnp.moveaxis(x, 1, 0)
                 xs = (params, ic) + tuple(jax.tree_util.tree_map(lead, v)
                                           for v in (tr, adv, tg, d_obs, d_act, d_mask, d_msg, d_w)) + (social_w, res)
-                losses, (ents, imits, wm, ret, cf, kl) = jax.lax.map(lambda a: jax.checkpoint(agent_loss)(*a), xs,
+                losses, (ents, imits, wm, ret, cf, kl, ecs) = jax.lax.map(lambda a: jax.checkpoint(agent_loss)(*a), xs,
                                                                      batch_size=cfg.agent_chunk)
             else:
-                losses, (ents, imits, wm, ret, cf, kl) = jax.vmap(agent_loss, in_axes=(0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0))(
+                losses, (ents, imits, wm, ret, cf, kl, ecs) = jax.vmap(agent_loss, in_axes=(0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0))(
                     params, ic, tr, adv, tg, d_obs, d_act, d_mask, d_msg, d_w, social_w, res)
             return losses.sum(), (ents.mean(), imits.mean(), tuple(x.mean() for x in wm), ret.mean(),
-                                  cf.mean(0), kl.mean(0))
+                                  cf.mean(0), kl.mean(0), ecs.mean())
 
         lrs = lrs_of(pop)
 
@@ -757,7 +758,7 @@ def make_train(env_cfg: EnvConfig, cfg: MAConfig):
             (params, opt_state, key), ents = jax.lax.scan(epoch, (params, opt_state, key), None,
                                                           cfg.update_epochs)
         fin = finalized.astype(jnp.float32) * valid_f
-        metrics = {"entropy": ents[0].mean(), "imitation_loss": ents[1].mean(),
+        metrics = {"entropy": ents[0].mean(), "entropy_coef": ents[6].mean(), "imitation_loss": ents[1].mean(),
                    "watched_fraction": (demo_w > 0).mean(),
                    # Of the steps whose fate was settled this update, the share learned (the rest
                    # was forgotten for want of sleep); and the share of new steps still waiting
