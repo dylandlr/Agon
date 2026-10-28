@@ -595,7 +595,7 @@ def main():
             Population(state.genotype, state.appearance), memory)
         learn_log["updates"] += 1
         for name, v in met.items():
-            learn_log[name] += float(v)
+            learn_log[name] += float(jnp.mean(v))     # clip_fraction and approx_kl come per output (a vector)
         return params, opt_state, key, memory
 
     can_grow = bool(env_cfg.reproduction) and not args.no_grow
