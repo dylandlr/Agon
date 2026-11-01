@@ -670,7 +670,10 @@ def make_train(env_cfg: EnvConfig, cfg: MAConfig):
                 loss = loss + cfg.wm_coef * (wm[0] + wm[1] + wm[2])
             ret = retention(p, rs)
             loss = loss + cfg.retention_coef * ret
-            return loss, ((ent * w).sum() / denom, imit, wm, ret, clipfrac, approx_kl, (ec * w).sum() / denom)
+            # entropy and its bonus are logged as the mean over the steps that were learned (w), not over the new
+            # steps (denom): w carries the share learned after sleep, so dividing by denom under-reported both
+            # by that share (about a tenth). The loss still divides by denom on purpose (see above).
+            return loss, ((ent * w).sum() / wsum, imit, wm, ret, clipfrac, approx_kl, (ec * w).sum() / wsum)
 
         def total_loss(params, ic, tr, adv, tg, d_obs, d_act, d_mask, d_msg, d_w):
             # Agent axis is 0 for params/ic/genes/the store, 1 for (T, N, B, ...) data

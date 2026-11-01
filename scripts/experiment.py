@@ -105,15 +105,16 @@ def items(kind, args=None):
         return [("full", base), ("no_sleep_learning", base + ["--no-sleep-learning"]),
                 ("caves", base + ["--underground"]), ("grounded_language", base + ["--language", "grounded"])]
     if kind == "validate":
-        # 0 the design; 1, 2 the stall ablations (claude/research/design-audit-learning.md: the policy
-        # collapsed to 0.07 nats and stopped improving a sixth of the way in); 3.. the older ablations
-        return [("caveman", []), ("caveman_entropy_floor", ["--entropy-target", "0.4"]),
+        # 0 the design; 1, 2 the stall ablations; 3.. the older ablations. The logged entropy once read ~10x too
+        # low (a collapse to 0.07 nats that never was); the true entropy is ~1 to 2 nats, so the floors sit at
+        # 1.5 and 2.0, above it, where they bind
+        return [("caveman", []), ("caveman_entropy_floor", ["--entropy-target", "1.5"]),
                 ("caveman_no_retention", ["--retention-coef", "0"]),
                 ("caveman_shared_trunk", ["--share-trunk"]), ("caveman_no_world_model", ["--no-world-model"]),
                 ("caveman_no_sleep_learning", ["--no-sleep-learning"]), ("blank", ["--slate", "blank"]),
                 # 7, 8: tuning of the stall fix, run only after 1 and 2 are read
-                ("caveman_entropy_floor_high", ["--entropy-target", "0.8"]),
-                ("caveman_floor_no_retention", ["--entropy-target", "0.4", "--retention-coef", "0"])]
+                ("caveman_entropy_floor_high", ["--entropy-target", "2.0"]),
+                ("caveman_floor_no_retention", ["--entropy-target", "1.5", "--retention-coef", "0"])]
     if kind == "stress":
         return [(k, [s]) for k, s in STRESS]
     if kind == "inheritance":

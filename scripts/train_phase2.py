@@ -140,7 +140,8 @@ def main():
                          "policy, value, messages and trust stay each agent's own (MAConfig.share_trunk)")
     ap.add_argument("--entropy-target", type=float, default=0.0,
                     help="an entropy floor in nats (0 = off): the entropy bonus grows under it, shrinks above "
-                         "(MAConfig.entropy_target); the validate run collapsed to 0.07 of 4.4 and stopped learning")
+                         "(MAConfig.entropy_target). Entropy is logged as the mean over learned steps; the true value of a "
+                         "trained band is about 1 to 2 nats, so a floor under that never binds")
     ap.add_argument("--entropy-boost-max", type=float, default=4.0,
                     help="the floor's bonus is at most ent_coef x exp(this); 4 = 55x (MAConfig.entropy_boost_max). "
                          "history.json logs the bonus actually applied (entropy_coef): at the ceiling and still "
