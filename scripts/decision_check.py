@@ -74,7 +74,8 @@ def build_cfg(args, run: Path | None):
                                grazing=bool(h.get("grazing", False)), clothing=bool(h.get("clothing", False)),
                                ecology=bool(h.get("ecology", False)), fouling=bool(h.get("fouling", False)),
                                excretion=bool(h.get("excretion", True)))
-        cfg = dataclasses.replace(cfg, language_mode=h.get("language", "emergent"), writing=bool(h.get("writing", False)))
+        cfg = dataclasses.replace(cfg, language_mode=h.get("language", "emergent"), writing=bool(h.get("writing", False)),
+                                  staged_conditions=bool(h.get("staged_conditions", False)))
         if h.get("reproduction"):
             cfg = with_reproduction(cfg, n_founders=h.get("founders") or None)
         cfg = with_threats(cfg, food=h.get("food", 1.0), predators=h.get("predators", 1.0),

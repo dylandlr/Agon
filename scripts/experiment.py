@@ -114,7 +114,10 @@ def items(kind, args=None):
                 ("caveman_no_sleep_learning", ["--no-sleep-learning"]), ("blank", ["--slate", "blank"]),
                 # 7, 8: tuning of the stall fix, run only after 1 and 2 are read
                 ("caveman_entropy_floor_high", ["--entropy-target", "2.0"]),
-                ("caveman_floor_no_retention", ["--entropy-target", "1.5", "--retention-coef", "0"])]
+                ("caveman_floor_no_retention", ["--entropy-target", "1.5", "--retention-coef", "0"]),
+                # 9: Arm A of the injury redesign (design-injury-conditions-and-learning.md): cold, heat, thirst and
+                # hunger work through graded conditions; the observation is unchanged. Pair with 0 on the same seeds.
+                ("caveman_staged_conditions", ["--staged-conditions"])]
     if kind == "stress":
         return [(k, [s]) for k, s in STRESS]
     if kind == "inheritance":

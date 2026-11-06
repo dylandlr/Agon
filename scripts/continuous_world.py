@@ -494,6 +494,8 @@ def main():
         env_cfg = with_time_scale(env_cfg, hist.get("days_per_year", 40), hist.get("days_per_bio_year", 1.0))
     env_cfg = with_threats(env_cfg, predators=hist.get("predators", 1.0), disease=hist.get("disease", 1.0),
                            hazards=hist.get("hazards", 1.0))
+    import dataclasses as _dcs
+    env_cfg = _dcs.replace(env_cfg, staged_conditions=bool(hist.get("staged_conditions", False)))
     env_cfg = with_tick_minutes(env_cfg, hist.get("tick_minutes", 30.0))
     if args.learn_every is None:
         args.learn_every = 2 * env_cfg.day_length if env_cfg.tick_minutes >= 30 else int(hist.get("steps", 192))

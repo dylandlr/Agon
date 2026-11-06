@@ -559,6 +559,8 @@ def main():
     knob = lambda k, d=1.0: getattr(args, k) if getattr(args, k) is not None else run_knobs.get(k, d)
     env_cfg = with_threats(env_cfg, food=args.food if args.food is not None else 1.0, predators=knob("predators"),
                            disease=knob("disease"), hazards=knob("hazards"))
+    import dataclasses as _dcs
+    env_cfg = _dcs.replace(env_cfg, staged_conditions=bool(run_knobs.get("staged_conditions", False)))
     from lifesim.config import with_tick_minutes
     env_cfg = with_tick_minutes(env_cfg, args.tick_minutes if args.tick_minutes is not None
                                 else run_knobs.get("tick_minutes", 30.0))

@@ -153,6 +153,9 @@ OUT_LOGITS = OUT_TOKENS * VOCAB
 # Body parts a blow can be aimed at (people and animals alike; for animals arms are forelegs).
 PARTS = ("head", "neck", "torso", "arms", "legs")
 N_PARTS = len(PARTS)
+AILMENTS = ["hypothermia", "heat illness", "dehydration", "starvation"]   # staged conditions (EnvConfig.staged_conditions)
+N_AIL = len(AILMENTS)
+AIL_COLD, AIL_HEAT, AIL_THIRST, AIL_HUNGER = range(N_AIL)
 PART_HEAD, PART_NECK, PART_TORSO, PART_ARMS, PART_LEGS = range(N_PARTS)
 # How a strike is delivered (EnvConfig.techniques): with what (the limb) and to what end (the mode).
 # No named moves: a punch is hand+strike, a kick foot+strike, a shove hand+push, a grab hand+hold;
@@ -308,6 +311,7 @@ class State(NamedTuple):
     pain: jnp.ndarray           # (N,) fresh pain from recent wounds, fading (pain_of adds the ache of injury)
     heartache: jnp.ndarray      # (N,) emotional pain: others' hurt seen (x empathy) and grief; fades over days
     part_damage: jnp.ndarray    # (N, N_PARTS) damage to head, neck, torso, arms, legs, 0..1 (EnvConfig.body_parts)
+    ailment: jnp.ndarray        # (N, N_AIL) severity 0..1 of hypothermia, heat illness, dehydration, starvation (EnvConfig.staged_conditions; not observed)
     held_by: jnp.ndarray        # (N,) int32 who got hold of one last tick (-1: free; EnvConfig.techniques)
     hold_grip: jnp.ndarray      # (N,) that hold's strength: the chance it pins one this tick
     off_balance: jnp.ndarray    # (N,) int32 ticks left staggered or on the ground: cannot step or strike
@@ -1170,7 +1174,7 @@ def reset(key: jax.Array, cfg: EnvConfig, genotype: gt.Genotype | None = None,
         conditions=draw_inborn(jax.random.fold_in(ks[4], 17), n, None, None).astype(jnp.float32), father_cond=jnp.zeros((n, cond.K)),
         life_moves=jnp.zeros(n, jnp.int32), life_strikes=jnp.zeros(n, jnp.int32), hardship=jnp.zeros(n, jnp.int32),
         impression=jnp.full((n, n), 2.5 * cfg.wellbeing_scale),   # founders know each other, all looking well
-        scars=jnp.zeros(n), lasting_injury=jnp.zeros(n), pain=jnp.zeros(n), heartache=jnp.zeros(n), part_damage=jnp.zeros((n, N_PARTS)),
+        scars=jnp.zeros(n), lasting_injury=jnp.zeros(n), pain=jnp.zeros(n), heartache=jnp.zeros(n), part_damage=jnp.zeros((n, N_PARTS)), ailment=jnp.zeros((n, N_AIL)),
         held_by=jnp.full(n, -1, jnp.int32), hold_grip=jnp.zeros(n), off_balance=jnp.zeros(n, jnp.int32),
         rot=jnp.zeros(n),
         sex=sex, existed=founders, gestation=jnp.zeros(n, jnp.int32), courting=jnp.zeros(n, jnp.int32),
@@ -2319,7 +2323,7 @@ def _give_birth(ns: State, birthing, key, cfg: EnvConfig):
             immunity=put(s.immunity, 0.0), stress=put(s.stress, 0.0), clothing=put(s.clothing, 0.0),   # born bare
             pain_aversion=put(s.pain_aversion, child_geno.pain_aversion[0]), genotype=geno,
             weight=put(s.weight, ideal), scars=put(s.scars, 0.0), lasting_injury=put(s.lasting_injury, 0.0), pain=put(s.pain, 0.0), heartache=put(s.heartache, 0.0),
-            part_damage=put(s.part_damage, jnp.zeros(N_PARTS)),
+            part_damage=put(s.part_damage, jnp.zeros(N_PARTS)), ailment=put(s.ailment, jnp.zeros(N_AIL)),
             held_by=put(s.held_by, -1), hold_grip=put(s.hold_grip, 0.0), off_balance=put(s.off_balance, 0),
             rot=put(s.rot, 0.0),
             appearance=put(s.appearance, look), last_msg=put(s.last_msg, jnp.zeros(MSG_LEN, jnp.int32)),
@@ -3275,19 +3279,38 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     injury = jnp.clip(injury + jnp.where(burned, cfg.burn_injury, 0.0), 0.0, 1.0)
     # Body parts: what this tick's blows, bites and falls did to each part; a destroyed head or neck
     # kills (counted to the blow, else the bite)
+    # Staged conditions: each severity moves toward the depth of its cause, fast when worsening and slow
+    # when recovering, and the condition does the damage (replaces the flat per-tick lines below)
+    if cfg.staged_conditions:
+        def _depth(x, onset, full):
+            return jnp.clip((x - onset) / (full - onset), 0.0, 1.0)
+        ail_depth = jnp.stack([_depth(body_temp, cfg.cold_onset, cfg.cold_threshold),
+                            _depth(body_temp, cfg.heat_onset, cfg.heat_threshold),
+                            _depth(hydration, cfg.need_onset, 0.0), _depth(satiety, cfg.need_onset, 0.0)], axis=-1)
+        rate = jnp.where(ail_depth > state.ailment, cfg.ailment_rise, cfg.ailment_fall)
+        ailment = jnp.where(alive0[:, None], jnp.clip(state.ailment + rate * (ail_depth - state.ailment), 0.0, 1.0), state.ailment)
+        sev = ailment
+        # deep hypothermia freezes the extremities and then the trunk
+        frost = cfg.frostbite_rate * jnp.clip((sev[:, AIL_COLD] - cfg.frostbite_onset) / (1.0 - cfg.frostbite_onset), 0.0, 1.0)
+        torso_cold = cfg.cold_torso_rate * jnp.clip((sev[:, AIL_COLD] - cfg.cold_torso_onset) / (1.0 - cfg.cold_torso_onset), 0.0, 1.0)
+        frost_parts = jnp.zeros((n, N_PARTS)).at[:, PART_ARMS].set(frost).at[:, PART_LEGS].set(frost).at[:, PART_TORSO].set(torso_cold)
+        frost_parts = jnp.where(alive0[:, None], frost_parts, 0.0)
+    else:
+        ailment = state.ailment
+        frost_parts = jnp.zeros((n, N_PARTS))
     if cfg.body_parts:
-        part_new = state.part_damage + part_by_blow + part_by_bite \
+        part_new = state.part_damage + part_by_blow + part_by_bite + frost_parts \
             + jnp.zeros((n, N_PARTS)).at[:, PART_LEGS].set(fall_damage)
         vital_gone = alive0 & ((part_new[:, PART_HEAD] >= 1.0) | (part_new[:, PART_NECK] >= 1.0))
         by_blow = (part_by_blow[:, PART_HEAD] + part_by_blow[:, PART_NECK]) > 0
         violence = violence + jnp.where(vital_gone & by_blow, 1.0, 0.0)
         predation = predation + jnp.where(vital_gone & ~by_blow, 1.0, 0.0)
     components = jnp.stack([
-        jnp.where(satiety <= 0, cfg.starve_damage, 0.0),
-        jnp.where(hydration <= 0, cfg.thirst_damage, 0.0),
+        cfg.starve_damage * sev[:, AIL_HUNGER] if cfg.staged_conditions else jnp.where(satiety <= 0, cfg.starve_damage, 0.0),
+        cfg.thirst_damage * sev[:, AIL_THIRST] if cfg.staged_conditions else jnp.where(hydration <= 0, cfg.thirst_damage, 0.0),
         jnp.where(energy <= 0, cfg.exhaust_damage, 0.0),
-        jnp.where(body_temp < cfg.cold_threshold, cfg.cold_damage, 0.0),
-        jnp.where(body_temp > cfg.heat_threshold, cfg.heat_damage, 0.0),
+        cfg.cold_damage * sev[:, AIL_COLD] if cfg.staged_conditions else jnp.where(body_temp < cfg.cold_threshold, cfg.cold_damage, 0.0),
+        cfg.heat_damage * sev[:, AIL_HEAT] if cfg.staged_conditions else jnp.where(body_temp > cfg.heat_threshold, cfg.heat_damage, 0.0),
         jnp.where(sick, cfg.disease_damage / geno.disease_resistance, 0.0),
         predation + jnp.where(stung, cfg.sting_damage, 0.0),     # bitten, gored, stung
         violence,
@@ -3311,7 +3334,7 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
     part_damage = jnp.clip(part_new - jnp.where(thriving, cfg.injury_heal_rate * calm, 0.0)[:, None], 0.0, 1.0) \
         if cfg.body_parts else state.part_damage                              # parts heal as injuries do
     # Every wound scars by the health it takes: blows, predator attacks, burns and falls
-    wound = predation + violence + jnp.where(burned, cfg.burn_damage, 0.0) + fall_damage
+    wound = predation + violence + jnp.where(burned, cfg.burn_damage, 0.0) + fall_damage + frost_parts.sum(-1)   # frostbite hurts and scars
     scars = jnp.where(alive0, jnp.clip(state.scars + cfg.scar_per_wound * wound, 0.0, 1.0), state.scars)
     # Fresh pain: each wound hurts by the health it takes, and the hurt fades over a few hours.
     # An old wound that never healed flares now and then with no new hurt (chronic and phantom pain).
@@ -3977,6 +4000,7 @@ def step(state: State, actions: jnp.ndarray, cfg: EnvConfig, messages: jnp.ndarr
         hardship=keep(hardship, state.hardship),
         scars=scars, lasting_injury=lasting_injury, pain=keep(pain, state.pain), heartache=keep(heartache, state.heartache),
         part_damage=jnp.where(alive0[:, None], part_damage, state.part_damage),
+        ailment=jnp.where(alive0[:, None], ailment, state.ailment),
         held_by=jnp.where(alive0, tech["held_by"], -1), hold_grip=jnp.where(alive0, tech["hold_grip"], 0.0),
         off_balance=jnp.where(alive0, tech["off_balance"], 0), rot=rot,
         sex=state.sex, existed=state.existed, gestation=gestation, courting=courting, father=father, mother=state.mother,

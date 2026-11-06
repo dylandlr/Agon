@@ -135,6 +135,10 @@ def main():
     ap.add_argument("--world-model", action=argparse.BooleanOptionalAction, default=False,
                     help="a learned model of its own world that imagines a few ticks ahead before choosing "
                          "(ideas); on in the presets, --no-world-model for the ablation")
+    ap.add_argument("--staged-conditions", action=argparse.BooleanOptionalAction, default=False,
+                    help="cold, heat, thirst and hunger work through graded conditions (hypothermia, heat illness, "
+                         "dehydration, starvation) that build, do the damage over time, and freeze legs and arms "
+                         "(EnvConfig.staged_conditions); off = the old flat drain past a line")
     ap.add_argument("--share-trunk", action="store_true",
                     help="one trunk (encoder, memory, world model) for the population, tied across the agents; "
                          "policy, value, messages and trust stay each agent's own (MAConfig.share_trunk)")
@@ -189,6 +193,7 @@ def main():
     if args.reproduction:
         env_cfg = with_reproduction(env_cfg, n_founders=args.founders or None)
     env_cfg = with_threats(env_cfg, predators=args.predators, disease=args.disease, hazards=args.hazards)
+    env_cfg = dataclasses.replace(env_cfg, staged_conditions=args.staged_conditions)
     env_cfg = with_tick_minutes(env_cfg, args.tick_minutes)
     env_cfg = dataclasses.replace(env_cfg, max_steps=int(round(args.episode_years * env_cfg.year_length)))
     cfg = MAConfig(num_worlds=args.worlds, num_steps=args.steps, total_ticks=args.ticks, lr=args.lr, agent_chunk=args.agent_chunk,

@@ -78,6 +78,24 @@ class EnvConfig:
                                     # people in shade in an ordinary summer; humans sweat)
     cold_damage: float = 0.006
     heat_damage: float = 0.004
+    # Staged conditions (staged_conditions=True): cold, heat, thirst and hunger no longer subtract a flat
+    # amount from health once past a line. Each builds a graded, persistent condition (hypothermia, heat
+    # illness, dehydration, starvation; env.AILMENTS) that moves toward how deep the cause is (0 at its
+    # onset, 1 at the old damage line) quickly when worsening and slowly when recovering, and the
+    # condition itself does the damage, per tick: (cold_damage, heat_damage, thirst_damage, starve_damage) x
+    # severity. Deep hypothermia also freezes legs and arms (frostbite) and the torso. The severities are
+    # NOT observed; their effects reach the agent through felt pain and damage to each part.
+    # These numbers are starting guesses, not calibrated.
+    staged_conditions: bool = False
+    ailment_rise: float = 0.04        # per tick: share of the gap to the cause's depth closed while worsening
+    ailment_fall: float = 0.01        # ... while recovering (about 4x slower)
+    cold_onset: float = -0.3          # body temp where hypothermia begins (full at cold_threshold)
+    heat_onset: float = 0.4           # body temp where heat illness begins (full at heat_threshold)
+    need_onset: float = 0.15          # satiety or hydration where the condition begins (full at 0)
+    frostbite_onset: float = 0.3      # hypothermia severity past which legs and arms freeze
+    frostbite_rate: float = 0.004     # per tick of part damage to each of legs and arms at severity 1
+    cold_torso_onset: float = 0.7     # severity past which the torso is damaged
+    cold_torso_rate: float = 0.004
     sweat_thirst_mult: float = 1.0  # extra thirst per unit body temp above 0.2
 
     # ------------------------------------------------------------ body
@@ -799,7 +817,8 @@ def with_time_scale(cfg: "EnvConfig", days_per_year: int = 40, days_per_bio_year
 # mating) nothing changes, so a finer tick means more, shorter acts, as in a colony sim.
 _PER_TICK_AMOUNT = (       # added or lost per tick: x k
     "hunger_rate", "thirst_rate", "fatigue_rate", "rest_recovery", "starve_damage", "thirst_damage",
-    "exhaust_damage", "heal_rate", "cold_damage", "heat_damage", "fat_gain_kg", "fat_burn_kg",
+    "exhaust_damage", "heal_rate", "cold_damage", "heat_damage", "ailment_rise", "ailment_fall",
+    "frostbite_rate", "cold_torso_rate", "fat_gain_kg", "fat_burn_kg",
     "injury_heal_rate", "injury_bleed", "disease_damage", "disease_fatigue", "immunity_decay",
     "stress_from_threat", "stress_from_need", "stress_energy_cost", "loneliness_stress", "social_buffering",
     "trauma_recovery", "plant_regrow_forest", "plant_regrow_grass", "animal_hp_regen", "wood_regrow",
