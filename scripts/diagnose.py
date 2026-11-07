@@ -33,6 +33,16 @@ Sections (--sections, default all):
             lighting a torch, starting one.
   caps      What they do and cannot do: each family of actions and each outcome per 1000 awake
             ticks, policy against random, with "never" and "at or below chance" flagged.
+  needs     While hydration or satiety is below 0.3 (the decision check's line): thirst by distance to water, hunger
+            by the chain food takes (holding something edible / empty-handed on good forage / on poor forage; with
+            ecology almost every cell has some food, so distance to food says nothing), and what it chooses in each,
+            policy against random. Separates "beside the resource and does not take it" (decision) from "far and does
+            not go" (navigation / memory) from "none within reach" (placement).
+  deaths    Every cause of death (trained agents): age, asleep, in shelter, at night, child; and for thirst and
+            starvation how it happened (thirst: reached water while low and died anyway / knew it but never reached
+            it / never been near it / none within 12 cells; starvation: held food and died anyway / stood on good
+            forage but never held food / never on good forage), for predation whether it was an ambush, asleep, or
+            a predator it saw and did not flee.
   learn     From history.json: is learning still moving (last third against the third before),
             per-output clipping, KL, imitation, watching, world-model errors and trust. Entropy is
             the true mean entropy only for runs made after the logging fix (commit ab25481);
@@ -60,7 +70,10 @@ import decision_check as D                                             # noqa: E
 COLD = -0.3                  # exposure starts below this body temperature; damage starts at cfg.cold_threshold
 PROBE_TEMPS = [0.0, -0.3, -0.5, -0.7, -0.9]
 RMAX = 12                    # how far (cells) we look for shelter
-SECTIONS = ["survival", "cold", "probe", "reflex", "fire", "caps", "learn"]
+SECTIONS = ["survival", "cold", "probe", "reflex", "fire", "caps", "learn", "needs", "deaths"]
+LOWNEED = 0.3                # a need is low (the decision check's line) below this
+NEARPRED = 3                 # a predator this close (cells) is a threat
+DEATH_CAUSES = ("thirst", "starvation", "predation", "violence", "disease", "injury", "exhaustion", "heat", "cold", "fall", "burns", "childbirth", "age")
 VARIANTS = ["policy", "reflex_cold", "reflex_dusk"]
 FAMILIES = {
     "move": list(range(E.MOVE_N, E.MOVE_NW + 1)), "rest": [E.REST], "sleep": [E.SLEEP],
@@ -131,6 +144,22 @@ def make_dist_fn(G, n):
     return dist
 
 
+def field_dist(mask, G):
+    """(G, G) Chebyshev distance (0..RMAX, RMAX+1 = none within reach) from every cell to the nearest True cell of one
+    shared mask (water, or food now)."""
+    reach = mask
+    d = jnp.where(mask, 0, RMAX + 1)
+    for r in range(1, RMAX + 1):
+        p = jnp.pad(reach, 1)
+        new = reach
+        for dx in range(3):
+            for dy in range(3):
+                new = new | p[dx:dx + G, dy:dy + G]
+        reach = new
+        d = jnp.where((d > RMAX) & reach, r, d)
+    return d
+
+
 # ------------------------------------------------------------------ one world
 def rollout(cfg, brains, kind, variant, seed, days, probe_every, hidden):
     """kind: "random" or "policy". variant: "policy" | "reflex_cold" | "reflex_dusk" (laid over a policy)."""
@@ -183,6 +212,31 @@ def rollout(cfg, brains, kind, variant, seed, days, probe_every, hidden):
         dusk = night | (hour >= 12.0 + dl / 2 - 2.0)
         return in_cover, d_true, d_known, night, dusk, E.season_of(s.t, cfg)
 
+    water0 = jnp.asarray(E.drinkable(state.terrain) | (state.terrain == E.MARSH))   # where one can drink (adjacent) or stand in it
+
+    @jax.jit
+    def ctx2(s):
+        """Needs context: distance to water (true, and to water the agent has stood near), whether it is at water, how good
+        the forage is where it stands (share of the full rate; with ecology almost every cell has some, so distance to
+        food says nothing), and whether it holds something edible."""
+        r_, c_ = s.pos[:, 0], s.pos[:, 1]
+        dw = field_dist(water0, G)[r_, c_]
+        dwk = dist_fn(s.visited & water0[None], s.pos)
+        fg = E.forage_grid(s, cfg)[r_, c_] / cfg.plant_max
+        held = s.inv[jnp.arange(n), s.hand]
+        holding = E.EDIBLE[s.hand] & (held > 0.05)
+        return dw, dwk, fg, E.adjacent_to_water(s.terrain, s.pos, cfg), holding
+
+    def predator_distance(s):
+        """Nearest predator that can attack now (alive, awake, not tame), Chebyshev, 99 = none (as decision_check)."""
+        P = s.predators
+        pp = np.asarray(s.pos) + np.stack([np.zeros(n, np.int32), np.asarray(s.below).astype(np.int32) * E.LAYER_OFF], -1)
+        lp = np.asarray(P.pos) + np.stack([np.zeros(len(P.alive), np.int32), np.asarray(P.below).astype(np.int32) * E.LAYER_OFF], -1)
+        hunting = np.asarray(P.alive) & (np.asarray(P.rest) <= 0)
+        dist = np.abs(pp[:, None, :] - lp[None, :, :]).max(-1).astype(float)
+        ok = hunting[None, :] & (np.asarray(P.bond).T < cfg.tame_calm if cfg.taming else True)
+        return np.minimum(np.where(ok, dist, 99.0).min(1), 99).astype(np.int8)
+
     rec = collections.defaultdict(list)
     deaths, probes = [], []
     counts = collections.Counter()
@@ -217,6 +271,15 @@ def rollout(cfg, brains, kind, variant, seed, days, probe_every, hidden):
         age = np.asarray(state.age)
         birth_age = np.asarray(state.birth_age)
         state_prev_pos = np.asarray(state.pos)
+        dw, dwk, fg, atw, holding = ctx2(state)
+        rec["hyd"].append(np.asarray(state.hydration).astype(np.float16))
+        rec["sat"].append(np.asarray(state.satiety).astype(np.float16))
+        rec["dwater"].append(np.asarray(dw).astype(np.int8))
+        rec["dwater_known"].append(np.asarray(dwk).astype(np.int8))
+        rec["forage"].append(np.asarray(fg).astype(np.float16))
+        rec["holding"].append(np.asarray(holding))
+        rec["atwater"].append(np.asarray(atw))
+        rec["dpred"].append(predator_distance(state))
         state, _, _, info = step(state, a, msg)
         # record
         rec["alive"].append(alive)
@@ -547,6 +610,199 @@ def sec_learn(run):
     return out
 
 
+def _pooled(R, variant, kind, keys):
+    """Per-tick arrays of the given rec keys, pooled over rollouts of one kind: dict of flattened arrays over (tick, agent)."""
+    rs = [r for r in R if r["variant"] == variant and r["kind"] == kind and "dwater" in r["rec"]]
+    if not rs:
+        return None
+    out = {k: np.concatenate([r["rec"][k].reshape(-1) if r["rec"][k].ndim == 2 else
+                              np.repeat(r["rec"][k], r["rec"]["alive"].shape[1]) for r in rs]) for k in keys}
+    return out
+
+
+def sec_needs(cfg, R):
+    """Where are they, and what do they choose, while a need is low? Policy against random agents. Thirst is split by
+    distance to water; hunger by the chain food takes (hold something edible -> eat; on good forage -> grasp it)."""
+    keys = ["alive", "asleep", "act", "hyd", "sat", "dwater", "forage", "holding", "atwater"]
+    pol, rnd = _pooled(R, "policy", "policy", keys), _pooled(R, "policy", "random", keys)
+    print("\n## While a need is low (below %.1f): where they are and what they choose\n" % LOWNEED)
+    if pol is None:
+        print("No rollouts with needs context (rerun without --reuse).")
+        return {}
+    FOOD_OK = 0.3                      # forage at least this share of the full rate counts as good ground
+    spec = {
+        "thirst": dict(level="hyd", title="hydration", cols=[("drink", [E.DRINK]), ("seek_water", [E.SEEK_WATER]),
+                                                           ("a move", FAMILIES["move"]), ("rest/sleep", FAMILIES["rest"] + FAMILIES["sleep"])],
+                       buckets=lambda P: [
+                           ("at water (can drink)", P["atwater"]),
+                           ("1 to 5 cells from water", ~P["atwater"] & (P["dwater"] >= 1) & (P["dwater"] <= 5)),
+                           (f"6 to {RMAX} cells", (P["dwater"] >= 6) & (P["dwater"] <= RMAX)),
+                           (f"no water within {RMAX}", P["dwater"] > RMAX)]),
+        "hunger": dict(level="sat", title="satiety", cols=[("eat", [E.EAT]), ("grasp", [E.GRASP]), ("seek_food", [E.SEEK_FOOD]),
+                                                         ("a move", FAMILIES["move"]), ("rest/sleep", FAMILIES["rest"] + FAMILIES["sleep"])],
+                       buckets=lambda P: [
+                           ("holding something edible", P["holding"]),
+                           (f"empty-handed, on good forage (>= {FOOD_OK:.0%} of full)", ~P["holding"] & (P["forage"].astype(np.float32) >= FOOD_OK)),
+                           (f"empty-handed, on poor forage (< {FOOD_OK:.0%})", ~P["holding"] & (P["forage"].astype(np.float32) < FOOD_OK))]),
+    }
+    result = {}
+    for need, sp in spec.items():
+        rows, data = [], []
+        for who, P in (("policy", pol), ("random", rnd)):
+            if P is None:
+                continue
+            m = P["alive"] & ~P["asleep"] & (P[sp["level"]].astype(np.float32) < LOWNEED)
+            tot = int(m.sum())
+            for name, bm in sp["buckets"](P):
+                b = m & bm
+                nb = int(b.sum())
+                a = P["act"][b].astype(int)
+                rates = [(float(np.isin(a, ix).mean()) if nb else None) for _, ix in sp["cols"]]
+                rows.append([who, name, nb, pct(nb, tot)] + [pct(int(np.isin(a, ix).sum()), nb) for _, ix in sp["cols"]])
+                data.append({"who": who, "bucket": name, "ticks": nb, "share": nb / tot if tot else None,
+                             "rates": dict(zip([c for c, _ in sp["cols"]], rates))})
+        print(f"### {need}: awake ticks with {sp['title']} < {LOWNEED}\n")
+        print(md(rows, ["agents", "where", "ticks", "share of low-need ticks"] + ["chose " + c for c, _ in sp["cols"]]))
+        print()
+        result[need] = data
+    print("Reading it: ticks beside water (or holding food) where they do not drink (eat) are a decision failure; ticks far from "
+          "water, or empty-handed on good forage with no grasp, are navigation or the gather step; none within reach is placement. "
+          "Distances are on the surface map (agents underground are measured from the cell above).")
+    return result
+
+
+def sec_deaths(cfg, R):
+    """Forensics for every cause of death (policy agents): who, when, in what state, and for thirst, starvation and
+    predation how it happened."""
+    pol = [r for r in R if r["variant"] == "policy" and r["kind"] == "policy"]
+    ds = [(r, d) for r in pol for d in r["deaths"]]
+    print("\n## Deaths by cause, all of them (trained agents)\n")
+    if not ds:
+        print("No deaths in these rollouts.")
+        return {"n": 0}
+    yr = cfg.year_length
+    ay = sum(r["alive_ticks"] for r in pol) / yr
+    rows, med = [], (lambda v: "n/a" if not len(v) else f"{float(np.median(v)):.1f}")
+    for cause, c in collections.Counter(d["cause"] for _, d in ds).most_common():
+        dd = [d for _, d in ds if d["cause"] == cause]
+        rows.append([cause, c, f"{c / max(ay, 1e-9):.2f}", med([d["age"] / cfg.day_length for d in dd]),
+                     pct(sum(d["asleep"] for d in dd), c), pct(sum(d["in_cover"] for d in dd), c),
+                     pct(sum(d["night"] for d in dd), c), pct(sum(child_of(cfg, d) for d in dd), c)])
+    print(md(rows, ["cause", "deaths", "per agent-year", "median days lived in the sim", "died asleep", "in shelter", "at night", "children"]))
+    out = {"n": len(ds), "agent_years": ay}
+
+    def stretch(rec, i, t, ok):
+        """First tick e of the unbroken stretch up to t (inclusive) in which agent i was alive with ok[:, i] true."""
+        e = t
+        while e > 0 and rec["alive"][e - 1, i] and ok[e - 1, i]:
+            e -= 1
+        return e
+
+    for cause, need, dist_key, known_key, acts, label in (
+            ("thirst", "hyd", "dwater", "dwater_known", [E.DRINK], "water"),
+            ("starvation", "sat", None, None, [E.EAT], "food")):
+        rows_, bins = [], collections.Counter()
+        for r, d in ds:
+            if d["cause"] != cause or "dwater" not in r["rec"]:
+                continue
+            rec, i, t = r["rec"], d["agent"], d["t"]
+            low = rec[need].astype(np.float32) < LOWNEED
+            e = stretch(rec, i, t, low)
+            sl = slice(e, t + 1)
+            awake = ~rec["asleep"][sl, i]
+            hours = (t - e + 1) * 24.0 / cfg.day_length
+            acts_c = collections.Counter(int(a) for a in rec["act"][sl, i][awake])
+            if cause == "thirst":
+                near = rec["atwater"][sl, i]
+                reached = bool(near.any())
+                at_ticks = int((near & awake).sum())
+                took = int(np.isin(rec["act"][sl, i][near & awake], acts).sum())
+                d0 = int(rec[dist_key][e, i])
+                dk = int(rec[known_key][e, i])
+                if reached:
+                    bins["reached water while low, died anyway"] += 1
+                elif d0 > RMAX:
+                    bins[f"no water within {RMAX} cells when it began"] += 1
+                elif dk <= RMAX:
+                    bins[f"knew water within {RMAX} cells, never reached it"] += 1
+                else:
+                    bins[f"water within {RMAX} cells, never reached it (never been near it)"] += 1
+                rows_.append({"hours": hours, "reached": reached, "at_ticks": at_ticks, "took": took, "d_at_onset": d0,
+                              "asleep_share": float(1 - awake.mean()), "top": [(E.ACTION_NAMES[a], c) for a, c in acts_c.most_common(3)]})
+            else:
+                hold = rec["holding"][sl, i]
+                good = rec["forage"][sl, i].astype(np.float32) >= 0.3
+                at_ticks = int((hold & awake).sum())                      # ticks it held food while starving
+                took = int(np.isin(rec["act"][sl, i][hold & awake], acts).sum())
+                if hold.any():
+                    bins["held food while starving, died anyway"] += 1
+                elif good.any():
+                    bins["stood on good forage while starving, never held food"] += 1
+                else:
+                    bins["never on good forage while starving"] += 1
+                rows_.append({"hours": hours, "reached": bool(hold.any()), "at_ticks": at_ticks, "took": took,
+                              "d_at_onset": None, "asleep_share": float(1 - awake.mean()),
+                              "top": [(E.ACTION_NAMES[a], c) for a, c in acts_c.most_common(3)]})
+        if not rows_:
+            continue
+        n = len(rows_)
+        print(f"\n### {cause}: {n} deaths\n")
+        print(md([[k, v, pct(v, n)] for k, v in bins.most_common()], ["how", "deaths", "share"]))
+        print()
+        trs = [["hours from the need first low to death (median)", med([x["hours"] for x in rows_])]]
+        if cause == "thirst":
+            trs.append(["distance to water when it began, cells (median)", med([x["d_at_onset"] for x in rows_])])
+        trs += [[f"awake ticks {'next to water' if cause == 'thirst' else 'holding food'} while low (median)", med([x["at_ticks"] for x in rows_])],
+                [f"of those, ticks choosing {'/'.join(E.ACTION_NAMES[a] for a in acts)} (median)", med([x["took"] for x in rows_])],
+                ["share of the stretch asleep (median)", med([x["asleep_share"] for x in rows_])]]
+        print(md(trs, ["", ""]))
+        top = collections.Counter()
+        for x in rows_:
+            for name, c in x["top"]:
+                top[name] += c
+        print("\nWhat they did while low (awake ticks): " + ", ".join(f"{k} {v}" for k, v in top.most_common(6)))
+        out[cause] = {"n": n, "bins": dict(bins), "rows": rows_}
+
+    pr = []
+    for r, d in ds:
+        if d["cause"] not in ("predation", "violence") or "dpred" not in r["rec"]:
+            continue
+        rec, i, t = r["rec"], d["agent"], d["t"]
+        close = rec["dpred"][:, i] <= NEARPRED if d["cause"] == "predation" else np.zeros(len(rec["dpred"]), bool)
+        e = t
+        while e > 0 and rec["alive"][e - 1, i] and close[e - 1]:
+            e -= 1
+        warn = t - e                                      # ticks it had a predator within reach before the end
+        sl = slice(e, t)
+        a = rec["act"][sl, i].astype(int)
+        pr.append({"cause": d["cause"], "warn": warn, "asleep": d["asleep"], "in_cover": d["in_cover"],
+                   "fled": int(np.isin(a, [E.FLEE]).sum()), "moved": int(np.isin(a, FAMILIES["move"]).sum()),
+                   "stayed": int(np.isin(a, FAMILIES["rest"] + FAMILIES["sleep"]).sum())})
+    pp = [x for x in pr if x["cause"] == "predation"]
+    if pp:
+        def pbin(x):
+            if x["asleep"]:
+                return "died asleep"
+            if x["warn"] <= 2:
+                return "no predator within 3 cells until the last 2 ticks (ambush)"
+            return "predator within 3 cells for 3+ ticks, never chose FLEE" if x["fled"] == 0 else "chose FLEE and was caught"
+        print(f"\n### predation: {len(pp)} deaths\n")
+        bins = collections.Counter(pbin(x) for x in pp)
+        print(md([[k, v, pct(v, len(pp))] for k, v in bins.most_common()], ["how", "deaths", "share"]))
+        print()
+        print(md([["ticks with a predator within 3 cells before the end (median)", med([x["warn"] for x in pp])],
+                  ["ticks choosing FLEE in that stretch (median)", med([x["fled"] for x in pp])],
+                  ["ticks choosing a move (median)", med([x["moved"] for x in pp])],
+                  ["ticks choosing rest/sleep (median)", med([x["stayed"] for x in pp])],
+                  ["in shelter at death", pct(sum(x["in_cover"] for x in pp), len(pp))]], ["", ""]))
+        out["predation"] = {"n": len(pp), "bins": dict(bins), "rows": pp}
+    print("\nReading it: for thirst and starvation, 'reached it while low, died anyway' means the resource was there and the "
+          "need was not met (check the drink/eat choices beside it); 'knew it, never reached' is a decision or a walk too long "
+          "for the need; 'never been near it' is exploration; 'none within reach' is placement. For predation, 'ambush' is not "
+          "avoidable by choice; 'never chose FLEE' is a decision failure.")
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--run", type=str, default=None)
@@ -572,7 +828,7 @@ def main():
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     pk = out / "rollouts.pkl"
-    need_roll = any(s in secs for s in ["survival", "cold", "probe", "reflex", "fire", "caps"])
+    need_roll = any(s in secs for s in ["survival", "cold", "probe", "reflex", "fire", "caps", "needs", "deaths"])
     R = []
     if need_roll and args.reuse and pk.exists():
         R = pickle.load(open(pk, "rb"))
@@ -589,7 +845,7 @@ def main():
                 R.append(r)
                 print(f"seed {seed} {variant}: alive at end {r['alive_end']}/{r['start_alive']}, deaths {len(r['deaths'])}, "
                       f"cold {sum(1 for d in r['deaths'] if d['cause'] == 'cold')}", flush=True)
-            if any(s in secs for s in ["survival", "fire", "caps"]):
+            if any(s in secs for s in ["survival", "fire", "caps", "needs"]):
                 r = rollout(cfg, brains, "random", "policy", 100 + seed, args.days, 0, hidden)
                 R.append(r)
                 print(f"seed {seed} random: alive at end {r['alive_end']}/{r['start_alive']}, deaths {len(r['deaths'])}", flush=True)
@@ -609,6 +865,10 @@ def main():
         result["fire"] = sec_fire(cfg, R)
     if "caps" in secs:
         result["caps"] = sec_caps(cfg, R)
+    if "needs" in secs:
+        result["needs"] = sec_needs(cfg, R)
+    if "deaths" in secs:
+        result["deaths"] = sec_deaths(cfg, R)
     if "learn" in secs:
         result["learn"] = sec_learn(run)
     (out / "diagnose.json").write_text(json.dumps(result, indent=1, default=lambda o: o.tolist() if hasattr(o, "tolist") else str(o)))

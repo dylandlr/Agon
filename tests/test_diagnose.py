@@ -80,3 +80,91 @@ def test_learning_panel_reads_history(tmp_path, capsys):
     text = capsys.readouterr().out
     assert "survival score per world-day" in text and "flat" in text      # the score stopped rising in the last third
     assert "survival_score_per_world_day" in out
+
+
+def _fake_needs_run(T=100, N=2, *, kind="policy", hyd_low_from=40, atwater=False, dwater=5, dwater_known=13,
+                    act=0, death=None, dpred=None, extra=None):
+    from types import SimpleNamespace
+    hyd = np.ones((T, N), np.float16)
+    hyd[hyd_low_from:, 0] = 0.1
+    rec = {"alive": np.ones((T, N), bool), "asleep": np.zeros((T, N), bool), "act": np.full((T, N), act, np.int16),
+           "cover": np.zeros((T, N), bool), "hyd": hyd, "sat": np.ones((T, N), np.float16),
+           "dwater": np.full((T, N), dwater, np.int8), "dwater_known": np.full((T, N), dwater_known, np.int8),
+           "forage": np.full((T, N), 0.5, np.float16), "holding": np.zeros((T, N), bool),
+           "atwater": np.full((T, N), atwater, bool),
+           "dpred": np.full((T, N), 99, np.int8) if dpred is None else dpred,
+           "night": np.zeros(T, bool), "season": np.zeros(T, int)}
+    rec.update(extra or {})
+    run = {"kind": kind, "variant": "policy", "seed": 0, "rec": rec, "deaths": [death] if death else [], "probes": [],
+           "start_alive": N, "alive_end": N - bool(death), "alive_ticks": 200, "awake_ticks": 200, "counts": {}}
+    cfg = SimpleNamespace(day_length=48, adult_years=15.0, ticks_per_bio_year=48.0, year_length=1920)
+    return cfg, [run]
+
+
+def _death(cause, t=90):
+    return {"t": t, "agent": 0, "cause": cause, "age": 5000, "birth_age": 0, "season": 1, "night": False,
+            "in_cover": False, "asleep": False}
+
+
+def test_thirst_death_bins():
+    for atw, dw, dk, want in ((True, 1, 13, "reached water while low"), (False, 13, 13, "no water within"),
+                              (False, 6, 13, "never been near it"), (False, 6, 5, "knew water within")):
+        cfg, R = _fake_needs_run(atwater=atw, dwater=dw, dwater_known=dk, death=_death("thirst"))
+        out = DG.sec_deaths(cfg, R)
+        assert any(want in k for k in out["thirst"]["bins"]), (want, out["thirst"]["bins"])
+        assert abs(out["thirst"]["rows"][0]["hours"] - 25.5) < 1e-6      # ticks 40..90 at 30 minutes each
+
+
+def test_predation_death_bins():
+    from lifesim import env as E
+    T = 100
+    for dp_from, act, want in ((89, E.REST, "ambush"), (60, E.REST, "never chose FLEE"), (60, E.FLEE, "chose FLEE and was caught")):
+        dpred = np.full((T, 2), 99, np.int8)
+        dpred[dp_from:, 0] = 2
+        cfg, R = _fake_needs_run(death=_death("predation"), dpred=dpred, act=act)
+        out = DG.sec_deaths(cfg, R)
+        assert any(want in k for k in out["predation"]["bins"]), (want, out["predation"]["bins"])
+
+
+def test_needs_table_separates_beside_water_from_far(capsys):
+    from lifesim import env as E
+    # policy: thirsty from tick 40; beside water it drinks, far from water it rests. random never drinks.
+    cfg, Rp = _fake_needs_run(atwater=True, dwater=1, act=E.DRINK)
+    cfg, Rr = _fake_needs_run(kind="random", atwater=True, dwater=1, act=E.REST)
+    out = DG.sec_needs(cfg, Rp + Rr)
+    text = capsys.readouterr().out
+    pol = {d["bucket"]: d for d in out["thirst"] if d["who"] == "policy"}
+    rnd = {d["bucket"]: d for d in out["thirst"] if d["who"] == "random"}
+    assert pol["at water (can drink)"]["ticks"] == 60 and pol["at water (can drink)"]["rates"]["drink"] == 1.0
+    assert rnd["at water (can drink)"]["rates"]["drink"] == 0.0
+    assert "while a need is low" in text.lower()
+
+
+def test_starvation_death_bins_follow_the_food_chain():
+    from lifesim import env as E
+    T = 100
+    for hold, forage, want in ((True, 0.5, "held food while starving"), (False, 0.5, "stood on good forage"),
+                               (False, 0.1, "never on good forage")):
+        cfg, R = _fake_needs_run(death=_death("starvation"), hyd_low_from=100)
+        rec = R[0]["rec"]
+        rec["sat"] = np.ones((T, 2), np.float16)
+        rec["sat"][40:, 0] = 0.1
+        rec["holding"][:, 0] = hold
+        rec["forage"][:, 0] = forage
+        out = DG.sec_deaths(cfg, R)
+        assert any(want in k for k in out["starvation"]["bins"]), (want, out["starvation"]["bins"])
+
+
+def test_hunger_table_splits_holding_from_empty_handed(capsys):
+    from lifesim import env as E
+    cfg, Rp = _fake_needs_run(act=E.EAT, hyd_low_from=100)
+    rec = Rp[0]["rec"]
+    rec["sat"] = np.ones((100, 2), np.float16)
+    rec["sat"][40:, 0] = 0.1
+    rec["holding"][:, 0] = True                              # holding food and choosing EAT
+    cfg, Rr = _fake_needs_run(kind="random", act=E.REST, hyd_low_from=100)
+    Rr[0]["rec"]["sat"] = rec["sat"].copy()
+    out = DG.sec_needs(cfg, Rp + Rr)
+    capsys.readouterr()
+    pol = {d["bucket"]: d for d in out["hunger"] if d["who"] == "policy"}
+    assert pol["holding something edible"]["ticks"] == 60 and pol["holding something edible"]["rates"]["eat"] == 1.0
