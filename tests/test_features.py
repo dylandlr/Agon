@@ -223,7 +223,7 @@ def test_experiment_conditions():
     assert [n for n, _ in ex.items("validate")] == [
         "caveman", "caveman_entropy_floor", "caveman_no_retention", "caveman_shared_trunk", "caveman_no_world_model",
         "caveman_no_sleep_learning", "blank", "caveman_entropy_floor_high", "caveman_floor_no_retention",
-        "caveman_staged_conditions"]
+        "caveman_staged_conditions", "caveman_heritable_sharing"]
     inh = ex.items("inheritance")
     assert len(inh) == 6 and {e[0] for _, e in inh} == {"parent", "innate"}
     from lifesim.presets import PRESETS

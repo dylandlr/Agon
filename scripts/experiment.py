@@ -117,7 +117,11 @@ def items(kind, args=None):
                 ("caveman_floor_no_retention", ["--entropy-target", "1.5", "--retention-coef", "0"]),
                 # 9: Arm A of the injury redesign (design-injury-conditions-and-learning.md): cold, heat, thirst and
                 # hunger work through graded conditions; the observation is unchanged. Pair with 0 on the same seeds.
-                ("caveman_staged_conditions", ["--staged-conditions"])]
+                ("caveman_staged_conditions", ["--staged-conditions"]),
+                # 10: shared AND selfish reward. Each agent's alpha is its own heritable `sharing` gene (founders
+                # uniform 0..1) and its group is the living agents within 6 cells; selection sets how shared the
+                # reward is. Compare with 0 (alpha 0) on the same seeds; report mean_sharing over training.
+                ("caveman_heritable_sharing", ["--alpha-heritable", "--share-radius", "6"])]
     if kind == "stress":
         return [(k, [s]) for k, s in STRESS]
     if kind == "inheritance":

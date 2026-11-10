@@ -47,6 +47,11 @@ class Genotype(NamedTuple):
     # Rare: weighs others' visible fortunes like one's own, kin or not (0 for nearly everyone).
     # Not inherited: it arises anew with probability EnvConfig.saint_rate (set by the environment).
     selflessness: jnp.ndarray
+    # How much of the group's fortune one's own training signal contains (0 purely selfish, 1 purely the
+    # group's). Only used when training with --alpha-heritable; otherwise inert. Heritable, so selection
+    # decides how shared a society's reward is. Appended last, and drawn from its own key (below), so every
+    # other trait of a given seed is exactly what it was before this field existed.
+    sharing: jnp.ndarray
 
 
 # (log-mean, log-std) for multiplicative traits; (low, high) for bounded ones
@@ -63,14 +68,20 @@ _BOUNDS = {
     "temperament_drift": (0.0, 1.0),
     "empathy": (0.0, 1.0), "kin_care": (0.0, 1.0), "envy": (0.0, 1.0), "guilt": (0.0, 1.0),
     "reciprocity": (0.0, 1.0), "vengefulness": (0.0, 1.0), "sadism": (0.0, 1.0), "same_sex": (0.0, 1.0),
-    "selflessness": (0.0, 2.0),
+    "selflessness": (0.0, 2.0), "sharing": (0.0, 1.0),
 }
 _FIELDS = Genotype._fields
 
 
+def _field_keys(key):
+    """One key per trait. The last trait (sharing) takes its own folded key rather than a slot in the split,
+    so adding it did not change the random draws of any earlier trait."""
+    return list(jax.random.split(key, len(_FIELDS) - 1)) + [jax.random.fold_in(key, 777)]
+
+
 def sample(key: jax.Array, n: int) -> Genotype:
     """Founder genotypes: independent draws per trait."""
-    keys = jax.random.split(key, len(_FIELDS))
+    keys = _field_keys(key)
     vals = {}
     for k, name in zip(keys, _FIELDS):
         if name == "selflessness":
@@ -110,6 +121,7 @@ HERITABILITY = {
     "empathy": 0.35, "kin_care": 0.35, "envy": 0.35, "guilt": 0.35,
     "reciprocity": 0.35, "vengefulness": 0.35, "sadism": 0.35, "libido": 0.4,
     "same_sex": 0.3,                    # twin studies: about 0.3
+    "sharing": 0.35,                    # like the moral sentiments
 }
 
 
@@ -124,7 +136,7 @@ def inherit(key: jax.Array, mother: Genotype, father: Genotype, population: Geno
 
     Multiplicative traits are blended on the log scale; bounded ones directly.
     Shapes: mother/father (k,), population (N,) used only for its mean and spread."""
-    keys = jax.random.split(key, len(_FIELDS))
+    keys = _field_keys(key)
     vals = {}
     for k, name in zip(keys, _FIELDS):
         h2 = HERITABILITY.get(name, 0.4)
@@ -145,7 +157,7 @@ def mutate(key: jax.Array, child: Genotype, population: Genotype, rate: float = 
     then clipped to the trait's range. Far rarer and larger than the ordinary variation between
     siblings that inherit() already gives. Selflessness is left alone (it is drawn by the
     environment). Returns the genotype and the jumps in standard deviations, (k, n_traits)."""
-    keys = jax.random.split(key, len(_FIELDS))
+    keys = _field_keys(key)
     vals, jumps = {}, []
     for k, name in zip(keys, _FIELDS):
         x = getattr(child, name)
@@ -166,8 +178,8 @@ def recombine_and_mutate(key: jax.Array, mother: Genotype, father: Genotype,
     """Per-trait uniform crossover, then multiplicative (or additive, for
     bounded traits) Gaussian mutation. Shapes must match."""
     k_cross, k_mut = jax.random.split(key)
-    cross_keys = jax.random.split(k_cross, len(_FIELDS))
-    mut_keys = jax.random.split(k_mut, len(_FIELDS))
+    cross_keys = _field_keys(k_cross)
+    mut_keys = _field_keys(k_mut)
     vals = {}
     for ck, mk, name in zip(cross_keys, mut_keys, _FIELDS):
         m, f = getattr(mother, name), getattr(father, name)

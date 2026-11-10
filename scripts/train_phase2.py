@@ -66,6 +66,10 @@ def main():
                     help="acts: original rewards for acts; survival: survival is the only reward, felt by disposition")
     ap.add_argument("--alpha", type=float, default=0.0,
                     help="prosociality: 0 own reward, 1 group-mean reward")
+    ap.add_argument("--alpha-heritable", action="store_true",
+                    help="each agent's alpha is its own heritable `sharing` gene (founders uniform 0..1); --alpha is then unused")
+    ap.add_argument("--share-radius", type=int, default=0,
+                    help="the group an agent shares reward with: the agents alive within this many cells (0 = the whole world)")
     ap.add_argument("--imitation", type=float, default=0.5, help="social learning weight; 0 = off")
     ap.add_argument("--imitation-bias", choices=["uniform", "success", "kin"], default="success")
     ap.add_argument("--imitate-all", action="store_true",
@@ -203,7 +207,8 @@ def main():
                    per_agent_lr=not args.no_agent_lr, seed=args.seed,
                    num_minibatches=min(4, args.worlds), imitation_coef=args.imitation,
                    imitation_bias=args.imitation_bias, imitate_positive_only=not args.imitate_all,
-                   alpha=args.alpha, msg_ent_coef=args.msg_ent_coef, ent_coef=args.ent_coef,
+                   alpha=args.alpha, alpha_heritable=args.alpha_heritable, share_radius=args.share_radius,
+                   msg_ent_coef=args.msg_ent_coef, ent_coef=args.ent_coef,
                    speech_attention=args.speech_attention, teach_bonus=args.teach_bonus,
                    sleep_learning=not args.no_sleep_learning, world_model=args.world_model,
                    share_trunk=args.share_trunk, entropy_target=args.entropy_target, entropy_boost_max=args.entropy_boost_max,
@@ -246,6 +251,7 @@ def main():
             row = {
                 "update": u + 1, "ticks": (u + 1) * cfg.num_steps,
                 "agent_steps": (u + 1) * cfg.num_steps * cfg.num_worlds * args.agents,
+                "mean_sharing": round(float(acc["sharing_sum"]) / max(float(acc["sharing_n"]), 1.0), 4),
                 "mean_age_at_death": round(float(acc["age_at_death"]) / deaths, 1) if deaths else None,
                 "deaths": {E.CAUSE_NAMES[c]: int(k) for c, k in enumerate(acc["cause"]) if c and k},
                 "deaths_by_season": dict(zip(["spring", "summer", "autumn", "winter"],

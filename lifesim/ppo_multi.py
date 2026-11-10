@@ -74,6 +74,11 @@ class MAConfig:
     imitation_bias_strength: float = 5.0
     imitate_positive_only: bool = True
     alpha: float = 0.0              # prosociality: train on (1 - alpha) * own + alpha * group mean reward
+    # alpha_heritable: each agent's alpha is its own heritable `sharing` gene (alpha above is then unused), so
+    # selection decides how shared the reward is. share_radius: the group an agent shares with is those alive
+    # within this many cells (Chebyshev); 0 = everyone alive in the world.
+    alpha_heritable: bool = False
+    share_radius: int = 0
     # Off by default: with them on, speech more than doubled over 614k steps (133 vs 309 per
     # 1,000 agent-ticks) with no other benefit; talkers got copied, so talking spread.
     # Keep them as an experimental condition for language, not a default.
@@ -196,6 +201,24 @@ def consolidation_plan(done, died, sleep_q, stage, consolidation_ticks, span):
     finalized = (stage == 1) | ((stage == 0) & (consolidated | ~in_tail))
     next_stage = jnp.where((stage == 0) & ~finalized, 1, 2)[T - span:] if span > 0 else stage[:0]
     return weight, finalized, consolidated, next_stage
+
+
+def mix_reward(reward, alive0, pos, alpha, radius):
+    """Each agent's training reward: (1 - alpha) * own + alpha * the mean reward of its group.
+
+    reward, alive0 (B, N); pos (B, N, 2); alpha a scalar or (B, N); radius 0 = the whole world, else the
+    agents within `radius` cells. The group is the agents ALIVE at the start of the tick, the agent itself
+    included: dead and unborn slots carry no reward and must not dilute the mean (they did before this was
+    written, so the shared share of the signal fell as the population did). An agent that was not alive
+    keeps its own reward unchanged."""
+    w = alive0.astype(reward.dtype)
+    if radius and radius > 0:
+        near = (jnp.abs(pos[:, :, None, :] - pos[:, None, :, :]).max(-1) <= radius).astype(reward.dtype)
+        wij = near * w[:, None, :]                                           # (B, N, N): j in i's group, alive
+        group = (wij * reward[:, None, :]).sum(-1) / jnp.maximum(wij.sum(-1), 1.0)
+    else:
+        group = ((reward * w).sum(-1) / jnp.maximum(w.sum(-1), 1.0))[:, None]
+    return jnp.where(alive0, (1 - alpha) * reward + alpha * group, reward)
 
 
 def gae(reward, value, done, boot, last_val, gam, lam):
@@ -430,7 +453,9 @@ def make_train(env_cfg: EnvConfig, cfg: MAConfig):
                 states, _swap_axes_nb(action), _swap_axes_nb(msg))
             own_reward = reward                                          # before mixing: comparable across alpha
             # Prosociality weight alpha: each agent's training reward mixes in the group mean
-            reward = (1 - cfg.alpha) * reward + cfg.alpha * reward.mean(axis=1, keepdims=True)
+            a_vec = states.genotype.sharing if cfg.alpha_heritable else cfg.alpha
+            if cfg.alpha_heritable or cfg.alpha:
+                reward = mix_reward(reward, states.alive, states.pos, a_vec, cfg.share_radius)
             idx = jax.random.randint(k_pick, (b,), 0, b)
             fresh = jax.tree_util.tree_map(lambda x: x[idx], pool)
             fresh = fresh._replace(key=jax.vmap(lambda k: jax.random.fold_in(k, 1))(fresh.key))
@@ -501,6 +526,8 @@ def make_train(env_cfg: EnvConfig, cfg: MAConfig):
                 # before alpha mixing and without the moral sentiments, as the proposal defines it
                 "own_reward": (own_reward - info.moral_reward).sum(),
                 "world_ticks": jnp.asarray(b),
+                "sharing_sum": (states.genotype.sharing * states.alive).sum(),     # heritable alpha of the living
+                "sharing_n": states.alive.sum(),
                 "survivors_at_end": (nxt.alive.sum(axis=-1) * done).sum(),
                 "full_years": (done & jnp.any(nxt.alive, axis=-1)).sum(),
                 # Fire ladder: use, maintain, cook, carry, make

@@ -48,13 +48,13 @@ from lifesim import techtree  # noqa: E402
 from lifesim.threats import with_threats  # noqa: E402
 from lifesim.analysis import language_metrics  # noqa: E402
 from lifesim.config import EnvConfig, living_world, with_reproduction, with_tick_minutes, with_time_scale  # noqa: E402
-from lifesim.ppo_multi import MAConfig, Population, Transition, make_train  # noqa: E402
+from lifesim.ppo_multi import MAConfig, Population, Transition, make_train, mix_reward  # noqa: E402
 from lifesim.policy import sample_outputs  # noqa: E402
 from lifesim.recorder import _stamp_events, extract_events  # noqa: E402
 
 MORALS = ["empathy", "kin_care", "envy", "guilt", "reciprocity", "vengefulness", "sadism", "same_sex"]
 TRAITS = MORALS + ["selflessness", "libido", "pain_aversion", "social_reward", "novelty", "strength",
-                   "patience", "social_learning", "lr_scale", "speed"]
+                   "patience", "social_learning", "lr_scale", "speed", "sharing"]
 # What each life did, counted per tick alive (scripts/archetypes.py clusters these into roles)
 BEHAVIOURS = ["strikes_on_agents", "struck", "gifts", "touches", "speech", "kills_small", "kills_large",
               "predator_kills", "fire_fed", "drinks", "eats", "gathers", "moves", "rests", "sleeps",
@@ -511,6 +511,7 @@ def main():
     if args.learn:
         lcfg = MAConfig(num_worlds=1, num_minibatches=1, num_steps=args.learn_every, hidden=args.hidden,
                         encoder=encoder, gamma=hist.get("gamma", 0.997), alpha=hist.get("alpha", 0.0),
+                        alpha_heritable=bool(hist.get("alpha_heritable", False)), share_radius=hist.get("share_radius", 0),
                         imitation_coef=args.imitation if args.imitation is not None else hist.get("imitation", 0.5),
                         imitation_bias=hist.get("imitation_bias", "success"),
                         imitate_positive_only=not hist.get("imitate_all", False),
@@ -712,7 +713,12 @@ def main():
                             rec["rolled"] = rolled
                     mind_log.write(json.dumps(rec, separators=(",", ":")) + "\n")
             if args.learn:
-                r = reward if not hist.get("alpha") else (1 - hist["alpha"]) * reward + hist["alpha"] * reward.mean()
+                if hist.get("alpha") or hist.get("alpha_heritable"):
+                    r = mix_reward(reward[None], prev.alive[None], prev.pos[None],
+                                   prev.genotype.sharing[None] if hist.get("alpha_heritable") else hist["alpha"],
+                                   hist.get("share_radius", 0))[0]
+                else:
+                    r = reward
                 col = lambda x: jnp.asarray(x)[:, None]
                 buf.append(Transition(
                     col(reset_next | (t == 0)), col(info.died), col(prev.alive), col(a), col(jnp.zeros(n)), col(r),
