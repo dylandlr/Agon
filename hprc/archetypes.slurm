@@ -2,7 +2,7 @@
 # Archetype intervention: one tyrant or one saint among the founders, 3 seeds each (6 array tasks),
 # alpha 0 and normal food; the control is the core experiment's a0.0_f1.0_s0..2.
 #   sbatch --export=ALL,WORLDS=128 hprc/archetypes.slurm
-# Then: python scripts/experiment.py report --root $SCRATCH/runs/exp_<code version>
+# Then: python scripts/experiment.py report --root $SCRATCH/runs/exp_<code version>_<preset>
 #SBATCH --job-name=lifesim-archetypes
 #SBATCH --array=0-5
 #SBATCH --time=24:00:00
@@ -20,6 +20,6 @@ cd "$SCRATCH/lifesim"
 export XLA_PYTHON_CLIENT_PREALLOCATE=false
 mkdir -p logs
 # One results folder per code version (experiment.py refuses to reuse runs made by other code)
-ROOT="$SCRATCH/runs/exp_$(python -c 'from lifesim.presets import code_version; print(code_version())')"
-python scripts/experiment.py archetypes --root "$ROOT" --worlds ${WORLDS:-64} \
+ROOT="$SCRATCH/runs/exp_$(python -c 'from lifesim.presets import code_version; print(code_version())')_${PRESET:-society}"
+python scripts/experiment.py archetypes --root "$ROOT" --preset ${PRESET:-society} --worlds ${WORLDS:-64} \
   --agent-steps ${STEPS:-1e8} --playback-every 8 --only $SLURM_ARRAY_TASK_ID

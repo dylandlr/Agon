@@ -69,7 +69,7 @@ def step_check(args):
     cfg = EnvConfig(grid_size=32, n_agents=2)
     net = make_network(cfg, 64, args.encoder, messages=True)
     x = (jnp.zeros((1, 2, E.obs_dim(cfg))), jnp.zeros((1, 2), bool),
-         jnp.ones((1, 2, E.N_ACTIONS + E.MSG_LEN * E.VOCAB), bool))
+         jnp.ones((1, 2, E.N_ACTIONS + E.EXTRA_LOGITS), bool))
     params = net.init(jax.random.PRNGKey(0), jnp.zeros((2, 64)), x)
     _, logits, _ = net.apply(params, jnp.zeros((2, 64)), x)
     print(f"network OK: logits {tuple(logits.shape)}, encoder {args.encoder}, convolution path {net.conv_impl}")

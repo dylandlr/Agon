@@ -14,7 +14,8 @@ from lifesim.ppo_multi import MAConfig, make_train
 def _calm(cfg):
     return dataclasses.replace(cfg, climate_volatility=0.0, lightning_prob=0.0, season_temp=(18.0,) * 4,
                                day_temp_swing=0.0, small_prey_per_1000=0.0, large_prey_per_1000=0.0,
-                               predators_per_1000=0.0)
+                               predators_per_1000=0.0, predator_respawn=0.0, small_prey_respawn=0.0,
+                               large_prey_respawn=0.0)   # an empty slot refills: no animal may appear
 
 
 def test_scale_and_calendar():
@@ -36,7 +37,9 @@ def test_a_day_of_hunger_thirst_and_tiredness_is_the_same_at_any_tick():
     for minutes in (30, 2):
         cfg = with_tick_minutes(_calm(EnvConfig(grid_size=16, n_agents=1)), minutes)
         s = E.reset(jax.random.PRNGKey(0), cfg)
-        s = s._replace(satiety=jnp.ones(1), hydration=jnp.ones(1), energy=jnp.ones(1), t=jnp.int32(cfg.day_length // 3))
+        off = lambda an: an._replace(alive=jnp.zeros_like(an.alive))   # a slot is kept even at 0 per 1,000
+        s = s._replace(satiety=jnp.ones(1), hydration=jnp.ones(1), energy=jnp.ones(1), t=jnp.int32(cfg.day_length // 3),
+                       small=off(s.small), large=off(s.large), predators=off(s.predators))
         step = lambda st, _: (E.step(st, jnp.array([E.REST]), cfg)[0], None)
         s, _ = jax.lax.scan(step, s, None, cfg.day_length // 2)          # half a day, awake and resting
         out[minutes] = np.array([float(s.satiety[0]), float(s.hydration[0]), float(s.sleepiness[0]),

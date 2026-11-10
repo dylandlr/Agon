@@ -9,7 +9,8 @@ through a fixed syllable table so researchers can say it.
 """
 from __future__ import annotations
 
-SYLLABLES = ["", "ka", "lo", "mi", "ta", "ru", "se", "no", "va", "pi", "de", "zu", "ha", "yo", "be", "ni"]
+SYLLABLES = ["", "ka", "lo", "mi", "ta", "ru", "se", "no", "va", "pi", "de", "zu", "ha", "yo", "be", "ni",
+             "go", "fe", "ri", "mu", "sa", "te", "wo", "la", "ki", "po", "du", "ne", "si", "bo", "ja", "re"]
 
 
 def spoken_form(message) -> str:

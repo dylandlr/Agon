@@ -91,6 +91,8 @@
         p.lean = 3; break; }
       case "eat":                                          // hand to the mouth and down again
         p.sh[1] = [55 + 20 * Math.max(0, s), 12]; p.el[1] = 120 + 25 * Math.max(0, s); p.sh[0] = [10, 8]; p.el[0] = 30; break;
+      case "relieve":                                      // a squat, forearms on the knees
+        p.hip = [[100, 14], [100, 14]]; p.kn = [130, 130]; p.lean = 18; p.sh = [[35, 12], [35, 12]]; p.el = [55, 55]; break;
       case "drink":                                        // a crouch, both hands down to the water
         p.hip = [[95, 8], [95, 8]]; p.kn = [120, 120]; p.lean = 35 + 6 * Math.max(0, s); p.sh = [[55 + 6 * Math.max(0, s), 10], [55 + 6 * Math.max(0, s), 10]]; p.el = [10, 10]; break;
       case "reach":                                        // a stoop, a hand to the ground

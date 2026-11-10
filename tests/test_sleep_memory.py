@@ -62,7 +62,7 @@ def test_the_trainer_carries_its_day_and_fills_the_long_term_store():
     # from the recurrent state it had going into it (stored after learning, with the new weights)
     fresh = np.asarray(res.filled) & ~np.isclose(np.asarray(res.probs), before).all(-1)
     params = runner[0]
-    A, M = E.N_ACTIONS, E.MSG_LEN * E.VOCAB
+    A, M = E.N_ACTIONS, E.EXTRA_LOGITS
     full = jnp.concatenate([res.mask, jnp.ones(res.mask.shape[:-1] + (M,), bool)], -1)
     _, lg, _ = jax.vmap(lambda p, c, o, r, mk: net.apply(p, c, (o[None], r[None], mk[None])))(
         params, res.carry, res.obs, res.reset, full)

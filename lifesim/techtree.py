@@ -71,6 +71,17 @@ NODES = [
      lambda e: e["type"] == "made" and e.get("product") == "bronze"),
     ("metal_tools", "Metal tools", ["smelting", "tool_use"], "striking or cutting with metal",
      lambda e: e.get("tool") in _METAL and e["type"] in ("strike_animal", "strike_agent", "kill", "gather")),
+    # byproducts of the living world (cfg.byproducts)
+    ("hides", "Taking hides", ["hunt_small"], "picking up a hide from a kill",
+     lambda e: e["type"] == "gather" and e.get("what") == "hide"),
+    ("bedding", "A bed", [], "sleeping on leaves or a hide laid down",
+     lambda e: e["type"] == "bedded"),
+    ("bone_tools", "Bone tools", ["tool_use"], "striking, cutting or gathering with a bone",
+     lambda e: e.get("tool") == "bone" and e["type"] in ("strike_animal", "strike_agent", "kill", "gather")),
+    ("hafting", "Hafting", ["edge_use"], "binding a point to a stick with fiber: a spear",
+     lambda e: e["type"] == "made" and e.get("product") == "spear"),
+    ("spear_hunting", "Hunting with a spear", ["hafting"], "striking or killing an animal with a spear",
+     lambda e: e.get("tool") == "spear" and e["type"] in ("strike_animal", "kill")),
     # underground (cfg.underground)
     ("caving", "Going underground", [], "going down a cave mouth",
      lambda e: e["type"] == "went_underground"),

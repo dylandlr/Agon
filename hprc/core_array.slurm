@@ -4,7 +4,7 @@
 # Run validate.slurm first and check it. Resubmitting resumes unfinished tasks.
 #   sbatch --export=ALL,WORLDS=128 hprc/core_array.slurm
 #   sbatch --export=ALL,WORLDS=128 --array=3,7 hprc/core_array.slurm    # just some tasks
-# Then: python scripts/experiment.py report --root $SCRATCH/runs/exp_<code version>
+# Then: python scripts/experiment.py report --root $SCRATCH/runs/exp_<code version>_<preset>
 #SBATCH --job-name=lifesim-core
 #SBATCH --array=0-17
 #SBATCH --time=24:00:00
@@ -22,6 +22,6 @@ cd "$SCRATCH/lifesim"
 export XLA_PYTHON_CLIENT_PREALLOCATE=false
 mkdir -p logs
 # One results folder per code version (experiment.py refuses to reuse runs made by other code)
-ROOT="$SCRATCH/runs/exp_$(python -c 'from lifesim.presets import code_version; print(code_version())')"
-python scripts/experiment.py core --root "$ROOT" --worlds ${WORLDS:-64} \
+ROOT="$SCRATCH/runs/exp_$(python -c 'from lifesim.presets import code_version; print(code_version())')_${PRESET:-society}"
+python scripts/experiment.py core --root "$ROOT" --preset ${PRESET:-society} --worlds ${WORLDS:-64} \
   --agent-steps ${STEPS:-1e8} --playback-every 8 --only $SLURM_ARRAY_TASK_ID
