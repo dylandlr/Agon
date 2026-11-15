@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Animal</title>
+<script src="./support.js"></script>
+<script src="./art.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>body{margin:0}</style>
+</helmet>
+<svg viewBox="0 0 64 64" width="{{size}}" height="{{size}}" role="img" aria-label="{{label}}" style="display: block; overflow: visible">
+  <g transform="{{tf}}">
+  <!-- hard-edged contact shadow -->
+  <ellipse cx="{{shX}}" cy="{{shY}}" rx="{{shRxO}}" ry="{{shRyO}}" fill="#000000" opacity="{{shOpO}}"></ellipse>
+  <ellipse cx="{{shX}}" cy="{{shY}}" rx="{{shRx}}" ry="{{shRy}}" fill="#000000" opacity="{{shOp}}"></ellipse>
+
+  <sc-for list="{{headBack}}" as="h" hint-placeholder-count="0"><path d="{{h.d}}" fill="{{h.f}}" stroke="{{h.s}}" stroke-width="{{h.w}}" stroke-linejoin="round" stroke-linecap="round" transform="{{h.t}}"></path></sc-for>
+  <sc-for list="{{bodyList}}" as="h" hint-placeholder-count="0"><path d="{{h.d}}" fill="{{h.f}}" stroke="{{h.s}}" stroke-width="{{h.w}}" stroke-linejoin="round" stroke-linecap="round"></path></sc-for>
+  <sc-if value="{{sideBody}}" hint-placeholder-val="{{ true }}">
+  <g transform="{{lkTf}}">
+  <!-- SMALL PREY: side profile, tall ears, round haunch -->
+  <sc-if value="{{small}}" hint-placeholder-val="{{ true }}">
+    <ellipse cx="36.6" cy="20" rx="3" ry="9" transform="rotate(-15 36.6 20)" fill="{{bodyS}}" stroke="#1c110b" stroke-width="2"></ellipse>
+    <ellipse cx="36.6" cy="20.5" rx="1" ry="5.2" transform="rotate(-15 36.6 20)" fill="{{earC}}" opacity="0.55"></ellipse>
+    <ellipse cx="46" cy="19" rx="3.2" ry="9.4" transform="rotate(9 46 19)" fill="{{body}}" stroke="#1c110b" stroke-width="2"></ellipse>
+    <ellipse cx="46" cy="19.6" rx="1.2" ry="5.7" transform="rotate(9 46 19)" fill="{{earC}}"></ellipse>
+    <ellipse cx="38" cy="53" rx="5.5" ry="2.8" fill="{{bodyS}}" stroke="#1c110b" stroke-width="2"></ellipse>
+    <ellipse cx="19" cy="53" rx="7" ry="2.8" fill="{{bodyS}}" stroke="#1c110b" stroke-width="2"></ellipse>
+    <circle cx="11" cy="41" r="4.6" fill="{{belly}}" stroke="#1c110b" stroke-width="2"></circle>
+    <ellipse cx="28" cy="41" rx="15" ry="11.5" fill="{{bodyS}}" stroke="#1c110b" stroke-width="2"></ellipse>
+    <ellipse cx="27" cy="38.5" rx="12.5" ry="8.5" fill="{{body}}"></ellipse>
+    <path d="M38.75 41.4 A12.5 8.5 0 0 1 15.25 41.4 Q27 42.4 38.75 41.4Z" fill="{{belly}}"></path>
+    <circle cx="20" cy="43" r="8" fill="{{bodyS}}" stroke="#1c110b" stroke-width="2"></circle>
+    <circle cx="19" cy="42" r="6" fill="{{body}}"></circle>
+    <circle cx="44" cy="33" r="8.4" fill="{{bodyS}}" stroke="#1c110b" stroke-width="2"></circle>
+    <circle cx="43" cy="32" r="6.6" fill="{{body}}"></circle>
+    <circle cx="51.6" cy="35" r="2" fill="#e0a090" stroke="#1c110b" stroke-width="1.4"></circle>
+  </sc-if>
+
+  <!-- LARGE PREY: bristleback boar. Barrel body, bristle ridge, snout and tusk -->
+  <sc-if value="{{large}}" hint-placeholder-val="{{ false }}">
+    <sc-for list="{{legs}}" as="g" hint-placeholder-count="4"><g style="{{g.anim}}"><path d="{{g.p}}" fill="{{g.fill}}" stroke="#1c110b" stroke-width="2" stroke-linejoin="round"></path><path d="{{g.hd}}" fill="none" stroke="{{g.hoof}}" stroke-width="{{g.wf}}" stroke-linecap="butt"></path></g></sc-for>
+    <path d="M9 36 q-6 -1 -5 -7" fill="none" stroke="#1c110b" stroke-width="4" stroke-linecap="round"></path>
+    <path d="M9 36 q-6 -1 -5 -7" fill="none" stroke="{{markC}}" stroke-width="1.6" stroke-linecap="round"></path>
+    <path d="{{tor.o}}" fill="{{bodyS}}" stroke="#1c110b" stroke-width="2" stroke-linejoin="round"></path>
+    <path d="{{tor.i}}" fill="{{body}}"></path>
+    <path d="{{tor.b}}" fill="{{belly}}"></path>
+    <path d="{{tor.t}}" fill="none" stroke="{{bodyS}}" stroke-width="1.3" stroke-linecap="round"></path>
+    <sc-for list="{{bristles}}" as="b" hint-placeholder-count="7"><polygon points="{{b.pts}}" fill="{{markC}}" stroke="#1c110b" stroke-width="1.6" stroke-linejoin="round"></polygon></sc-for>
+    <sc-if value="{{boar}}"><polygon points="45,35 48,26 54,34" fill="{{bodyS}}" stroke="#1c110b" stroke-width="2" stroke-linejoin="round"></polygon></sc-if>
+    <sc-if value="{{ele}}">
+      <path d="M46 31 Q33 25 35 41 Q37 52 47 46Z" fill="{{bodyS}}" stroke="#1c110b" stroke-width="2" stroke-linejoin="round"></path>
+      <path d="M45 34 Q38 31 39 41 Q40 47 45 44Z" fill="{{belly}}" opacity="0.55"></path>
+    </sc-if>
+    <ellipse cx="51" cy="41" rx="{{hdRx}}" ry="{{hdRy}}" fill="{{bodyS}}" stroke="#1c110b" stroke-width="2"></ellipse>
+    <ellipse cx="50" cy="40" rx="{{hdRx2}}" ry="{{hdRy2}}" fill="{{body}}"></ellipse>
+    <sc-if value="{{boar}}">
+      <ellipse cx="59" cy="45" rx="4.6" ry="3.8" fill="#d9a090" stroke="#1c110b" stroke-width="2"></ellipse>
+      <circle cx="60.6" cy="44.4" r="0.9" fill="#1c110b"></circle>
+      <path d="M57 47.4 q3.4 1.2 3.6 -3.6" fill="none" stroke="#1c110b" stroke-width="5.4" stroke-linecap="round"></path>
+      <path d="M57 47.4 q3.4 1.2 3.6 -3.6" fill="none" stroke="#e8dcc4" stroke-width="2.6" stroke-linecap="round"></path>
+    </sc-if>
+    <sc-if value="{{ele}}">
+      <path d="M57 42 Q64 45 62.5 54 Q62 58 58.8 57" fill="none" stroke="#1c110b" stroke-width="7.6" stroke-linecap="round"></path>
+      <path d="M57 42 Q64 45 62.5 54 Q62 58 58.8 57" fill="none" stroke="{{body}}" stroke-width="5.2" stroke-linecap="round"></path>
+      <path d="M57 42 Q63 45 61.6 52" fill="none" stroke="{{belly}}" stroke-width="1.4" stroke-linecap="round" opacity="0.6"></path>
+      <path d="M54.5 47 Q61 50 63.5 43.5" fill="none" stroke="#1c110b" stroke-width="4.6" stroke-linecap="round"></path>
+      <path d="M54.5 47 Q61 50 63.5 43.5" fill="none" stroke="#efe6d0" stroke-width="2.4" stroke-linecap="round"></path>
+    </sc-if>
+    <sc-if value="{{wil}}">
+      <path d="M47 33 Q43 26 49 24.5 Q46 28 49.5 33" fill="#d9d0b8" stroke="#1c110b" stroke-width="1.6" stroke-linejoin="round"></path>
+      <ellipse cx="59" cy="45" rx="4.4" ry="3.6" fill="{{markC}}" stroke="#1c110b" stroke-width="2"></ellipse>
+      <circle cx="60.4" cy="44.2" r="0.9" fill="#0c0806"></circle>
+      <path d="M56 48.5 L54.6 57 L59.4 50Z" fill="{{markC}}" stroke="#1c110b" stroke-width="1.5" stroke-linejoin="round"></path>
+    </sc-if>
+  </sc-if>
+
+  <!-- PREDATOR: lean wolf. Low body, bushy tail, ruff, pricked ears, yellow eye -->
+  <sc-if value="{{pred}}" hint-placeholder-val="{{ false }}">
+    <sc-for list="{{legs}}" as="g" hint-placeholder-count="4"><g style="{{g.anim}}"><path d="{{g.p}}" fill="{{g.fill}}" stroke="#1c110b" stroke-width="2" stroke-linejoin="round"></path><path d="{{g.hd}}" fill="none" stroke="{{g.hoof}}" stroke-width="{{g.wf}}" stroke-linecap="butt"></path></g></sc-for>
+    <path d="M11 37 Q3 38 3 48" fill="none" stroke="#1c110b" stroke-width="9" stroke-linecap="round"></path>
+    <path d="M11 37 Q3 38 3 48" fill="none" stroke="{{body}}" stroke-width="5.4" stroke-linecap="round"></path>
+    <path d="M3.2 45 L3 48" fill="none" stroke="{{belly}}" stroke-width="5.4" stroke-linecap="round"></path>
+    <path d="{{tor.o}}" fill="{{bodyS}}" stroke="#1c110b" stroke-width="2" stroke-linejoin="round"></path>
+    <path d="{{tor.i}}" fill="{{body}}"></path>
+    <path d="{{tor.b}}" fill="{{belly}}"></path>
+    <path d="{{tor.t}}" fill="none" stroke="{{bodyS}}" stroke-width="1.3" stroke-linecap="round"></path>
+    <sc-for list="{{spotList}}" as="s" hint-placeholder-count="0"><ellipse cx="{{s.x}}" cy="{{s.y}}" rx="{{s.rx}}" ry="{{s.ry}}" fill="{{spotC}}" opacity="0.9"></ellipse></sc-for>
+    <sc-if value="{{cat}}" hint-placeholder-val="{{ false }}">
+      <path d="M11 36 Q1 35 1.6 44 Q2 50.6 8.6 49.6" fill="none" stroke="#1c110b" stroke-width="9" stroke-linecap="round"></path>
+      <path d="M11 36 Q1 35 1.6 44 Q2 50.6 8.6 49.6" fill="none" stroke="{{body}}" stroke-width="5.4" stroke-linecap="round"></path>
+      <path d="M2.4 47 Q3.6 50.4 8.6 49.6" fill="none" stroke="{{markC}}" stroke-width="5.4" stroke-linecap="round"></path>
+    </sc-if>
+    <path d="M36.5 33 Q47 31.5 46.5 38 Q45.5 45 39 45.5 Q34 41 36.5 33Z" fill="{{belly}}" stroke="#1c110b" stroke-width="1.6" stroke-linejoin="round"></path>
+    <polygon points="48,27 52,18 57,28" fill="{{bodyS}}" stroke="#1c110b" stroke-width="2" stroke-linejoin="round"></polygon>
+    <polygon points="42,28 45,17 51,27" fill="{{bodyS}}" stroke="#1c110b" stroke-width="2" stroke-linejoin="round"></polygon>
+    <polygon points="44.4,26 45.4,20.4 48.8,26" fill="{{markC}}"></polygon>
+    <ellipse cx="49" cy="32" rx="8.5" ry="7" fill="{{bodyS}}" stroke="#1c110b" stroke-width="2"></ellipse>
+    <ellipse cx="48" cy="31" rx="6.8" ry="5.4" fill="{{body}}"></ellipse>
+    <ellipse cx="{{snCx}}" cy="35" rx="{{snRx}}" ry="3.6" fill="{{belly}}" stroke="#1c110b" stroke-width="2"></ellipse>
+    <circle cx="{{noseX}}" cy="34.2" r="1.8" fill="#1c110b"></circle>
+    <path d="M54.5 37.4 q2.2 1.2 4.6 0" fill="none" stroke="#1c110b" stroke-width="1.2" stroke-linecap="round"></path>
+  </sc-if>
+
+
+  <!-- DEER: large prey, tall legs, antlers -->
+  <sc-if value="{{deer}}" hint-placeholder-val="{{ false }}">
+    <sc-for list="{{legs}}" as="g" hint-placeholder-count="4"><g style="{{g.anim}}"><path d="{{g.p}}" fill="{{g.fill}}" stroke="#1c110b" stroke-width="2" stroke-linejoin="round"></path><path d="{{g.hd}}" fill="none" stroke="{{g.hoof}}" stroke-width="{{g.wf}}" stroke-linecap="butt"></path></g></sc-for>
+    <path d="{{tor.o}}" fill="{{bodyS}}" stroke="#1c110b" stroke-width="2" stroke-linejoin="round"></path>
+    <path d="{{tor.i}}" fill="{{body}}"></path>
+    <path d="{{tor.b}}" fill="{{belly}}"></path>
+    <path d="{{tor.t}}" fill="none" stroke="{{bodyS}}" stroke-width="1.3" stroke-linecap="round"></path>
+    <ellipse cx="12" cy="31" rx="2.8" ry="3.6" fill="{{belly}}" stroke="#1c110b" stroke-width="1.8"></ellipse>
+    <circle cx="20" cy="30" r="1.1" fill="{{belly}}"></circle><circle cx="26" cy="28" r="1.1" fill="{{belly}}"></circle><circle cx="32" cy="30" r="1.1" fill="{{belly}}"></circle><circle cx="37" cy="33" r="1.1" fill="{{belly}}"></circle>
+    <ellipse cx="47" cy="11" rx="2" ry="4" fill="{{bodyS}}" stroke="#1c110b" stroke-width="1.6" transform="rotate(-30 47 11)"></ellipse>
+    <ellipse cx="51" cy="17" rx="6.4" ry="4.6" fill="{{bodyS}}" stroke="#1c110b" stroke-width="2" transform="rotate(18 51 17)"></ellipse>
+    <ellipse cx="50" cy="16" rx="5" ry="3.4" fill="{{body}}" transform="rotate(18 51 17)"></ellipse>
+    <ellipse cx="56.5" cy="19.5" rx="3" ry="2.4" fill="{{belly}}" stroke="#1c110b" stroke-width="1.8"></ellipse>
+    <circle cx="59" cy="19" r="1" fill="#1c110b"></circle>
+    <path d="M49 11 L46 3 M47.4 7 L43 5.6 M49 11 L53 3.5 M51 7.2 L55.5 6" fill="none" stroke="#1c110b" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"></path>
+    <path d="M49 11 L46 3 M47.4 7 L43 5.6 M49 11 L53 3.5 M51 7.2 L55.5 6" fill="none" stroke="{{horn}}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>
+  </sc-if>
+
+  <!-- MOUNTAIN GOAT: large prey, shaggy skirt, swept-back horns -->
+  <sc-if value="{{goat}}" hint-placeholder-val="{{ false }}">
+    <sc-for list="{{legs}}" as="g" hint-placeholder-count="4"><g style="{{g.anim}}"><path d="{{g.p}}" fill="{{g.fill}}" stroke="#1c110b" stroke-width="2" stroke-linejoin="round"></path><path d="{{g.hd}}" fill="none" stroke="{{g.hoof}}" stroke-width="{{g.wf}}" stroke-linecap="butt"></path></g></sc-for>
+    <path d="{{tor.o}}" fill="{{bodyS}}" stroke="#1c110b" stroke-width="2" stroke-linejoin="round"></path>
+    <path d="{{tor.i}}" fill="{{body}}"></path>
+    <path d="{{tor.b}}" fill="{{belly}}"></path>
+    <path d="{{tor.t}}" fill="none" stroke="{{bodyS}}" stroke-width="1.3" stroke-linecap="round"></path>
+    <polygon points="12,32 6,27 9,37" fill="{{bodyS}}" stroke="#1c110b" stroke-width="1.8" stroke-linejoin="round"></polygon>
+    <path d="M16 41 Q17.4 44.4 19.6 41.8 Q22 45 24.4 42 Q27 45.2 29.4 42 Q31.8 45 34 41.8 Q36.2 44.4 38 41Z" fill="{{belly}}" stroke="{{bodyS}}" stroke-width="1.4" stroke-linejoin="round"></path>
+    <ellipse cx="43" cy="23" rx="3.6" ry="1.6" fill="{{bodyS}}" stroke="#1c110b" stroke-width="1.6" transform="rotate(20 43 23)"></ellipse>
+    <ellipse cx="48" cy="27" rx="6" ry="4.8" fill="{{bodyS}}" stroke="#1c110b" stroke-width="2" transform="rotate(24 48 27)"></ellipse>
+    <ellipse cx="47" cy="26" rx="4.6" ry="3.4" fill="{{body}}" transform="rotate(24 48 27)"></ellipse>
+    <ellipse cx="53.6" cy="30.4" rx="3.2" ry="2.5" fill="{{belly}}" stroke="#1c110b" stroke-width="1.8"></ellipse>
+    <circle cx="56" cy="30" r="0.9" fill="#1c110b"></circle>
+    <polygon points="50,33 52.8,33 51.2,39" fill="{{belly}}" stroke="#1c110b" stroke-width="1.4" stroke-linejoin="round"></polygon>
+    <path d="M45 22 Q43 13 35 11" fill="none" stroke="#1c110b" stroke-width="5.2" stroke-linecap="round" stroke-linejoin="round"></path>
+    <path d="M45 22 Q43 13 35 11" fill="none" stroke="{{horn}}" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"></path>
+    <path d="M47.6 21.6 Q47.4 14 41.4 10" fill="none" stroke="#1c110b" stroke-width="5.2" stroke-linecap="round" stroke-linejoin="round"></path>
+    <path d="M47.6 21.6 Q47.4 14 41.4 10" fill="none" stroke="{{horn}}" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"></path>
+  </sc-if>
+
+  <!-- GROUSE: small prey, ground bird -->
+  <sc-if value="{{grouse}}" hint-placeholder-val="{{ false }}">
+    <polygon points="16,36 3,26 3.5,34 2,40 3.5,46 16,44" fill="{{markC}}" stroke="#1c110b" stroke-width="2" stroke-linejoin="round"></polygon>
+    <path d="M14 38 L5 31 M14 41 L4 40 M14 43 L5 45" fill="none" stroke="{{belly}}" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"></path>
+    <path d="M27 49 L27 56 M27 56 l-3 1 M27 56 l3 1" fill="none" stroke="#1c110b" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"></path>
+    <path d="M27 49 L27 56 M27 56 l-3 1 M27 56 l3 1" fill="none" stroke="#c9a878" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path>
+    <path d="M34 49 L34 56 M34 56 l-3 1 M34 56 l3 1" fill="none" stroke="#1c110b" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"></path>
+    <path d="M34 49 L34 56 M34 56 l-3 1 M34 56 l3 1" fill="none" stroke="#c9a878" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path>
+    <ellipse cx="41" cy="32" rx="5" ry="7" fill="{{bodyS}}" stroke="#1c110b" stroke-width="2"></ellipse>
+    <ellipse cx="28" cy="40" rx="13.5" ry="10" fill="{{bodyS}}" stroke="#1c110b" stroke-width="2"></ellipse>
+    <ellipse cx="27" cy="38.5" rx="11" ry="8" fill="{{body}}"></ellipse>
+    <ellipse cx="36" cy="43" rx="6" ry="6" fill="{{belly}}"></ellipse>
+    <ellipse cx="24" cy="39" rx="8.5" ry="5.2" fill="{{markC}}" stroke="#1c110b" stroke-width="1.6"></ellipse>
+    <path d="M18 38 q4 1 8 0 M18 41 q4 1 8 0" fill="none" stroke="{{bodyS}}" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"></path>
+    <circle cx="44" cy="26" r="5.2" fill="{{bodyS}}" stroke="#1c110b" stroke-width="2"></circle>
+    <circle cx="43.4" cy="25.4" r="3.8" fill="{{body}}"></circle>
+    <ellipse cx="45" cy="20.6" rx="2.6" ry="1.7" fill="{{comb}}" stroke="#1c110b" stroke-width="1.6"></ellipse>
+    <polygon points="48.6,25 54,27 48.6,29.4" fill="#d4a43c" stroke="#1c110b" stroke-width="1.6" stroke-linejoin="round"></polygon>
+    <sc-if value="{{hawk}}" hint-placeholder-val="{{ false }}">
+      <path d="M17 36 Q30 30 38 38 Q30 48 18 44Z" fill="{{markC}}" stroke="#1c110b" stroke-width="1.6" stroke-linejoin="round"></path>
+      <path d="M22 38 q5 -2 10 0 M22 41 q5 -2 9 0" fill="none" stroke="{{belly}}" stroke-width="1" stroke-linecap="round"></path>
+      <path d="M52.6 25.6 q2.6 0.6 2 4" fill="none" stroke="#1c110b" stroke-width="2" stroke-linecap="round"></path>
+      <path d="M45 24.4 l5 1.2" fill="none" stroke="#1c110b" stroke-width="1.6" stroke-linecap="round"></path>
+    </sc-if>
+    <sc-if value="{{owl}}" hint-placeholder-val="{{ false }}">
+      <polygon points="40,21 41,15 44.4,20.4" fill="{{markC}}" stroke="#1c110b" stroke-width="1.5" stroke-linejoin="round"></polygon>
+      <polygon points="45,20.6 48,15 49.4,21.4" fill="{{markC}}" stroke="#1c110b" stroke-width="1.5" stroke-linejoin="round"></polygon>
+      <circle cx="45.6" cy="26" r="4.4" fill="{{belly}}" stroke="#1c110b" stroke-width="1.2"></circle>
+      <polygon points="47.6,26.6 50.6,28 47.6,30" fill="#d4a43c" stroke="#1c110b" stroke-width="1.2" stroke-linejoin="round"></polygon>
+    </sc-if>
+    <sc-if value="{{vult}}" hint-placeholder-val="{{ false }}">
+      <ellipse cx="41" cy="31.4" rx="6" ry="3.6" fill="{{belly}}" stroke="#1c110b" stroke-width="1.6"></ellipse>
+      <circle cx="44" cy="25.8" r="4.2" fill="{{comb}}" stroke="#1c110b" stroke-width="1.6"></circle>
+      <path d="M47.6 25 q3.4 0.6 3 4.4" fill="none" stroke="#1c110b" stroke-width="2.4" stroke-linecap="round"></path>
+    </sc-if>
+  </sc-if>
+
+  <!-- FOX: small predator, white-tipped tail -->
+  <sc-if value="{{fox}}" hint-placeholder-val="{{ false }}">
+    <sc-for list="{{legs}}" as="g" hint-placeholder-count="4"><g style="{{g.anim}}"><path d="{{g.p}}" fill="{{g.fill}}" stroke="#1c110b" stroke-width="2" stroke-linejoin="round"></path><path d="{{g.hd}}" fill="none" stroke="{{g.hoof}}" stroke-width="{{g.wf}}" stroke-linecap="butt"></path></g></sc-for>
+    <path d="M12 40 Q-1 36 3 50 Q9 50 14 45Z" fill="{{body}}" stroke="#1c110b" stroke-width="2" stroke-linejoin="round"></path>
+    <path d="M2 45 Q1.6 50.4 6 50.6 Q9 49.4 8.2 45.4Z" fill="#f4ecd8"></path>
+    <path d="{{tor.o}}" fill="{{bodyS}}" stroke="#1c110b" stroke-width="2" stroke-linejoin="round"></path>
+    <path d="{{tor.i}}" fill="{{body}}"></path>
+    <path d="{{tor.b}}" fill="{{belly}}"></path>
+    <path d="{{tor.t}}" fill="none" stroke="{{bodyS}}" stroke-width="1.3" stroke-linecap="round"></path>
+    <path d="M36.5 34 Q46.5 33 46 39 Q45 45 38.5 45 Q34.5 41 36.5 34Z" fill="{{belly}}" stroke="#1c110b" stroke-width="1.6" stroke-linejoin="round"></path>
+    <polygon points="42,27 44,16 49,26" fill="{{bodyS}}" stroke="#1c110b" stroke-width="2" stroke-linejoin="round"></polygon>
+    <polygon points="47,26 50,15 55,26" fill="{{bodyS}}" stroke="#1c110b" stroke-width="2" stroke-linejoin="round"></polygon>
+    <polygon points="49,25 50.4,19 53,25" fill="{{markC}}" stroke="#1c110b" stroke-width="0" stroke-linejoin="round"></polygon>
+    <sc-if value="{{tuft}}" hint-placeholder-val="{{ false }}">
+      <path d="M44 16.4 L43.2 11 M49.6 15.4 L50.6 10" fill="none" stroke="#1c110b" stroke-width="3.2" stroke-linecap="round"></path>
+      <path d="M44 16.4 L43.2 11.6 M49.6 15.4 L50.6 10.6" fill="none" stroke="{{markC}}" stroke-width="1.4" stroke-linecap="round"></path>
+    </sc-if>
+    <ellipse cx="49" cy="32" rx="7.2" ry="5.8" fill="{{bodyS}}" stroke="#1c110b" stroke-width="2"></ellipse>
+    <ellipse cx="48" cy="31" rx="5.8" ry="4.6" fill="{{body}}"></ellipse>
+    <ellipse cx="56.5" cy="35" rx="5.6" ry="2.8" fill="{{belly}}" stroke="#1c110b" stroke-width="2"></ellipse>
+    <circle cx="60.8" cy="34.4" r="1.5" fill="#1c110b"></circle>
+  </sc-if>
+
+  <!-- BEAR: large predator -->
+  <sc-if value="{{bear}}" hint-placeholder-val="{{ false }}">
+    <sc-for list="{{legs}}" as="g" hint-placeholder-count="4"><g style="{{g.anim}}"><path d="{{g.p}}" fill="{{g.fill}}" stroke="#1c110b" stroke-width="2" stroke-linejoin="round"></path><path d="{{g.hd}}" fill="none" stroke="{{g.hoof}}" stroke-width="{{g.wf}}" stroke-linecap="butt"></path><path d="{{g.cl}}" fill="none" stroke="#efe6d0" stroke-width="1.2" stroke-linecap="round"></path></g></sc-for>
+    <circle cx="7" cy="34" r="3.2" fill="{{bodyS}}" stroke="#1c110b" stroke-width="1.8"></circle>
+    <path d="{{tor.o}}" fill="{{bodyS}}" stroke="#1c110b" stroke-width="2" stroke-linejoin="round"></path>
+    <path d="{{tor.i}}" fill="{{body}}"></path>
+    <path d="{{tor.b}}" fill="{{belly}}"></path>
+    <path d="{{tor.t}}" fill="none" stroke="{{bodyS}}" stroke-width="1.3" stroke-linecap="round"></path>
+        <circle cx="46" cy="25.5" r="3.8" fill="{{bodyS}}" stroke="#1c110b" stroke-width="2"></circle>
+    <circle cx="55" cy="26" r="3.6" fill="{{bodyS}}" stroke="#1c110b" stroke-width="2"></circle>
+    <ellipse cx="51" cy="33" rx="9.5" ry="8.5" fill="{{bodyS}}" stroke="#1c110b" stroke-width="2"></ellipse>
+    <ellipse cx="50" cy="32" rx="7.6" ry="6.6" fill="{{body}}"></ellipse>
+    <ellipse cx="58.4" cy="37.4" rx="5.6" ry="4.2" fill="{{muzzle}}" stroke="#1c110b" stroke-width="2"></ellipse>
+    <ellipse cx="62" cy="35.6" rx="1.8" ry="1.3" fill="#1c110b"></ellipse>
+    <path d="M56 40.4 q2 1.2 4.4 0" fill="none" stroke="#1c110b" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"></path>
+  </sc-if>
+
+  <!-- VIPER: small predator -->
+  <sc-if value="{{croc}}" hint-placeholder-val="{{ false }}">
+    <path d="M4 50 Q10 46 19 44 Q30 42.4 41 43 Q47 43.4 50 45.6 L63.4 46.4 Q64.4 49 62 50.4 L50 52.4 Q38 54 26 53.6 Q12 53.4 4 50Z" fill="{{bodyS}}" stroke="#1c110b" stroke-width="2" stroke-linejoin="round"></path>
+    <path d="M7 49.6 Q12 46.8 20 45.6 Q30 44.2 41 44.8 Q47 45 50 47 L62 47.6 L60 49.6 L50 50.6 Q38 52 27 51.8 Q14 51.6 7 49.6Z" fill="{{body}}"></path>
+    <path d="M10 52.4 Q28 55 50 52" fill="none" stroke="{{belly}}" stroke-width="1.8" stroke-linecap="round"></path>
+    <path d="M52 50.4 L61 49.4" fill="none" stroke="#1c110b" stroke-width="1.2" stroke-linecap="round"></path>
+    <path d="M53.6 50.2 l0.8 1.8 l0.8 -1.7 M56.4 49.9 l0.8 1.8 l0.8 -1.7 M59 49.6 l0.8 1.7 l0.8 -1.6" fill="{{belly}}" stroke="#1c110b" stroke-width="0.9" stroke-linejoin="round"></path>
+    <path d="M14 45.4 l2 -3.4 l2 3 M21 44.4 l2 -3.6 l2 3.2 M28 43.6 l2 -3.6 l2 3.2 M35 43.4 l2 -3.4 l2 3.2 M42 43.8 l2 -3 l2 3" fill="{{markC}}" stroke="#1c110b" stroke-width="1.3" stroke-linejoin="round"></path>
+    <path d="M17 51 l-1 4 M25 52 l-1 3 M40 52 l1 3 M47 51 l2 3" fill="none" stroke="#1c110b" stroke-width="3.8" stroke-linecap="round"></path>
+    <path d="M17 51 l-1 4 M25 52 l-1 3 M40 52 l1 3 M47 51 l2 3" fill="none" stroke="{{bodyS}}" stroke-width="1.8" stroke-linecap="round"></path>
+    <ellipse cx="51.4" cy="43.6" rx="2.8" ry="2.2" fill="{{bodyS}}" stroke="#1c110b" stroke-width="1.5"></ellipse>
+  </sc-if>
+  <sc-if value="{{serp}}" hint-placeholder-val="{{ false }}">
+    <path d="M4 54 C10 40 20 58 28 50 C36 42 38 56 46 48 C52 42 50 34 52 30" fill="none" stroke="#1c110b" stroke-width="10.4" stroke-linecap="round" stroke-linejoin="round"></path>
+    <path d="M4 54 C10 40 20 58 28 50 C36 42 38 56 46 48 C52 42 50 34 52 30" fill="none" stroke="{{bodyS}}" stroke-width="7.4" stroke-linecap="round" stroke-linejoin="round"></path>
+    <path d="M4 54 C10 40 20 58 28 50 C36 42 38 56 46 48 C52 42 50 34 52 30" fill="none" stroke="{{body}}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></path>
+    <path d="M4 54 C10 40 20 58 28 50 C36 42 38 56 46 48 C52 42 50 34 52 30" fill="none" stroke="{{markC}}" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="2.4 6"></path>
+    <path d="M4 54 C10 40 20 58 28 50 C36 42 38 56 46 48 C52 42 50 34 52 30" fill="none" stroke="{{belly}}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="1 5" transform="translate(0 2.2)"></path>
+    <ellipse cx="54" cy="26" rx="6.4" ry="4.2" fill="{{bodyS}}" stroke="#1c110b" stroke-width="2" transform="rotate(-48 54 26)"></ellipse>
+    <ellipse cx="53.4" cy="25.4" rx="4.8" ry="2.8" fill="{{body}}" transform="rotate(-48 54 26)"></ellipse>
+    <path d="M58.4 22.4 L62.6 19.4 M62.6 19.4 l1.6 -1.6 M62.6 19.4 l1.8 1.2" fill="none" stroke="#c2503c" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path>
+  </sc-if>
+
+  </g>
+  </sc-if>
+  <sc-for list="{{headFront}}" as="h" hint-placeholder-count="0"><path d="{{h.d}}" fill="{{h.f}}" stroke="{{h.s}}" stroke-width="{{h.w}}" stroke-linejoin="round" stroke-linecap="round" transform="{{h.t}}"></path></sc-for>
+  <!-- eye (profile: one eye) -->
+  <sc-if value="{{eyeOpen}}" hint-placeholder-val="{{ true }}">
+    <circle cx="{{ex}}" cy="{{ey}}" r="{{er}}" fill="{{eyeC}}" stroke="#1c110b" stroke-width="1.2"></circle>
+    <circle cx="{{ex1}}" cy="{{ey}}" r="1" fill="#1c110b"></circle>
+  </sc-if>
+  <sc-if value="{{eyeShut}}" hint-placeholder-val="{{ false }}">
+    <path d="{{shutA}}" fill="none" stroke="#1c110b" stroke-width="1.8" stroke-linecap="round"></path>
+  </sc-if>
+
+  <!-- state tells -->
+  <sc-if value="{{hurt}}" hint-placeholder-val="{{ false }}">
+    <rect x="{{hx}}" y="{{hy}}" width="12" height="9" rx="2" fill="#e8dcc4" stroke="#1c110b" stroke-width="1.6" transform="rotate(-14 {{hx}} {{hcy}})"></rect>
+    <rect x="{{hx2}}" y="{{hy}}" width="3" height="9" fill="#c2503c" transform="rotate(-14 {{hx}} {{hcy}})"></rect>
+  </sc-if>
+  <sc-if value="{{rest}}" hint-placeholder-val="{{ false }}">
+    <path d="M50 8 h8 l-8 9 h8" fill="none" stroke="#d4c63c" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="animation: ag-zzz 2.4s ease-out infinite"></path>
+  </sc-if>
+  <sc-if value="{{alert}}" hint-placeholder-val="{{ false }}">
+    <path d="M12 6 v9" fill="none" stroke="#1c110b" stroke-width="6" stroke-linecap="round"></path>
+    <path d="M12 6 v9" fill="none" stroke="#e8c63c" stroke-width="3" stroke-linecap="round"></path>
+    <circle cx="12" cy="21" r="3.2" fill="#e8c63c" stroke="#1c110b" stroke-width="1.6"></circle>
+  </sc-if>
+  </g>
+</svg>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"kind":{"editor":"enum","default":"small","options":["small","large","pred","deer","goat","grouse","fox","bear","snake"]},"gait":{"editor":"string","default":""},"shadow":{"editor":"boolean","default":true},"state":{"editor":"enum","default":"calm","options":["calm","alert","rest","hurt"]},"girth":{"editor":"float","default":1},"v":{"editor":"enum","default":"","options":["","snow","sand","ash","marsh"]},"coat":{"editor":"string","default":""},"look":{"editor":"enum","default":"E","options":["E","S","N","SE","NE"]},"size":{"editor":"int","default":64},"scale":{"editor":"float","default":1},"$preview":{"width":64,"height":64}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const A = window.AgonArt, p = this.props;
+    const kind = p.kind || 'small', st = p.state || 'calm';
+    const P = p.coat ? A.coatPal(A.animalPal(kind, p.v), p.coat) : A.animalPal(kind, p.v);
+    const NAME = { small: 'Rabbit', large: 'Bristleback', pred: 'Wolf', deer: 'Deer', goat: 'Mountain goat', grouse: 'Grouse', fox: 'Fox', bear: 'Bear', snake: 'Viper' };
+    const SH = { small: [28, 54, 21, 3.6], large: [32, 54, 28, 4], pred: [32, 54, 27, 3.6], deer: [30, 55, 25, 3.4], goat: [30, 55, 22, 3.4], grouse: [28, 56, 17, 3], fox: [30, 55, 24, 3.2], bear: [32, 55, 30, 4], snake: [28, 56, 26, 2.8] };
+    const EY = { small: [47.5, 31, 0], large: [54.5, 38.3, 0], pred: [52.4, 30.6, 0], deer: [53.4, 15.8, 0], goat: [50.4, 25.8, 0], grouse: [46.4, 25, 0], fox: [51.4, 30.8, 0], bear: [54.4, 31, 0], snake: [55.6, 24, 0] };
+    const HB = { small: [22, 30], large: [24, 30], pred: [20, 30], deer: [20, 26], goat: [20, 30], grouse: [18, 34], fox: [20, 32], bear: [22, 28], snake: [22, 40] };
+    const sh = SH[kind] || SH.small, ey = (kind === 'snake' && P.croc) ? [51.6, 43.4, 0] : (EY[kind] || EY.small);
+    const shut = st === 'rest';
+    const bigEye = st === 'alert';
+    const er = ({ small: 2, large: 1.7, bear: 1.5, grouse: 1.5, deer: 1.7, goat: 1.6, snake: 1.7 }[kind] || 2.1) + (bigEye ? 0.9 : 0);
+    const LG = {
+      large: { top: 43.5, len: 11.5, w: 6.4, xs: [17, 38, 23, 44], col: P.ele ? [A.shade(P.body, 0.72), A.shade(P.body, 0.9)] : P.wil ? [A.shade(P.body, 0.6), A.shade(P.body, 0.8)] : ['#3a2a20', '#4a382a'], b: 0.5, h: [[18, 42, 4.4, 4.4], [47, 42, 4.4, 4.4]] },
+      pred: { top: 41.5, len: 13.5, w: 4.6, xs: [16, 35, 21, 40], col: [A.shade(P.body, 0.62), P.body], b: 1.1, h: [[19.5, 40, 4.6, 4.2], [44.5, 40, 3.8, 4]] },
+      deer: { top: 36.5, len: 18.5, w: 3.6, xs: [16, 36, 21, 40], col: [A.shade(P.body, 0.74), P.body], b: 1.2, h: [[18, 36, 4.2, 4.6], [43.5, 36, 3.4, 4.2]] },
+      goat: { top: 40.5, len: 14.5, w: 4.2, xs: [17, 36, 22, 40], col: [A.shade(P.body, 0.74), P.body], b: 1.1, h: [[19, 39, 4, 4.2], [43.5, 38.5, 3.4, 3.8]] },
+      fox: { top: 41, len: 14, w: 4.2, xs: [17, 35, 22, 40], col: [A.shade(P.body, 0.62), A.shade(P.body, 0.62)], b: 1.1, h: [[19.5, 40, 4.2, 4], [44.5, 40, 3.6, 3.8]] },
+      bear: { top: 38, len: 17, w: 8.4, xs: [15, 34, 21, 40], col: [A.shade(P.body, 0.62), P.body], b: 0.35, h: [[19, 42, 6, 6.4], [50, 42, 5.6, 6.2]] },
+    }[kind];
+    const LW = { large: P.ele ? [12, 9.6, 8.6] : [8.6, 6.4, 5.6], pred: [7.4, 5, 4.2], deer: [6.6, 4.4, 3.6], goat: [7, 5, 4.2], fox: [6.6, 4.6, 3.8], bear: [10.6, 8.8, 8.2] }[kind];
+    const taper = (pts, ws) => {
+      const n = pts.length, C = [], W = [];
+      for (let i = 0; i < n - 1; i++) {
+        const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(n - 1, i + 2)];
+        for (let u = 0; u < 1; u += 0.2) {
+          const u2 = u * u, u3 = u2 * u;
+          const f = (k) => 0.5 * ((2 * p1[k]) + (-p0[k] + p2[k]) * u + (2 * p0[k] - 5 * p1[k] + 4 * p2[k] - p3[k]) * u2 + (-p0[k] + 3 * p1[k] - 3 * p2[k] + p3[k]) * u3);
+          C.push([f(0), f(1)]); W.push(ws[i] + (ws[i + 1] - ws[i]) * u);
+        }
+      }
+      C.push(pts[n - 1]); W.push(ws[n - 1]);
+      const m = C.length, Lf = [], Rt = [];
+      C.forEach((q, i) => { const a0 = C[Math.max(0, i - 1)], a1 = C[Math.min(m - 1, i + 1)]; let dx = a1[0] - a0[0], dy = a1[1] - a0[1]; const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l; Lf.push([q[0] - dy * W[i] / 2, q[1] + dx * W[i] / 2]); Rt.push([q[0] + dy * W[i] / 2, q[1] - dx * W[i] / 2]); });
+      const f2 = (q) => q[0].toFixed(2) + ' ' + q[1].toFixed(2);
+      return 'M' + Lf.map(f2).join(' L') + ' L' + Rt.reverse().map(f2).join(' L') + 'Z';
+    };
+    const gait = p.gait || '', gd = gait === 'run' ? 0.34 : 0.62;
+    const legs = LG ? LG.xs.map((x0, i) => {
+      const x = x0;
+      const hind = i === 0 || i === 2, T = LG.top, N = LG.len, b = LG.b, fy = T + N;
+      const pts = hind ? [[x, T], [x + 1.6 * b, T + N * 0.36], [x - 1.2 * b, T + N * 0.7], [x, fy]] : [[x, T], [x + 0.6 * b, T + N * 0.4], [x - 0.1 * b, T + N * 0.72], [x, fy]];
+      const ws = hind ? [LW[0], LW[1] * 1.25, LW[1] * 0.95, LW[2]] : [LW[0] * 0.8, LW[1] * 0.95, LW[1] * 0.85, LW[2]];
+      const near = i >= 2, ph = (i === 0 || i === 3) ? 0 : 0.5;
+      return { p: taper(pts, ws), hd: 'M' + pts[3][0].toFixed(2) + ' ' + (fy - 1.6).toFixed(2) + ' L' + pts[3][0].toFixed(2) + ' ' + fy.toFixed(2), wf: Math.max(LW[2] - 1.6, 1.4), fill: LG.col[near ? 1 : 0], hoof: '#2a1d15', cl: 'M' + (x - 2.4).toFixed(1) + ' ' + (fy + 0.4).toFixed(1) + ' v1.3 M' + x.toFixed(1) + ' ' + (fy + 0.6).toFixed(1) + ' v1.3 M' + (x + 2.4).toFixed(1) + ' ' + (fy + 0.4).toFixed(1) + ' v1.3', anim: gait && !shut ? 'transform-origin: ' + x + 'px ' + T + 'px; animation: ag-leg ' + gd + 's ease-in-out infinite; animation-delay: -' + (ph * gd).toFixed(2) + 's' : '' };
+    }) : [];
+    const TS = {
+      large: { pts: [[8, 40], [9, 31], [16, 26], [27, 24.5], [38, 25.5], [46, 29], [50, 36], [48, 45], [42, 50.5], [30, 52], [18, 50.5], [11, 46.5]], bel: [29, 47, 13, 3.8], th: 'M12.5 34 Q21 37 19 47 M41 32 Q36 38 39 47' },
+      pred: { pts: [[11, 40], [10, 34], [17, 29.4], [28, 29], [38, 28.6], [45, 27.5], [47, 34], [46, 38.5], [41, 44.5], [34, 45.2], [25, 43], [16, 43.5]], bel: [28, 42.5, 11, 2.4], th: 'M12 34.5 Q19 36.5 17.5 43 M40 32.5 Q36 37 38 43' },
+      deer: { pts: [[12, 34], [14, 27], [22, 25], [32, 25.5], [37, 25], [43, 17.5], [48, 15], [48, 23], [45, 31], [42, 38.5], [36, 42.5], [28, 43.5], [18, 42], [13, 39]], bel: [28, 40.8, 10, 2.4], th: 'M14.5 29 Q21 31 19.5 39 M37 30 Q33 34 35 39' },
+      goat: { pts: [[12, 35], [13, 29], [21, 26.5], [31, 26.5], [38, 26], [42, 22.5], [48, 24.5], [47, 31], [44, 38], [38, 43.5], [28, 45], [18, 44], [13, 41]], bel: [28, 41, 10, 2.6], th: 'M14.5 30 Q21 32 19.5 40 M38 30 Q34 35 36 40' },
+      fox: { pts: [[12, 41], [12.5, 35.5], [19, 32.3], [28, 31.6], [37, 32], [44, 30.5], [46, 36], [43, 42.5], [36, 46], [27, 46.5], [18, 45.5], [13, 44]], bel: [28, 43.5, 10, 2.3], th: 'M13.5 36 Q19.5 37.5 18 44 M38 34 Q34 38 36 44' },
+      bear: { pts: [[7, 37], [8, 29], [15, 23], [26, 21.5], [37, 22.5], [45, 26], [51, 33], [50, 39.5], [44, 45], [30, 47.2], [17, 46.2], [9, 42]], bel: [29, 44, 14, 3.2], th: 'M11 31 Q21 34 19 46 M42 30 Q37 38 40 47' },
+    }[kind];
+    const smooth = (P) => { const n = P.length; let d = 'M' + P[0][0].toFixed(2) + ' ' + P[0][1].toFixed(2); for (let i = 0; i < n; i++) { const a = P[(i + n - 1) % n], b = P[i], c = P[(i + 1) % n], e = P[(i + 2) % n]; d += ' C' + (b[0] + (c[0] - a[0]) / 6).toFixed(2) + ' ' + (b[1] + (c[1] - a[1]) / 6).toFixed(2) + ' ' + (c[0] - (e[0] - b[0]) / 6).toFixed(2) + ' ' + (c[1] - (e[1] - b[1]) / 6).toFixed(2) + ' ' + c[0].toFixed(2) + ' ' + c[1].toFixed(2); } return d + 'Z'; };
+    // the pale belly is a crescent that rides the lower edge of the inner body fill and tapers to nothing at both ends, so it never crosses a contour
+    const belly = (Q, bl) => {
+      const n = Q.length, S = [];
+      for (let i = 0; i < n; i++) { const a = Q[(i + n - 1) % n], b = Q[i], c = Q[(i + 1) % n], e = Q[(i + 2) % n], p1 = [b[0] + (c[0] - a[0]) / 6, b[1] + (c[1] - a[1]) / 6], p2 = [c[0] - (e[0] - b[0]) / 6, c[1] - (e[1] - b[1]) / 6]; for (let t = 0; t < 1; t += 0.1) { const u = 1 - t; S.push([u * u * u * b[0] + 3 * u * u * t * p1[0] + 3 * u * t * t * p2[0] + t * t * t * c[0], u * u * u * b[1] + 3 * u * u * t * p1[1] + 3 * u * t * t * p2[1] + t * t * t * c[1]]); } }
+      const [cx, , rx, ry] = bl, lo = [], hi = [];
+      for (let x = cx - rx; x <= cx + rx + 0.01; x += 1) { let yb = -1; for (const s of S) if (Math.abs(s[0] - x) <= 0.8 && s[1] > yb) yb = s[1]; if (yb < 0) continue; const k = Math.max(0, 1 - Math.pow((x - cx) / rx, 2)), h = ry * 2.2 * Math.pow(k, 0.7); lo.push([x, yb - 0.5]); hi.push([x, yb - 0.5 - h]); }
+      if (lo.length < 3) return '';
+      return 'M' + lo.map((q) => q[0].toFixed(1) + ' ' + q[1].toFixed(1)).join(' L') + ' L' + hi.reverse().map((q) => q[0].toFixed(1) + ' ' + q[1].toFixed(1)).join(' L') + 'Z';
+    };
+    let tor = null, backY = () => 0;
+    if (TS) {
+      const P = TS.pts, n = P.length;
+      const inner = P.map((q, i) => { const a = P[(i + n - 1) % n], c = P[(i + 1) % n]; let tx = c[0] - a[0], ty = c[1] - a[1]; const m = Math.hypot(tx, ty) || 1; tx /= m; ty /= m; const nx = -ty, ny = tx; const off = 1.4 + 2 * Math.max(0, -ny); return [q[0] + nx * off, q[1] + ny * off]; });
+      tor = { o: smooth(P), i: smooth(inner), b: belly(inner, TS.bel), t: TS.th };
+      const samp = [];
+      for (let i = 0; i < n; i++) { const a = P[(i + n - 1) % n], b = P[i], c = P[(i + 1) % n], e = P[(i + 2) % n]; for (let u = 0; u <= 1; u += 0.1) { const m = 1 - u; const x = m * m * m * b[0] + 3 * m * m * u * (b[0] + (c[0] - a[0]) / 6) + 3 * m * u * u * (c[0] - (e[0] - b[0]) / 6) + u * u * u * c[0]; const y = m * m * m * b[1] + 3 * m * m * u * (b[1] + (c[1] - a[1]) / 6) + 3 * m * u * u * (c[1] - (e[1] - b[1]) / 6) + u * u * u * c[1]; samp.push([x, y]); } }
+      backY = (x) => Math.min.apply(null, samp.filter((q) => Math.abs(q[0] - x) < 1.6).map((q) => q[1]).concat([99]));
+    }
+
+    // ---- facing: S/N front and back views, SE/NE three-quarter. Neck structure decides how the head sits: long necks raise it on a column, short necks tuck it against the chest.
+    const LK = (!P.croc && ['S', 'N', 'SE', 'NE'].includes(p.look)) ? p.look : 'E', FB = LK === 'S' || LK === 'N', back = LK === 'N' || LK === 'NE';
+    const HEAD = {
+      small: { r: 6.4, hy: 34, nl: 0, nw: 3, ear: 'long', sn: 0.9, neckX: 38 },
+      large: { r: 8.6, hy: 37, nl: 0, nw: 5, ear: 'round', sn: 1.2, tusk: 1, neckX: 40 },
+      pred: { r: 6.8, hy: 31, nl: 3, nw: 4, ear: 'point', sn: 1.05, neckX: 38 },
+      deer: { r: 5.4, hy: 15, nl: 15, nw: 3.4, ear: 'side', sn: 0.95, antler: 1, neckX: 36 },
+      goat: { r: 5.6, hy: 23, nl: 8, nw: 3.6, ear: 'side', sn: 0.9, horn: 1, beard: 1, neckX: 38 },
+      grouse: { r: 4.2, hy: 20, nl: 9, nw: 2.6, ear: 'none', sn: 0, beak: 1, neckX: 36 },
+      fox: { r: 6, hy: 33, nl: 2, nw: 3.6, ear: 'point', sn: 1, neckX: 38 },
+      bear: { r: 9.4, hy: 33, nl: 0, nw: 7, ear: 'round', sn: 1.1, neckX: 40 },
+      snake: { r: 4.6, hy: 24, nl: 16, nw: 2.6, ear: 'none', sn: 0, fork: 1, neckX: 36 },
+    }[kind] || { r: 6, hy: 32, nl: 0, nw: 4, ear: 'round', sn: 1, neckX: 38 };
+    const BCX = 27, hxc = BCX, items = [];
+    const add = (d, f, w, t, sk) => items.push({ d, f, s: sk || '#1c110b', w: w ?? 1.8, t: t || '' });
+    const ell = (x, y, rx, ry) => 'M' + (x - rx).toFixed(2) + ' ' + y.toFixed(2) + ' a' + rx.toFixed(2) + ' ' + ry.toFixed(2) + ' 0 1 0 ' + (2 * rx).toFixed(2) + ' 0 a' + rx.toFixed(2) + ' ' + ry.toFixed(2) + ' 0 1 0 ' + (-2 * rx).toFixed(2) + ' 0Z';
+    if (FB) {
+      const H = HEAD, r = H.r, hy = H.hy, bodyC = back ? A.shade(P.body, 0.82) : P.body, earIn = P.ear || A.shade(P.body, 0.7);
+      if (H.nl > 0) add('M' + (hxc - H.nw) + ' ' + (hy + 1) + ' L' + (hxc - H.nw - 0.8) + ' ' + (hy + H.nl + 6) + ' L' + (hxc + H.nw + 0.8) + ' ' + (hy + H.nl + 6) + ' L' + (hxc + H.nw) + ' ' + (hy + 1) + 'Z', bodyC);
+      if (H.nl > 0 && !back) add('M' + (hxc - H.nw * 0.2) + ' ' + (hy + r * 0.6) + ' L' + (hxc - H.nw * 0.5) + ' ' + (hy + H.nl + 5) + ' L' + (hxc + H.nw * 0.5) + ' ' + (hy + H.nl + 5) + ' L' + (hxc + H.nw * 0.2) + ' ' + (hy + r * 0.6) + 'Z', P.belly, 0);
+      [-1, 1].forEach((sd) => {
+        const ex = hxc + sd * r * 0.74;
+        if (H.ear === 'long') { add('M' + ex + ' ' + (hy - r * 0.5) + ' q' + (sd * 2.6) + ' -6 ' + (sd * 0.6) + ' -13 q' + (-sd * 3.4) + ' 4 ' + (-sd * 3) + ' 13Z', bodyC, 1.7); add('M' + ex + ' ' + (hy - r * 0.8) + ' q' + (sd * 1.2) + ' -4 ' + (sd * 0.2) + ' -8 q' + (-sd * 1.6) + ' 3 ' + (-sd * 1.3) + ' 8Z', earIn, 0); }
+        else if (H.ear === 'point') add('M' + (ex - sd * 2.6) + ' ' + (hy - r * 0.35) + ' L' + (ex + sd * 0.6) + ' ' + (hy - r - 6.5) + ' L' + (ex + sd * 3.4) + ' ' + (hy - r * 0.2) + 'Z', bodyC, 1.8);
+        else if (H.ear === 'round' && P.ele) add(ell(hxc + sd * r * 1.2, hy - r * 0.1, r * 0.62, r * 0.85), bodyC, 1.9);
+        else if (H.ear === 'round') add(ell(hxc + sd * r * 0.8, hy - r * 0.78, r * 0.34, r * 0.34), bodyC);
+        else if (H.ear === 'side') add('M' + (hxc + sd * r * 0.8) + ' ' + (hy - r * 0.3) + ' q' + (sd * 8) + ' -4 ' + (sd * 9) + ' -0.5 q' + (-sd * 4) + ' 4.4 ' + (-sd * 9) + ' 3Z', bodyC, 1.7);
+        if (H.horn) add('M' + (hxc + sd * r * 0.5) + ' ' + (hy - r * 0.8) + ' q' + (sd * 1) + ' -7 ' + (sd * 4.6) + ' -9 q' + (-sd * 1.6) + ' 3 ' + (-sd * 2.8) + ' 9Z', P.horn || '#6b5a3c', 1.6);
+        if (H.antler) add('M' + (hxc + sd * r * 0.5) + ' ' + (hy - r * 0.8) + ' l' + (sd * 2) + ' -8 M' + (hxc + sd * (r * 0.5 + 2)) + ' ' + (hy - r * 0.8 - 8) + ' l' + (sd * 3.5) + ' -3.5 M' + (hxc + sd * (r * 0.5 + 1.2)) + ' ' + (hy - r * 0.8 - 4.5) + ' l' + (-sd * 2.4) + ' -3.6', 'none', 2.4, '', P.horn || '#cdbd98');
+      });
+      add(ell(hxc, hy, r, r * (kind === 'snake' ? 0.8 : 0.92)), bodyC);
+      if (!back) {
+        if (H.sn > 0) { add(ell(hxc, hy + r * 0.46, r * 0.56 * H.sn, r * 0.4), P.muzzle || P.belly); add(ell(hxc, hy + r * 0.36, 1.3, 0.9), '#1c110b', 0); }
+        if (P.ele) add('M' + (hxc - 2.8) + ' ' + (hy + r * 0.3) + ' L' + (hxc - 2.2) + ' ' + (hy + r * 0.3 + 11) + ' Q' + hxc + ' ' + (hy + r * 0.3 + 15) + ' ' + (hxc + 2.2) + ' ' + (hy + r * 0.3 + 11) + ' L' + (hxc + 2.8) + ' ' + (hy + r * 0.3) + 'Z', bodyC, 1.8);
+        if (P.wil) add('M' + (hxc - 1.8) + ' ' + (hy + r * 0.8) + ' L' + hxc + ' ' + (hy + r * 0.8 + 7) + ' L' + (hxc + 1.8) + ' ' + (hy + r * 0.8) + 'Z', A.shade(P.body, 0.62), 1.3);
+        if (H.tusk) [-1, 1].forEach((sd) => add('M' + (hxc + sd * r * 0.5) + ' ' + (hy + r * 0.5) + ' l' + (sd * 1.4) + ' -3.6 l' + (sd * 1.1) + ' 3.2Z', '#efe6d0', 1.2));
+        if (H.beak) { add('M' + (hxc - 2.2) + ' ' + (hy + 0.5) + ' L' + hxc + ' ' + (hy + 6) + ' L' + (hxc + 2.2) + ' ' + (hy + 0.5) + 'Z', '#d4a040', 1.4); add(ell(hxc, hy - r - 0.4, 2.2, 1.6), P.comb || '#c2503c', 1.4); }
+        if (H.beard) add('M' + (hxc - 1.6) + ' ' + (hy + r * 0.8) + ' L' + hxc + ' ' + (hy + r * 0.8 + 5) + ' L' + (hxc + 1.6) + ' ' + (hy + r * 0.8) + 'Z', P.belly, 1.2);
+        if (H.fork) add('M' + hxc + ' ' + (hy + r * 0.7) + ' v4 l-1.4 1.6 M' + hxc + ' ' + (hy + r * 0.7 + 4) + ' l1.4 1.6', 'none', 1.3, '', '#c2503c');
+        const eyN = (kind === 'snake' || kind === 'grouse') ? 0.62 : 0.46, ey2 = hy - r * 0.14, er2 = Math.max(1.5, er * 0.9);
+        [-1, 1].forEach((sd) => { if (shut) add('M' + (hxc + sd * r * eyN - 2) + ' ' + ey2 + ' h4', 'none', 1.7, '', '#1c110b'); else { add(ell(hxc + sd * r * eyN, ey2, er2, er2), P.eye || '#f3ece3', 1.3); add(ell(hxc + sd * r * eyN, ey2, 0.8, 0.9), '#1c110b', 0); } });
+      } else {
+        add('M' + (hxc - r * 0.6) + ' ' + (hy - r * 0.55) + ' q' + (r * 0.6) + ' -3 ' + (r * 1.2) + ' 0', 'none', 1.2, '', A.shade(P.body, 0.6));
+        if (kind === 'small' || kind === 'pred' || kind === 'fox') { /* tail is drawn by the squeezed torso */ }
+      }
+    }
+
+    const bodyList = [];
+    if (FB) {
+      const B = { small: [43, 9.5, 9.5, 5, 3.2, 49], large: [41, 13, 11, 8, 5.4, 46], pred: [41, 9.5, 9, 5.5, 3.6, 46], deer: [36, 8.5, 9, 5, 3, 40], goat: [38, 9.5, 9, 5.5, 3.4, 42], grouse: [41, 10, 10.5, 3.6, 2.2, 49], fox: [41, 9, 9, 5.2, 3.4, 46], bear: [40, 14, 12, 9, 7.4, 46], snake: [47, 12, 5, 0, 0, 0] }[kind] || [41, 10, 10, 5, 3.4, 46];
+      const [bcy, brx, bry, lx, lw, lt] = B, dk = A.shade(P.body, 0.62), bs = back ? A.shade(P.body, 0.84) : P.body, push = (d, f, w, sk) => bodyList.push({ d, f, s: sk || '#1c110b', w: w ?? 1.9 });
+      if (back && (kind === 'grouse')) { for (let i = -3; i <= 3; i++) push('M27 ' + (bcy + 2) + ' L' + (27 + i * 5.2) + ' ' + (bcy - 17 + Math.abs(i) * 1.8) + ' L' + (27 + i * 5.2 + 3) + ' ' + (bcy - 15 + Math.abs(i) * 1.8) + 'Z', i % 2 ? P.mark : P.belly, 1.4); }
+      if (kind === 'snake') {
+        [[52, 13, 4.2], [47.6, 10, 3.8], [43.6, 7.2, 3.4]].forEach(([y, rx, ry], i) => { push(ell(27, y, rx, ry), i % 2 ? A.shade(P.body, 0.86) : P.body); push('M' + (27 - rx * 0.6) + ' ' + y + ' l2 1 M' + (27 + rx * 0.1) + ' ' + y + ' l2 -1', 'none', 1.5, P.mark); });
+        if (back) push('M27 40 q3 -3 0 -6', 'none', 0, P.mark);
+      } else {
+        [-1, 1].forEach((sd) => { push('M' + (27 + sd * lx - lw / 2) + ' ' + lt + ' L' + (27 + sd * lx - lw / 2 + 0.4) + ' 53 L' + (27 + sd * lx + lw / 2 - 0.4) + ' 53 L' + (27 + sd * lx + lw / 2) + ' ' + lt + 'Z', dk); push('M' + (27 + sd * lx - lw / 2 - 0.2) + ' 53 h' + (lw + 0.4), 'none', 2.4, '#2a1d15'); if (kind === 'bear' && !back) push('M' + (27 + sd * lx - 2) + ' 54.4 v1.2 M' + (27 + sd * lx) + ' 54.6 v1.2 M' + (27 + sd * lx + 2) + ' 54.4 v1.2', 'none', 1.1, '#efe6d0'); });
+        if (back && kind === 'fox') push('M27 ' + (bcy + 4) + ' q-9 4 -7 14 q8 4 14 0 q2 -9 -7 -14Z', P.body, 1.9);
+        if (back && kind === 'pred') push('M27 ' + (bcy + 3) + ' q-5 7 -3 15 q4 2 6 0 q2 -8 -3 -15Z', dk, 1.9);
+        push(ell(27, bcy, brx, bry), bs);
+        if (!back) push(ell(27, bcy + bry * 0.5, brx * 0.55, bry * 0.55), P.belly, 0);
+        else { push('M' + (27 - brx * 0.7) + ' ' + (bcy - bry * 0.2) + ' q' + (brx * 0.7) + ' ' + (-bry * 0.5) + ' ' + (brx * 1.4) + ' 0', 'none', 1.3, A.shade(P.body, 0.6)); if (kind === 'small') push(ell(27, bcy + bry * 0.4, 3.4, 3.2), '#f4efe6', 1.6); if (kind === 'deer') push(ell(27, bcy + bry * 0.35, 3.6, 4), P.belly, 1.4); if (kind === 'goat' || kind === 'large' || kind === 'bear') push(ell(27, bcy + bry * 0.55, 2.4, 2), A.shade(P.body, 0.7), 1.4); }
+      }
+    }
+    const cpx = (kind === 'small') ? 10 : 12, sq = FB ? 0.56 : LK === 'E' ? 1 : 0.88;
+    const lkTf = sq === 1 ? '' : 'translate(' + BCX + ' 0) scale(' + sq + ' 1) translate(' + (-BCX) + ' 0)';
+    // a back-facing view keeps the head behind the torso, a front-facing one puts it in front
+    const sc = p.scale ?? 1, gx = p.girth ?? 1, hb = HB[kind] || HB.small;
+    const cx = ey[0], y1 = ey[1];
+    return {
+      size: p.size ?? 64, label: (P.name || NAME[kind]) + ', ' + st,
+      boar: kind === 'large' && !P.ele && !P.wil, ele: kind === 'large' && !!P.ele, wil: kind === 'large' && !!P.wil, hdRx: P.ele ? 11.5 : 10, hdRy: P.ele ? 10 : 8.5, hdRx2: P.ele ? 9.5 : 8, hdRy2: P.ele ? 8 : 6.5,
+      small: kind === 'small', large: kind === 'large', pred: kind === 'pred', deer: kind === 'deer', goat: kind === 'goat', grouse: kind === 'grouse', fox: kind === 'fox', bear: kind === 'bear', snake: kind === 'snake',
+      croc: kind === 'snake' && !!P.croc, serp: kind === 'snake' && !P.croc, cat: kind === 'pred' && !!P.cat, tuft: kind === 'fox' && !!P.tuft, hawk: kind === 'grouse' && P.raptor === 'hawk', owl: kind === 'grouse' && P.raptor === 'owl', vult: kind === 'grouse' && P.raptor === 'vulture',
+      spotList: (kind === 'pred' && P.spot) ? [[16, 35], [21, 33], [26, 36], [31, 33.5], [35, 37], [20, 39], [25, 40], [30, 40.5], [14, 38.5], [38, 33.4], [41, 38], [11, 36]].map((q, i) => ({ x: q[0], y: q[1], rx: 1.7 - (i % 3) * 0.2, ry: 1.3 })) : [], spotC: P.spot || P.mark, snCx: (kind === 'pred' && P.cat) ? 55.5 : 57, snRx: (kind === 'pred' && P.cat) ? 3.8 : 6, noseX: (kind === 'pred' && P.cat) ? 58.6 : 61.4,
+      tf: 'translate(32 54) scale(' + (sc * gx).toFixed(3) + ' ' + sc.toFixed(3) + ') translate(-32 -54)', horn: P.horn || P.mark, comb: P.comb || '#c2503c', muzzle: P.muzzle || P.belly,
+      bristles: (P.ele ? [] : P.wil ? [30, 35, 40, 45] : [12, 17.6, 23.2, 28.8, 34.4, 40]).map((x) => { const yt = backY(x) + 0.6; return { pts: (x - 3.4) + ',' + (yt + 2.2) + ' ' + x + ',' + (yt - 5.6) + ' ' + (x + 3.4) + ',' + (yt + 2.2) }; }),
+      legs, tor, shOp: p.shadow === false ? 0 : 0.3, shOpO: p.shadow === false ? 0 : 0.12,
+      shX: sh[0], shY: sh[1], shRx: sh[2], shRy: sh[3], shRxO: sh[2] * 1.28, shRyO: sh[3] * 1.4,
+      body: P.body, bodyS: A.shade(P.body, 0.74), belly: P.belly, mark: P.mark,
+      earC: P.ear || P.mark, plate: P.plate || P.mark, markC: A.shade(P.body, 0.62),
+      eyeOpen: !shut && !FB && !(LK === 'NE'), eyeShut: shut && !FB && LK !== 'NE', lkTf, sideBody: !FB, bodyList, headBack: back && FB ? items : [], headFront: !back && FB ? items : [],
+      ex: cx, ex1: cx + 0.7, ey: y1, er,
+      eyeC: P.eye || '#f3ece3',
+      shutA: 'M' + (cx - 2.5) + ' ' + y1 + ' h5',
+      hurt: st === 'hurt', hx: hb[0], hy: hb[1], hcy: hb[1] + 4, hx2: hb[0] + 4.5,
+      rest: st === 'rest', alert: st === 'alert',
+    };
+  }
+}
+</script>
+</body>
+</html>

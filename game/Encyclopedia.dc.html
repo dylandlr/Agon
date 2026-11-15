@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Expression and motion encyclopedia</title>
+<script src="./support.js"></script>
+<script src="./art.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+:root{--ground:#30231b;--surface:#463429;--surface-raised:#523e32;--border:#624a3b;--border-strong:#a58a73;--ink:#ede9e1;--ink-muted:#aea69a;--signal-yellow:#d4c63c}
+body{margin:0;background:#30231b}
+</style>
+</helmet>
+<div style="width: 1440px; box-sizing: border-box; padding: 56px 64px 64px; background: var(--ground); color: var(--ink); font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 15px; line-height: 22px; display: flex; flex-direction: column; gap: 56px">
+
+  <header style="display: flex; flex-direction: column; gap: 8px">
+    <h1 style="margin: 0; font-size: 40px; line-height: 44px; font-weight: 700">Expressions and motion</h1>
+    <p style="margin: 0; max-width: 760px; color: var(--ink-muted)">Every face and every movement is a readout of simulation state. A viewer should be able to tell what an agent needs without opening the inspector. Faces are picked by <code style="font-family: ui-monospace, Menlo, Consolas, monospace">AgonArt.expressionFor</code>; movement by <code style="font-family: ui-monospace, Menlo, Consolas, monospace">AgonArt.anim</code>.</p>
+  </header>
+
+  <section style="display: flex; flex-direction: column; gap: 16px">
+    <h2 style="margin: 0; font-size: 24px; line-height: 30px; font-weight: 700">Faces</h2>
+    <p style="margin: 0; color: var(--ink-muted); max-width: 760px">Twelve faces. The rules run top to bottom and the first match wins, so a dying agent never shows a happy face. Eyes, brows, mouth and one extra tell (sweat, tear, Z, tint) carry the meaning; no face relies on color alone.</p>
+    <div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 20px">
+      <sc-for list="{{faces}}" as="f" hint-placeholder-count="12">
+        <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 8px; align-items: center">
+          <div style="width: 100%; display: flex; justify-content: space-between; font-size: 12px; line-height: 16px; color: var(--ink-muted)"><span>Priority {{f.n}}</span><span>{{f.tell}}</span></div>
+          <dc-import name="Portrait" strength="{{1.1}}" speed="{{1}}" metabolism="{{1}}" insulation="{{1.2}}" a0="{{0.45}}" a1="{{0.45}}" a2="{{0.35}}" expression="{{f.key}}" hurt="{{f.hurt}}" size="{{136}}" hint-size="136px,170px"></dc-import>
+          <div style="font-size: 16px; line-height: 22px; font-weight: 600">{{f.label}}</div>
+          <div style="font-size: 12px; line-height: 17px; color: var(--ink-muted); text-align: center">{{f.rule}}</div>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 16px">
+    <h2 style="margin: 0; font-size: 24px; line-height: 30px; font-weight: 700">Body animation</h2>
+    <p style="margin: 0; color: var(--ink-muted); max-width: 760px">One tick is 600ms at 1x. An agonist glides to its next tile in a straight line over the whole tick, so travel never pauses between ticks. The body animation loops on its own clock on top of that glide. All of it stops under reduced motion.</p>
+    <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 20px">
+      <sc-for list="{{moves}}" as="m" hint-placeholder-count="10">
+        <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 10px">
+          <div style="background: #4a382b; border: 2px solid #1c110b; border-radius: 6px; height: 120px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 12px; overflow: hidden">
+            <div style="{{m.stage}}">
+              <dc-import name="Pawn" strength="{{1.1}}" a0="{{0.45}}" a1="{{0.45}}" a2="{{0.35}}" closed="{{m.closed}}" size="{{96}}" hint-size="96px,96px"></dc-import>
+            </div>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 16px; line-height: 22px; font-weight: 600">{{m.label}}</span><span style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; line-height: 16px; color: var(--ink-muted)">{{m.secs}}</span></div>
+          <div style="font-size: 12px; line-height: 17px; color: var(--signal-yellow)">{{m.when}}</div>
+          <div style="font-size: 12px; line-height: 17px; color: var(--ink-muted)">{{m.text}}</div>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 16px">
+    <h2 style="margin: 0; font-size: 24px; line-height: 30px; font-weight: 700">Universal interaction layer</h2>
+    <p style="margin: 0; color: var(--ink-muted); max-width: 760px">Everything physical is a thing with tags and numeric properties. A verb reads the properties of what it is used with and what it is done to, so combat, crafting, fire and eating run through one rule set. U means the thing can be used for the verb, O means the verb can be done to it, B means both. Combat damage in the simulation is computed by the hit verb here.</p>
+    <div style="overflow-x: auto; border: 1px solid var(--border); border-radius: 8px">
+      <table style="border-collapse: collapse; font-size: 11px; line-height: 15px">
+        <thead><tr><th style="text-align: left; padding: 4px 8px; position: sticky; left: 0; background: var(--surface)">Thing</th><sc-for list="{{imVerbs}}" as="v" hint-placeholder-count="30"><th style="padding: 4px 3px; font-weight: 600; color: var(--ink-muted); writing-mode: vertical-rl; transform: rotate(180deg); height: 70px">{{v.label}}</th></sc-for></tr></thead>
+        <tbody><sc-for list="{{imRows}}" as="r" hint-placeholder-count="20"><tr><td style="padding: 3px 8px; font-weight: 600; white-space: nowrap; position: sticky; left: 0; background: var(--surface)">{{r.label}}</td><sc-for list="{{r.cells}}" as="c" hint-placeholder-count="30"><td style="{{c.style}}">{{c.txt}}</td></sc-for></tr></sc-for></tbody>
+      </table>
+    </div>
+    <div style="font-size: 16px; line-height: 22px; font-weight: 600">Composites</div>
+    <p style="margin: 0; color: var(--ink-muted); max-width: 760px">A verb's operands can be other verbs, so primitives nest. The result below is computed live by the same function the simulation calls.</p>
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
+      <sc-for list="{{imComps}}" as="c" hint-placeholder-count="12"><div style="background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 6px"><div style="font-size: 14px; line-height: 20px; font-weight: 600">{{c.label}}</div><div style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; line-height: 15px; color: var(--signal-yellow)">{{c.trace}}</div><div style="font-size: 12px; line-height: 17px; color: var(--ink-muted)">{{c.out}}</div></div></sc-for>
+    </div>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 16px">
+    <h2 style="margin: 0; font-size: 24px; line-height: 30px; font-weight: 700">Decay: from fresh to skeleton</h2>
+    <p style="margin: 0; color: var(--ink-muted); max-width: 760px">A body decays over {{decayTicks}} ticks (three days) after death. Decay is one number from 0 to 1: skin pales, bloats, greens and browns, flesh falls away in ragged patches, then only bones are left. In X-ray the organs rot first. The loop below plays the whole sequence; drag the slider to stop on any frame.</p>
+    <div style="display: flex; gap: 24px; align-items: stretch">
+      <div style="background: #4a382b; border: 2px solid #1c110b; border-radius: 8px; width: 300px; height: 300px; flex: none; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 14px; overflow: hidden; box-sizing: border-box">
+        <dc-import name="Pawn" strength="{{1.1}}" a0="{{0.45}}" a1="{{0.45}}" a2="{{0.35}}" closed="{{true}}" expression="dead" decay="{{dec.d}}" size="{{250}}" hint-size="250px,250px"></dc-import>
+      </div>
+      <div style="background: #10262c; border: 2px solid #1c110b; border-radius: 8px; width: 300px; height: 300px; flex: none; display: flex; align-items: center; justify-content: center; overflow: hidden; box-sizing: border-box">
+        <dc-import name="Xray" subject="pawn" strength="{{1.1}}" decay="{{dec.d}}" panel="{{false}}" size="{{270}}" hint-size="270px,270px"></dc-import>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 12px; flex: 1; justify-content: center">
+        <div style="display: flex; align-items: baseline; gap: 14px"><span style="font-size: 32px; line-height: 38px; font-weight: 700">{{dec.label}}</span><span style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 14px; color: var(--signal-yellow)">{{dec.ticks}} ticks, decay {{dec.pct}}</span></div>
+        <div style="font-size: 13px; line-height: 18px; color: var(--ink-muted)">{{dec.text}}</div>
+        <input type="range" min="0" max="1" step="0.01" value="{{dec.d}}" aria-label="Decay" onInput="{{scrubDecay}}" style="width: 100%; accent-color: #d4c63c">
+        <div style="display: flex; gap: 8px; align-items: center"><button onClick="{{toggleDecay}}" style="min-height: 36px; padding: 0 16px; border-radius: 4px; border: 1px solid var(--border-strong); background: #d4c63c; color: #1c110b; font-size: 13px; font-weight: 600">{{decayBtn}}</button><span style="font-size: 12px; color: var(--ink-muted)">Loop is 11 seconds.</span></div>
+      </div>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px">
+      <sc-for list="{{stages}}" as="g" hint-placeholder-count="6">
+        <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 6px; align-items: center">
+          <div style="background: #4a382b; border: 2px solid #1c110b; border-radius: 6px; width: 100%; box-sizing: border-box; display: flex; justify-content: center; padding: 6px 0 2px"><dc-import name="Pawn" strength="{{1.1}}" a0="{{0.45}}" a1="{{0.45}}" a2="{{0.35}}" closed="{{true}}" expression="dead" decay="{{g.d}}" size="{{104}}" hint-size="104px,104px"></dc-import></div>
+          <div style="background: #10262c; border: 2px solid #1c110b; border-radius: 6px; width: 100%; box-sizing: border-box; display: flex; justify-content: center; padding: 6px 0 2px"><dc-import name="Xray" subject="pawn" strength="{{1.1}}" decay="{{g.d}}" size="{{104}}" hint-size="104px,104px"></dc-import></div>
+          <div style="font-size: 15px; line-height: 20px; font-weight: 600">{{g.label}}</div>
+          <div style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; line-height: 15px; color: var(--signal-yellow)">{{g.range}}</div>
+          <div style="font-size: 12px; line-height: 17px; color: var(--ink-muted); text-align: center">{{g.text}}</div>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 16px">
+    <h2 style="margin: 0; font-size: 24px; line-height: 30px; font-weight: 700">Animals</h2>
+    <p style="margin: 0; color: var(--ink-muted); max-width: 760px">Same side-on view, ink outline and one shade step as the people. Thirty-five species: the original nine, then twenty-six more that only spawn in their native climates. Prey are rounded with the eye wide; predators are long and low with a yellow eye. Every animal also gets its own size (x0.85 to x1.2) and girth (lean to stout), so no two look the same. A yellow mark means alert, Z means resting after an attack, a bandage means hurt.</p>
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px">
+      <sc-for list="{{kinds}}" as="k" hint-placeholder-count="3">
+        <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 12px">
+          <div style="display: flex; flex-direction: column; gap: 2px"><div style="font-size: 18px; line-height: 24px; font-weight: 600">{{k.name}}</div><div style="font-size: 12px; line-height: 17px; color: var(--ink-muted)">{{k.rule}}</div></div>
+          <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px">
+            <sc-for list="{{k.states}}" as="s" hint-placeholder-count="4">
+              <div style="background: #5a6a3a; border: 2px solid #1c110b; border-radius: 6px; padding: 8px 0 4px; display: flex; flex-direction: column; align-items: center; gap: 4px">
+                <dc-import name="Animal" kind="{{k.kind}}" v="{{k.v}}" state="{{s.state}}" size="{{88}}" hint-size="88px,88px"></dc-import>
+                <span style="font-size: 12px; line-height: 16px; font-weight: 600; text-shadow: 0 1px 0 #1c110b">{{s.state}}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="background: #4a382b; border: 2px solid #1c110b; border-radius: 6px; height: 112px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 8px; overflow: hidden">
+            <div style="{{k.stage}}"><dc-import name="Animal" kind="{{k.kind}}" v="{{k.v}}" state="calm" size="{{96}}" hint-size="96px,96px"></dc-import></div>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 14px; line-height: 20px; font-weight: 600">{{k.moveLabel}}</span><span style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; line-height: 16px; color: var(--ink-muted)">{{k.secs}}</span></div>
+          <div style="font-size: 12px; line-height: 17px; color: var(--ink-muted)">{{k.text}}</div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: flex; gap: 24px; align-items: center">
+      <div style="background: #4a382b; border: 2px solid #1c110b; border-radius: 6px; width: 140px; height: 112px; flex: none; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 8px; overflow: hidden">
+        <div style="{{pounce.stage}}"><dc-import name="Animal" kind="pred" state="alert" size="{{96}}" hint-size="96px,96px"></dc-import></div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <div style="display: flex; gap: 12px; align-items: baseline"><span style="font-size: 16px; line-height: 22px; font-weight: 600">Predator attack</span><span style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; line-height: 16px; color: var(--ink-muted)">{{pounce.secs}}</span></div>
+        <div style="font-size: 13px; line-height: 18px; color: var(--ink-muted)">{{pounce.text}} Plays for the tick of the attack, then the predator rests for four ticks and ignores nearby agents.</div>
+      </div>
+    </div>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 16px">
+    <h2 style="margin: 0; font-size: 24px; line-height: 30px; font-weight: 700">Food and plants</h2>
+    <p style="margin: 0; color: var(--ink-muted); max-width: 760px">Eleven things to forage. Not all of it is good for you: nightshade and toadstools poison, herbs only heal, and each kind is placed at world generation by the climate it grows in. The four pictures run from picked clean to fully laden. Season multipliers scale how much grows back.</p>
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px">
+      <sc-for list="{{foods}}" as="f" hint-placeholder-count="3">
+        <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 12px">
+          <div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-size: 18px; line-height: 24px; font-weight: 600">{{f.label}}</span><span style="{{f.catC}}; font-size: 12px; font-weight: 600">{{f.cat}}</span></div>
+          <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px">
+            <sc-for list="{{f.stages}}" as="g" hint-placeholder-count="4">
+              <div style="background: #5a6a3a; border: 2px solid #1c110b; border-radius: 6px; padding: 8px 0; display: flex; justify-content: center"><div style="{{g.style}}"></div></div>
+            </sc-for>
+          </div>
+          <div style="font-size: 12px; line-height: 17px; color: var(--ink-muted)">{{f.note}}</div>
+          <div style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; line-height: 16px; color: var(--signal-yellow)">{{f.nutS}} ({{f.unit}})</div>
+          <div style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; line-height: 16px; color: var(--ink-muted)">{{f.seaS}}</div>
+          <div style="font-size: 12px; line-height: 17px; color: var(--ink-muted)">Effect: {{f.effS}}. {{f.rainS}}.</div>
+          <div style="font-size: 12px; line-height: 17px; color: var(--ink-muted)">Grows in: {{f.bioS}}.</div>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 16px">
+    <h2 style="margin: 0; font-size: 24px; line-height: 30px; font-weight: 700">Timing</h2>
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px">
+      <sc-for list="{{timing}}" as="t" hint-placeholder-count="4">
+        <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 6px">
+          <div style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 20px; line-height: 26px; font-weight: 600; color: var(--signal-yellow)">{{t.value}}</div>
+          <div style="font-size: 15px; line-height: 20px; font-weight: 600">{{t.title}}</div>
+          <div style="font-size: 12px; line-height: 17px; color: var(--ink-muted)">{{t.body}}</div>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":12700}}'>
+const INK = '#1c110b';
+const A = window.AgonArt;
+function darker(hex, f) { const n = parseInt(hex.slice(1), 16); return '#' + [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => Math.round(v * f).toString(16).padStart(2, '0')).join(''); }
+const pg = (pts, f, ex) => '<polygon points="' + pts.map((q) => q[0].toFixed(1) + ',' + q[1].toFixed(1)).join(' ') + '" fill="' + f + '"' + (ex || '') + '/>';
+function canopy3(lb, base, cx0, cy0) {
+  const dk = darker(base, 0.7), hi = A.tint(base, 0.14), id = 'cp';
+  let o = '<defs><clipPath id="' + id + '">' + lb.map(([cx, cy, r]) => '<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="' + r.toFixed(1) + '"/>').join('') + '</clipPath></defs>';
+  lb.forEach(([cx, cy, r]) => { o += CI(cx, cy, r + 2, INK); });
+  lb.forEach(([cx, cy, r]) => { o += CI(cx, cy, r, dk); });
+  lb.forEach(([cx, cy, r]) => { o += CI(cx - 2, cy - 2, Math.max(2, r - 2.6), base); });
+  // hard-edged facets across the whole crown: a lit upper-left plane and a shaded lower-right plane
+  o += '<g clip-path="url(#' + id + ')">' + pg([[cx0 - 40, cy0 - 40], [cx0 + 6, cy0 - 40], [cx0 - 14, cy0 - 6], [cx0 - 40, cy0 + 6]], hi, ' opacity="0.55"') + pg([[cx0 + 40, cy0 - 14], [cx0 + 40, cy0 + 40], [cx0 - 22, cy0 + 40], [cx0 - 6, cy0 + 6], [cx0 + 18, cy0 - 2]], dk, ' opacity="0.5"') + pg([[cx0 - 30, cy0 + 40], [cx0 - 6, cy0 + 8], [cx0 + 8, cy0 + 40]], dk, ' opacity="0.35"') + '</g>';
+  lb.forEach(([cx, cy, r], i) => { if (i % 3 === 1) o += CI(cx + r * 0.38, cy + r * 0.4, r * 0.16, dk); });
+  return o;
+}
+const CI = (cx, cy, r, f, ex) => '<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="' + r.toFixed(1) + '" fill="' + f + '"' + (ex || '') + '/>';
+const svgBg = (w, h, inner) => "url('data:image/svg+xml;utf8," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '">' + inner + '</svg>').replace(/'/g, '%27') + "')";
+function bushSvg(f) {
+  const lb = [[19, 18, 10], [10.5, 20.5, 7.5], [27.5, 20.5, 7.5], [14.5, 11.5, 7], [24, 11, 7]];
+  let o = '<ellipse cx="19" cy="31" rx="14" ry="2.6" fill="' + INK + '" opacity="0.3"/><path d="M13 29 L11 33 M19 30 L19 34 M25 29 L27 33" stroke="' + INK + '" stroke-width="2.6" stroke-linecap="round"/><path d="M13 29 L11 33 M19 30 L19 34 M25 29 L27 33" stroke="#6a4a30" stroke-width="1.2" stroke-linecap="round"/>' + canopy3(lb, f ? '#4b7a3c' : '#6b7a4a', 19, 17);
+  const spots = [[12, 12], [24, 10], [18, 19], [9, 21], [28, 22], [16, 25], [22, 24], [19, 8], [30, 15]];
+  if (!f) o += '<path d="M10 22 L16 14 M24 10 L28 18 M18 24 L19 16" stroke="' + INK + '" stroke-width="1.2" fill="none" opacity="0.6"/>';
+  spots.slice(0, f * 3).forEach(([x, y]) => { o += CI(x, y, 2.5, INK) + CI(x, y, 1.7, '#d9503c') + CI(x - 0.6, y - 0.6, 0.55, '#f4b0a0'); });
+  return o;
+}
+function forageSvg(k, f) {
+  const sh = '<ellipse cx="19" cy="31" rx="14" ry="2.6" fill="' + INK + '" opacity="0.3"/>';
+  const L = (d, c, w) => '<path d="' + d + '" stroke="' + INK + '" stroke-width="' + (w + 1.6) + '" fill="none" stroke-linecap="round"/><path d="' + d + '" stroke="' + c + '" stroke-width="' + w + '" fill="none" stroke-linecap="round"/>';
+  const E = (cx, cy, rx, ry, c) => '<ellipse cx="' + cx + '" cy="' + cy + '" rx="' + (rx + 1) + '" ry="' + (ry + 1) + '" fill="' + INK + '"/><ellipse cx="' + cx + '" cy="' + cy + '" rx="' + rx + '" ry="' + ry + '" fill="' + c + '"/>';
+  let o = sh;
+  if (k === 'tuber') {
+    const g = f ? '#5f9040' : '#8a7a4a';
+    o += L('M9 30 C8 22 6 18 5 13', g, 2.2) + L('M13 30 C13 21 14 15 16 9', g, 2.2) + L('M19 30 C20 22 24 17 27 11', g, 2.2) + L('M25 30 C26 24 30 21 33 18', g, 2.2) + L('M16 30 C15 25 11 22 8 21', g, 1.8);
+    [[10, 30, '#c9a46a'], [20, 31, '#a56a9a'], [29, 30, '#c9a46a']].slice(0, f).forEach(([x, y, c]) => { o += E(x, y, 4.2, 3, c) + '<path d="M' + (x - 2) + ' ' + (y - 1) + ' q2 -1.5 4 0" stroke="#fff6" stroke-width="0.8" fill="none"/>'; });
+    if (!f) o += '<path d="M8 31 h6 M22 31 h6" stroke="#6a4a30" stroke-width="1.4"/>';
+  } else if (k === 'nut') {
+    o += E(19, 28, 15, 4, '#8a5a2e') + E(11, 27, 4, 2, '#b07a3a') + E(27, 28, 5, 2.2, '#9a6a34') + '<path d="M6 28 l3 -2 M26 25 l4 2 M16 30 l4 1" stroke="#5a3a1a" stroke-width="1"/>';
+    [[10, 25], [17, 27], [25, 25], [30, 28], [14, 30], [22, 30]].slice(0, f * 2).forEach(([x, y]) => { o += E(x, y + 1, 2.9, 3.4, '#7a4a22') + '<path d="M' + (x - 3) + ' ' + (y - 1) + ' a3 2.4 0 0 1 6 0Z" fill="#b88a4a" stroke="' + INK + '" stroke-width="0.9"/><path d="M' + (x - 1) + ' ' + (y + 1) + ' l0.8 2" stroke="#d6a86a" stroke-width="0.8"/>'; });
+  } else if (k === 'mushroom') {
+    const cs = [[10, 26, 7, '#c2503c', 1], [22, 22, 8, '#8a5a3a', 0], [30, 28, 5.5, '#e8dcc4', 0], [17, 29, 5, '#b8683a', 0]];
+    o += E(19, 30, 13, 2.4, '#4a6a34');
+    if (!f) o += CI(14, 29, 1.6, '#9a8a6a') + CI(24, 29, 1.3, '#9a8a6a');
+    cs.slice(0, f + 1).forEach(([x, y, rr, c, dots]) => { o += '<rect x="' + (x - 1.6) + '" y="' + y + '" width="3.2" height="' + (31 - y) + '" rx="1.2" fill="#efe6d2" stroke="' + INK + '" stroke-width="1"/><path d="M' + (x - rr) + ' ' + (y + 1) + ' a' + rr + ' ' + (rr * 0.8).toFixed(1) + ' 0 0 1 ' + (rr * 2) + ' 0Z" fill="' + c + '" stroke="' + INK + '" stroke-width="1.2"/>'; if (dots) o += CI(x - 2.5, y - 2, 1, '#fff') + CI(x + 1.5, y - 3, 1, '#fff') + CI(x + 3, y, 0.8, '#fff'); });
+  } else if (k === 'nightshade') {
+    const lb = [[19, 18, 10], [10.5, 20.5, 7.5], [27.5, 20.5, 7.5], [14.5, 11.5, 7], [24, 11, 7]];
+    o += '<path d="M13 29 L11 33 M19 30 L19 34 M25 29 L27 33" stroke="' + INK + '" stroke-width="2.6" stroke-linecap="round"/><path d="M13 29 L11 33 M19 30 L19 34 M25 29 L27 33" stroke="#4a3a4a" stroke-width="1.2" stroke-linecap="round"/>' + canopy3(lb, f ? '#3f5a3c' : '#6b6a4a', 19, 17);
+    [[12, 12], [24, 10], [18, 19], [9, 21], [28, 22], [16, 25], [22, 24], [19, 8], [30, 15]].slice(0, f * 3).forEach(([x, y]) => { o += CI(x, y, 2.4, INK) + CI(x, y, 1.6, '#3a1f4a') + CI(x - 0.6, y - 0.6, 0.55, '#b89ad0'); });
+    if (f) o += '<path d="M15 14 l-1.5 -2.5 M26 17 l2 -2" stroke="#9a6ad0" stroke-width="1.2"/>';
+  } else if (k === 'toadstool') {
+    o += E(19, 30, 13, 2.4, '#4a5a44');
+    [[11, 25, 6.5], [23, 21, 7.5], [29, 28, 5]].slice(0, f + 1).forEach(([x, y, rr]) => { o += '<rect x="' + (x - 1.7) + '" y="' + y + '" width="3.4" height="' + (31 - y) + '" rx="1.2" fill="#f2efe4" stroke="' + INK + '" stroke-width="1"/><path d="M' + (x - 2.6) + ' ' + (y + 2.6) + ' q2.6 2 5.2 0" stroke="' + INK + '" stroke-width="1" fill="#e8e4d4"/><path d="M' + (x - rr) + ' ' + (y + 1) + ' a' + rr + ' ' + (rr * 0.8).toFixed(1) + ' 0 0 1 ' + (rr * 2) + ' 0Z" fill="#cfd8a0" stroke="' + INK + '" stroke-width="1.2"/>' + CI(x - rr * 0.4, y - 1.5, 0.9, '#fff') + CI(x + rr * 0.3, y - 2.6, 0.8, '#fff'); });
+  } else if (k === 'herb') {
+    o += E(19, 30, 12, 2.2, '#4f7a3a');
+    [[10, 12], [17, 6], [24, 10], [30, 15], [14, 18]].forEach(([x, y], i) => { o += L('M' + (x + (i % 2 ? 1 : -1)) + ' 31 Q' + x + ' 22 ' + x + ' ' + y, '#6fa04a', 1.6); o += '<ellipse cx="' + (x - 2.4) + '" cy="' + (y + 6) + '" rx="3" ry="1.3" transform="rotate(-30 ' + (x - 2.4) + ' ' + (y + 6) + ')" fill="#7fb858" stroke="' + INK + '" stroke-width="0.8"/><ellipse cx="' + (x + 2.4) + '" cy="' + (y + 9) + '" rx="3" ry="1.3" transform="rotate(30 ' + (x + 2.4) + ' ' + (y + 9) + ')" fill="#7fb858" stroke="' + INK + '" stroke-width="0.8"/>'; if (f && i < 1 + f) o += CI(x, y, 2.3, INK) + CI(x, y, 1.6, '#f0d84a') + CI(x, y, 0.6, '#d89a2a'); });
+  } else if (k === 'grain') {
+    const x0 = [7, 11, 15, 19, 23, 27, 31];
+    x0.forEach((x, i) => { const h = f ? 22 - (i % 3) * 3 : 8 - (i % 2) * 2; o += L('M' + x + ' 31 Q' + (x + (i % 2 ? 2 : -2)) + ' ' + (31 - h / 2) + ' ' + (x + (i % 2 ? 3 : -3)) + ' ' + (31 - h), f ? '#b8b25a' : '#8a7a4a', 1.3); if (f && i < 2 + f * 2) { const hx = x + (i % 2 ? 3 : -3), hy = 31 - h; o += E(hx, hy - 1, 1.9, 4, '#e0b84c') + '<path d="M' + hx + ' ' + (hy - 5) + ' v-2" stroke="' + INK + '" stroke-width="0.8"/>'; } });
+  } else if (k === 'cactus') {
+    o += E(19, 24, 7, 7, '#5e8f4a') + E(11, 16, 5, 5.5, '#6a9a52') + E(27, 14, 5, 5.5, '#6a9a52') + '<path d="M16 22 l-1 -2 M22 25 l2 -1 M10 14 l-1 -2 M28 12 l1 -2 M19 18 l0 -2" stroke="#e9e2c8" stroke-width="0.9"/>';
+    [[11, 11], [27, 9], [19, 17]].slice(0, f).forEach(([x, y]) => { o += E(x, y, 2.4, 2.8, '#c2386a') + CI(x - 0.6, y - 0.8, 0.6, '#f0a0c0'); });
+  } else if (k === 'cattail') {
+    o += '<ellipse cx="19" cy="31" rx="15" ry="3" fill="#4a7a9a" opacity="0.55"/>';
+    [[8, 14], [14, 7], [20, 11], [26, 5], [31, 13]].forEach(([x, y], i) => { o += L('M' + (x + (i % 2 ? 1 : -1)) + ' 31 Q' + x + ' 20 ' + x + ' ' + y, '#6a9a4a', 1.8); if (i < 2 + f) o += E(x, y + 2, 1.9, 5, '#6a4325') + '<path d="M' + x + ' ' + (y - 4) + ' v-3" stroke="#8a9a5a" stroke-width="1"/>'; });
+  } else if (k === 'lichen') {
+    o += E(19, 28, 12, 4.6, '#7a7a76') + E(11, 25, 5, 3.4, '#8a8a86');
+    const pts = [[11, 24, 4.4], [20, 27, 5.6], [27, 25, 4.2], [16, 29, 3.4], [24, 29, 3.2]];
+    pts.slice(0, 1 + f * 1.3 | 0).forEach(([x, y, rr]) => { o += E(x, y, rr, rr * 0.55, f ? '#b8c4a0' : '#8c9484') + '<path d="M' + (x - rr * 0.5) + ' ' + (y - 1) + ' q2 -2 4 0 M' + (x - 1) + ' ' + (y + 1) + ' q2 1.4 4 0" stroke="#7f8e6a" stroke-width="0.8" fill="none"/>'; if (f > 1) o += CI(x + rr * 0.4, y - 1, 0.9, '#e0903a'); });
+  }
+  return o;
+}
+const FOODS = [{"k": "berry", "label": "Berry bush", "unit": "Berries", "nut": 1, "note": "Fruits in spring to autumn, barren in winter.", "bio": ["temperate", "forest", "grassland", "tundra", "highlands", "alpine", "wetland"], "eff": ["+8% hydration per portion", "+2% energy"], "sea": [1.5, 1.1, 1.3, 0.1], "best": "Spring", "cat": "food", "rain": 1}, {"k": "tuber", "label": "Wild tubers", "unit": "Roots", "nut": 1.1, "note": "Dug from the ground, so they last through winter.", "bio": ["temperate", "forest", "grassland", "tundra", "highlands", "volcanic", "alpine", "badlands", "wetland"], "eff": ["+3% energy"], "sea": [0.5, 0.6, 0.9, 0.7], "best": "Autumn", "cat": "food", "rain": 1}, {"k": "nut", "label": "Nut fall", "unit": "Nuts", "nut": 1.3, "note": "Under forest canopy; falls heavily in autumn.", "bio": ["temperate", "forest"], "eff": ["+4% energy", "warms the body"], "sea": [0.05, 0.2, 2.4, 0.4], "best": "Autumn", "cat": "food", "rain": 1}, {"k": "mushroom", "label": "Mushrooms", "unit": "Mushrooms", "nut": 0.7, "note": "Damp shade; flushes after rain, thin fare.", "bio": ["temperate", "forest", "volcanic", "wetland"], "eff": ["+3% hydration per portion"], "sea": [0.6, 0.2, 1.8, 0.1], "best": "Autumn", "cat": "food", "rain": 2.2}, {"k": "grain", "label": "Wild grain", "unit": "Seed heads", "nut": 1, "note": "Open ground; ripens late summer into autumn.", "bio": ["temperate", "grassland", "desert", "highlands", "badlands"], "eff": ["+5% energy"], "sea": [0.3, 0.9, 1.9, 0], "best": "Autumn", "cat": "food", "rain": 1}, {"k": "cactus", "label": "Prickly pear", "unit": "Fruit", "nut": 0.9, "note": "Dry country food that holds through the year.", "bio": ["desert", "badlands"], "eff": ["+28% hydration per portion"], "sea": [0.8, 1.4, 0.8, 0.5], "best": "Summer", "cat": "food", "rain": 1.5}, {"k": "cattail", "label": "Cattails", "unit": "Shoots", "nut": 0.9, "note": "Water edges; shoots and starchy roots.", "bio": ["wetland"], "eff": ["+10% hydration per portion"], "sea": [1.2, 1, 0.8, 0.4], "best": "Spring", "cat": "food", "rain": 1}, {"k": "lichen", "label": "Reindeer lichen", "unit": "Lichen", "nut": 0.6, "note": "Cold ground; poor food but always there.", "bio": ["tundra", "highlands", "volcanic", "alpine"], "eff": [], "sea": [0.7, 0.9, 0.7, 0.5], "best": "Summer", "cat": "food", "rain": 1}, {"k": "nightshade", "label": "Nightshade", "unit": "Berries", "nut": 1, "note": "Glossy dark berries. Poisonous.", "bio": ["forest"], "eff": ["+5% hydration per portion", "poison strength 60%"], "sea": [1.2, 1.2, 1.2, 0.1], "best": "Spring", "cat": "poison", "rain": 1}, {"k": "toadstool", "label": "Toadstools", "unit": "Mushrooms", "nut": 0.5, "note": "Pale caps in damp shade. Deadly.", "bio": ["forest", "wetland"], "eff": ["poison strength 95%"], "sea": [0.6, 0.3, 1.8, 0.1], "best": "Autumn", "cat": "poison", "rain": 2.2}, {"k": "herb", "label": "Healing herb", "unit": "Leaves", "nut": 0.1, "note": "Bitter leaves that ease wounds and fever. No food value.", "bio": ["forest", "grassland", "highlands", "wetland"], "eff": ["eases wounds, breaks fevers"], "sea": [1.2, 1.2, 1, 0.2], "best": "Spring", "cat": "medicine", "rain": 1}];
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { d: 0.62, play: true }; }
+  componentDidMount() { this.t = setInterval(() => { if (this.state.play) { let d = this.state.d + 0.008; if (d > 1.12) d = 0; this.setState({ d }); } }, 80); }
+  componentWillUnmount() { clearInterval(this.t); }
+  renderVals() {
+    const A = window.AgonArt;
+    const RULE = {
+      dead: ['Agent is not alive.', 'x eyes'],
+      sleep: ['Current action is sleep.', 'Z rises'],
+      hurt: ['Hurt marker showing, or injury above 45%.', 'bandage'],
+      scared: ['Stress above 60%.', 'wide eyes'],
+      angry: ['Current action is strike (violence).', 'brows down'],
+      sick: ['Infection above zero.', 'green tint'],
+      cold: ['Body temperature below -0.7.', 'blue tint'],
+      thirsty: ['Hydration below 30%.', 'sweat drop'],
+      hungry: ['Satiety below 30%.', 'worried brows'],
+      tired: ['Energy below 30%.', 'half lids'],
+      happy: ['Satiety and hydration above 70%, health above 80%, stress below 15%.', 'blush'],
+      neutral: ['No other rule matched.', 'default'],
+    };
+    const faces = A.EXPR_ORDER.map((key, i) => ({ key, n: i + 1, label: A.EXPR[key].label, rule: RULE[key][0], tell: RULE[key][1], hurt: key === 'hurt' }));
+    const stage = (name, extra) => 'display: block; animation: ' + A.anim(name) + (extra || '');
+    const WHEN = {
+      idle: 'Standing with no action.', move: 'Walking to a bed, water, food or just wandering.', run: 'Moving with stress above 30%.',
+      eat: 'Eating berries at a bush.', drink: 'Drinking beside water.', sleep: 'Asleep. Eyes close.', hurt: 'Just attacked: hurt marker is showing.',
+      strike: 'Striking. Reserved for violence; the stand-in sim has none yet.', work: 'Crafting or researching at the bench.', forage: 'Picking berries at a bush.', carry: 'Walking while carrying materials or three or more berries.', wave: 'Taming: coaxing an animal with food.', cheer: 'Just finished crafting an item.', stumble: 'Sanity below 20% and awake.', shiver: 'Cold. Pairs with the cold face.', dead: 'Dead. Plays once and holds.',
+    };
+    const NAMES = ['idle', 'move', 'run', 'carry', 'eat', 'drink', 'forage', 'work', 'wave', 'cheer', 'stumble', 'sleep', 'hurt', 'strike', 'shiver', 'dead'];
+    const moves = NAMES.map((k) => ({ label: k.charAt(0).toUpperCase() + k.slice(1), stage: stage(k), secs: A.MOTION[k].secs + 's', when: WHEN[k], text: A.MOTION[k].text, closed: k === 'sleep' || k === 'dead' }));
+    const KINDS = [
+      { kind: 'small', name: 'Rabbit', rule: 'Small prey. Flees agents within 3 tiles and predators within 4. Alert while fleeing.', mk: 'hop', moveLabel: 'Hop' },
+      { kind: 'grouse', name: 'Grouse', rule: 'Small prey. Ground bird, flees within 4 tiles, fan tail and red comb.', mk: 'hop', moveLabel: 'Hop' },
+      { kind: 'deer', name: 'Deer', rule: 'Large prey. Tall and fast: flees within 5 tiles and sometimes takes two steps a tick. Antlers.', mk: 'move', moveLabel: 'Walk' },
+      { kind: 'large', name: 'Bristleback', rule: 'Large prey. Tusked boar. Slow, never flees, needs several hunters to bring down.', mk: 'lumber', moveLabel: 'Lumber' },
+      { kind: 'goat', name: 'Mountain goat', rule: 'Large prey. Stays on hills and rubble, flees within 3 tiles. Swept-back horns, shaggy skirt.', mk: 'hop', moveLabel: 'Hop' },
+      { kind: 'pred', name: 'Wolf', rule: 'Predator. Stalks the nearest lone agent within 7 tiles, then hunts any prey. Deterred by neighbours within 2.', mk: 'prowl', moveLabel: 'Prowl' },
+      { kind: 'fox', name: 'Fox', rule: 'Small predator. Hunts rabbits and grouse; only stalks agents who are hurt or below 60% health.', mk: 'prowl', moveLabel: 'Prowl' },
+      { kind: 'bear', name: 'Bear', rule: 'Large predator. Hunts bristlebacks and deer, hits hardest (20% health). Slow lumbering gait.', mk: 'lumber', moveLabel: 'Lumber' },
+      { kind: 'snake', name: 'Viper', rule: 'Small predator. Ambushes within 2 tiles, bites even groups, 60% chance to infect. Slithers.', mk: 'slither', moveLabel: 'Slither' },
+      // species added with the animal kingdom: each lives only in its native biomes
+      { kind: "small", v: "vole", name: "Vole", rule: "Small prey, active dawn and dusk. Lives in herds of about 3. Native to temperate, forest, grassland, wetland. Eats grain, tuber, berry.", mk: "hop", moveLabel: "Hop" },
+      { kind: "small", v: "lemming", name: "Lemming", rule: "Small prey, active dawn and dusk. Lives in herds of about 3. Native to tundra, alpine, highlands. Eats lichen, berry, grain.", mk: "hop", moveLabel: "Hop" },
+      { kind: "small", v: "pika", name: "Pika", rule: "Small prey, active by day. Lives in herds of about 2. Native to alpine, highlands. Eats lichen, grain.", mk: "hop", moveLabel: "Hop" },
+      { kind: "small", v: "jerboa", name: "Jerboa", rule: "Small prey, active by night. Lives in herds of about 2. Native to desert, badlands. Eats grain, cactus, tuber.", mk: "hop", moveLabel: "Hop" },
+      { kind: "grouse", v: "quail", name: "Quail", rule: "Small prey, active by day. Lives in herds of about 4. Native to grassland, temperate, badlands. Eats grain, berry.", mk: "hop", moveLabel: "Hop" },
+      { kind: "grouse", v: "turkey", name: "Wild turkey", rule: "Small prey, active by day. Lives in herds of about 3. Native to forest, temperate. Eats nut, berry, grain, mushroom.", mk: "hop", moveLabel: "Hop" },
+      { kind: "grouse", v: "duck", name: "Marsh duck", rule: "Small prey, active by day. Lives in herds of about 5. Native to wetland, temperate. Eats cattail, grain, berry. Habits: migrates in autumn.", mk: "hop", moveLabel: "Hop" },
+      { kind: "deer", v: "elk", name: "Elk", rule: "Small prey, active dawn and dusk. Lives in herds of about 4. Native to forest, highlands, temperate. Eats grain, lichen, berry, mushroom, nut. Habits: migrates away from cold.", mk: "move", moveLabel: "Walk" },
+      { kind: "deer", v: "moose", name: "Moose", rule: "Small prey, active dawn and dusk. Lives in herds of about 2. Native to wetland, forest, tundra. Eats cattail, lichen, berry, grain.", mk: "move", moveLabel: "Walk" },
+      { kind: "large", v: "bison", name: "Bison", rule: "Small prey, active dawn and dusk. Lives in herds of about 6. Native to grassland, temperate. Eats grain, tuber.", mk: "lumber", moveLabel: "Lumber" },
+      { kind: "large", v: "yak", name: "Yak", rule: "Small prey, active dawn and dusk. Lives in herds of about 4. Native to alpine, highlands, tundra. Eats lichen, grain, berry.", mk: "lumber", moveLabel: "Lumber" },
+      { kind: "goat", v: "bighorn", name: "Bighorn sheep", rule: "Small prey, active by day. Lives in herds of about 4. Native to highlands, alpine, badlands, desert. Eats grain, lichen, cactus.", mk: "hop", moveLabel: "Hop" },
+      { kind: "large", v: "capybara", name: "Capybara", rule: "Small prey, active dawn and dusk. Lives in herds of about 5. Native to wetland. Eats cattail, grain, berry.", mk: "lumber", moveLabel: "Lumber" },
+      { kind: "large", v: "peccary", name: "Peccary", rule: "Small prey, active dawn and dusk. Lives in herds of about 4. Native to desert, badlands. Eats cactus, tuber, nut, mushroom, grain.", mk: "lumber", moveLabel: "Lumber" },
+      { kind: "fox", v: "stoat", name: "Stoat", rule: "Mid-size predator, active dawn and dusk. Lives alone. Native to temperate, forest, tundra, grassland, highlands, alpine, wetland. Takes prey of size class 1 to 2. Habits: scavenges carcasses, holds a territory.", mk: "prowl", moveLabel: "Prowl" },
+      { kind: "fox", v: "badger", name: "Badger", rule: "Mid-size predator, active by night. Lives alone. Native to temperate, forest, grassland, highlands. Eats tuber, nut, mushroom, berry, grain. Takes prey of size class 1 to 2. Habits: scavenges carcasses, holds a territory.", mk: "prowl", moveLabel: "Prowl" },
+      { kind: "grouse", v: "hawk", name: "Hawk", rule: "Mid-size predator, active by day. Lives alone. Native to grassland, temperate, desert, badlands, highlands. Takes prey of size class 1 to 2. Habits: scavenges carcasses, holds a territory.", mk: "hop", moveLabel: "Hop" },
+      { kind: "grouse", v: "owl", name: "Owl", rule: "Mid-size predator, active by night. Lives alone. Native to forest, temperate, wetland, tundra, highlands. Takes prey of size class 1 to 2. Habits: holds a territory.", mk: "hop", moveLabel: "Hop" },
+      { kind: "grouse", v: "vulture", name: "Vulture", rule: "Mid-size scavenger, active by day. Lives in herds of about 2. Native to desert, badlands, grassland. Habits: scavenges carcasses.", mk: "hop", moveLabel: "Hop" },
+      { kind: "fox", v: "lynx", name: "Lynx", rule: "Large predator, active dawn and dusk. Lives alone. Native to forest, highlands, tundra, alpine. Takes prey of size class 1 to 3. Habits: scavenges carcasses, holds a territory.", mk: "prowl", moveLabel: "Prowl" },
+      { kind: "pred", v: "coyote", name: "Coyote", rule: "Large predator, active dawn and dusk. Hunts in packs of about 3; only the alpha female breeds. Native to grassland, desert, temperate, badlands. Takes prey of size class 1 to 3. Habits: scavenges carcasses.", mk: "prowl", moveLabel: "Prowl" },
+      { kind: "pred", v: "hyena", name: "Hyena", rule: "Large predator, active by night. Hunts in packs of about 4; only the alpha female breeds. Native to grassland, desert, badlands. Takes prey of size class 2 to 4. Habits: scavenges carcasses.", mk: "prowl", moveLabel: "Prowl" },
+      { kind: "bear", v: "wolverine", name: "Wolverine", rule: "Large predator, active dawn and dusk. Lives alone. Native to tundra, alpine, forest, highlands. Takes prey of size class 1 to 3. Habits: scavenges carcasses, holds a territory.", mk: "lumber", moveLabel: "Lumber" },
+      { kind: "pred", v: "cougar", name: "Cougar", rule: "Apex predator, active dawn and dusk. Lives alone. Native to forest, highlands, temperate, badlands. Takes prey of size class 2 to 4. Habits: scavenges carcasses, holds a territory.", mk: "prowl", moveLabel: "Prowl" },
+      { kind: "pred", v: "snowleopard", name: "Snow leopard", rule: "Apex predator, active dawn and dusk. Lives alone. Native to alpine, highlands, tundra. Takes prey of size class 1 to 3. Habits: scavenges carcasses, holds a territory.", mk: "prowl", moveLabel: "Prowl" },
+      { kind: "snake", v: "crocodile", name: "Crocodile", rule: "Apex predator, active by day. Lives alone. Native to wetland. Takes prey of size class 2 to 4. Habits: hibernates through winter, scavenges carcasses, holds a territory, ambushes from cover.", mk: "slither", moveLabel: "Slither" },
+    ];
+    const kinds = KINDS.map((k) => ({ ...k, states: ['calm', 'alert', 'rest', 'hurt'].map((state) => ({ state })), stage: stage(k.mk), secs: A.MOTION[k.mk].secs + 's', text: A.MOTION[k.mk].text }));
+    const CAT = { food: 'Food', poison: 'Poison', medicine: 'Medicine' }, CATC = { food: '#7fbf8e', poison: '#c98ae0', medicine: '#e0c46a' };
+    const foods = FOODS.map((f) => ({ ...f, cat: CAT[f.cat], catC: 'color: ' + CATC[({ Food: 'food', Poison: 'poison', Medicine: 'medicine' })[CAT[f.cat]] || 'food'], stages: [0, 1, 2, 3].map((n) => ({ style: 'width: 76px; height: 68px; background-repeat: no-repeat; background-size: 100% 100%; background-image: ' + svgBg(38, 34, f.k === 'berry' ? bushSvg(n) : forageSvg(f.k, n)), n })), nutS: 'Nutrition x' + f.nut, seaS: ['Spring', 'Summer', 'Autumn', 'Winter'].map((nm, i) => nm + ' x' + f.sea[i]).join('  '), bioS: f.bio.join(', ') || 'none', effS: f.eff.join('; ') || 'Fills the stomach only', rainS: f.rain > 1.2 ? 'Flushes after rain (x' + f.rain + ')' : f.rain > 1 ? 'Likes rain' : 'Rain-neutral' }));
+    const MX = A.matrix(), imVerbs = MX.verbs.map((v) => ({ label: A.VERBS[v].label })), imRows = MX.rows.map((r) => ({ label: r.label, cells: r.cells.map((c) => ({ txt: c, style: 'text-align: center; width: 20px; padding: 2px 0; font-weight: 700; color: ' + (c === 'B' ? '#ffd23f' : c === 'U' ? '#7fbf8e' : c === 'O' ? '#7cacdf' : 'transparent') + '; border-left: 1px solid rgba(255,255,255,0.05)' })) }));
+    const imComps = Object.keys(A.COMP).map((k) => { const c = A.COMP[k], res = A.evalNode(c.tree, {}); const hea = res.effects.filter((e) => e.stat === 'hea').reduce((n, e) => n + e.d, 0); return { label: c.label, trace: res.trace, out: res.ok ? (res.effects.length ? res.effects.map((e) => e.stat + ' ' + (e.d > 0 ? '+' : '') + (Math.round(e.d * 1000) / 1000)).join(', ') : '') + (res.yields.length ? (res.effects.length ? ', ' : '') + 'yields ' + res.yields.map((y) => y[1] + ' ' + y[0]).join(', ') : '') + (!res.effects.length && !res.yields.length ? 'ok' : '') : 'Cannot: ' + res.why }; });
+    const DTEXT = [
+      'Eyes turn to x marks. The body falls in one of four ways (side left, side right, flat on the back, flat on the face), flopping loose, and stays lying. Colour is unchanged.',
+      'Skin drains to grey. Flies start to circle.',
+      'Body swells up to 16% wider and the skin turns green. Two flies.',
+      'Skin browns and flesh falls away in ragged patches, showing bone. Three flies. Organs are almost gone in X-ray.',
+      'Flesh fades out. Ribs, skull and limbs show; the flies leave.',
+      'Bare bones. This is where it stays.',
+    ];
+    const edges = A.DECAY_STAGES.map((q) => q[1]).concat([1]);
+    const stages = A.DECAY_STAGES.map((q, i) => {
+      const lo = q[1], hi = i < 5 ? A.DECAY_STAGES[i + 1][1] : 1;
+      return { label: q[0], d: i === 5 ? 1 : (lo + hi) / 2 - (i === 0 ? 0.04 : 0), range: Math.round(lo * 100) + '% to ' + Math.round(hi * 100) + '%', text: DTEXT[i] };
+    });
+    const dd = Math.min(1, this.state.d), dc = A.decayOf(dd);
+    const dec = { d: dd, label: dc.label, pct: Math.round(dd * 100) + '%', ticks: Math.round(dd * A.DECAY_TICKS), text: DTEXT[dc.stage] };
+    return {
+      dec, stages, decayTicks: A.DECAY_TICKS, decayBtn: this.state.play ? 'Pause loop' : 'Play loop',
+      toggleDecay: () => this.setState({ play: !this.state.play }),
+      scrubDecay: (e) => this.setState({ play: false, d: Number(e.target.value) }),
+      foods, faces, moves, kinds, imVerbs, imRows, imComps,
+      pounce: { stage: stage('pounce'), secs: A.MOTION.pounce.secs + 's', text: A.MOTION.pounce.text },
+      timing: [
+        { value: '600ms', title: 'One tick at 1x', body: 'Divided by the speed setting: 300ms at 2x, 150ms at 4x. Glides and bars use the same duration.' },
+        { value: 'linear', title: 'Position glide', body: 'Agonists and animals translate to the next tile with a linear ease for the whole tick, so travel looks continuous.' },
+        { value: '0.22s to 0.3s', title: 'Step loops', body: 'Run bobs every 0.22s, walk every 0.3s. They run on their own clock, independent of tick speed.' },
+        { value: '1 shade step', title: 'No motion blur', body: 'Squash, stretch and tilt only. Outlines stay crisp and shadows stay hard-edged while a body moves.' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

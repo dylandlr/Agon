@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Thoughts chart</title>
+<script src="./support.js"></script>
+<script src="./art.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>body{margin:0}</style>
+</helmet>
+<div style="{{wrap}}">
+  <sc-if value="{{isBar}}" hint-placeholder-val="{{ true }}">
+    <sc-for list="{{bars}}" as="b" hint-placeholder-count="8">
+      <div style="{{b.row}}">
+        <span style="{{b.ls}}">{{b.label}}</span>
+        <div style="{{b.track}}"><div style="{{b.fill}}"></div></div>
+        <span style="{{b.ps}}">{{b.pct}}</span>
+      </div>
+    </sc-for>
+  </sc-if>
+  <sc-if value="{{isPie}}" hint-placeholder-val="{{ false }}">
+    <svg viewBox="0 0 136 136" width="{{pw}}" height="{{pw}}" role="img" aria-label="{{label}}" style="position: absolute; left: 0; top: 0; display: block; overflow: visible">
+      <circle cx="68" cy="68" r="65" fill="#1c110b"></circle>
+      <sc-for list="{{slices}}" as="q" hint-placeholder-count="8"><path d="{{q.d}}" fill="{{q.color}}" stroke="#1c110b" stroke-width="2" stroke-linejoin="round"></path></sc-for>
+      <circle cx="68" cy="68" r="45" fill="none" stroke="#ede9e1" stroke-opacity="0.55" stroke-width="1.2" stroke-dasharray="3 3"></circle>
+      <circle cx="68" cy="68" r="26" fill="#30231b" stroke="#1c110b" stroke-width="2"></circle>
+    </svg>
+    <div style="{{hub}}"><div style="font: 10px/12px system-ui, sans-serif; color: #aea69a">top</div><div style="font: 700 12px/14px system-ui, sans-serif; color: #ede9e1">{{topLabel}}</div></div>
+    <sc-for list="{{legend}}" as="l" hint-placeholder-count="8">
+      <div style="{{l.row}}">
+        <span style="{{l.sw}}"></span><span style="{{l.ls}}">{{l.label}}</span><span style="{{l.ps}}">{{l.pct}}</span>
+      </div>
+    </sc-for>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"mode":{"editor":"enum","default":"bar","options":["bar","pie"]},"t0":{"editor":"float","default":0.3},"t1":{"editor":"float","default":0.2},"t2":{"editor":"float","default":0.1},"t3":{"editor":"float","default":0.1},"t4":{"editor":"float","default":0.1},"t5":{"editor":"float","default":0.05},"t6":{"editor":"float","default":0.1},"t7":{"editor":"float","default":0.05},"b0":{"editor":"float","default":0},"b1":{"editor":"float","default":0},"b2":{"editor":"float","default":0},"b3":{"editor":"float","default":0},"b4":{"editor":"float","default":0},"b5":{"editor":"float","default":0},"b6":{"editor":"float","default":0},"b7":{"editor":"float","default":0},"n0":{"editor":"float","default":0},"n1":{"editor":"float","default":0},"n2":{"editor":"float","default":0},"n3":{"editor":"float","default":0},"n4":{"editor":"float","default":0},"n5":{"editor":"float","default":0},"n6":{"editor":"float","default":0},"n7":{"editor":"float","default":0},"size":{"editor":"int","default":270},"$preview":{"width":270,"height":136}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const A = window.AgonArt, p = this.props, TH = A.THOUGHTS, mode = p.mode === 'pie' ? 'pie' : 'bar';
+    const raw = [p.t0, p.t1, p.t2, p.t3, p.t4, p.t5, p.t6, p.t7].map((v) => Math.max(0, +v || 0));
+    const sum = raw.reduce((a, b) => a + b, 0) || 1, v = raw.map((x) => x / sum);
+    const order = v.map((x, i) => i).sort((a, b) => v[b] - v[a]);
+    const pc = (x) => Math.round(x * 100) + '%';
+    const K = (p.size ?? 270) / 270, mono = 'font: 11px/14px ui-monospace, Menlo, Consolas, monospace; color: #aea69a; text-align: right';
+    const bars = order.map((i, r) => ({ label: TH[i].label, pct: pc(v[i]),
+      row: 'position: absolute; left: 0; width: ' + (270 * K) + 'px; top: ' + (r * 17 * K).toFixed(1) + 'px; height: ' + (14 * K).toFixed(1) + 'px; display: flex; align-items: center; gap: 6px',
+      ls: 'width: 56px; flex-shrink: 0; font: 600 11px/14px system-ui, sans-serif; color: #ede9e1', ps: 'width: 32px; flex-shrink: 0; ' + mono,
+      track: 'flex: 1; height: 10px; border-radius: 5px; background: #523e32; border: 1.4px solid #1c110b; overflow: hidden; box-sizing: border-box',
+      fill: 'height: 100%; border-radius: 4px; background: ' + TH[i].color + '; width: ' + Math.max(3, Math.round(v[i] / Math.max(0.25, v[order[0]]) * 98)) + '%' }));
+    // polar-area pie: angle = share of the thoughts shown, radius = how strong each is now compared with the lifetime average (b = average, n = now)
+    const cx = 68, cy = 68, R = 62, R0 = 26;
+    const bl = [p.b0, p.b1, p.b2, p.b3, p.b4, p.b5, p.b6, p.b7].map((x) => Math.max(0, +x || 0)), nw = [p.n0, p.n1, p.n2, p.n3, p.n4, p.n5, p.n6, p.n7].map((x) => Math.max(0, +x || 0));
+    const hasR = bl.some((x) => x > 0) && nw.some((x) => x > 0);
+    const rad = (i) => { if (!hasR) return 45; const ratio = nw[i] / Math.max(0.02, bl[i]); return R0 + 4 + (R - R0 - 4) * Math.max(0, Math.min(1, ratio / 2)); };
+    let a0 = -Math.PI / 2;
+    const slices = [];
+    order.forEach((i) => {
+      if (v[i] < 0.004) return;
+      const a1 = a0 + Math.min(v[i], 0.9995) * 2 * Math.PI, large = a1 - a0 > Math.PI ? 1 : 0, r1 = rad(i);
+      const P = (a, rr) => (cx + Math.cos(a) * rr).toFixed(1) + ' ' + (cy + Math.sin(a) * rr).toFixed(1);
+      slices.push({ color: TH[i].color, d: 'M' + P(a0, R0) + ' L' + P(a0, r1) + ' A' + r1.toFixed(1) + ' ' + r1.toFixed(1) + ' 0 ' + large + ' 1 ' + P(a1, r1) + ' L' + P(a1, R0) + ' A' + R0 + ' ' + R0 + ' 0 ' + large + ' 0 ' + P(a0, R0) + ' Z' });
+      a0 = a1;
+    });
+    const legend = order.map((i, r) => ({ label: TH[i].label, pct: pc(v[i]),
+      row: 'position: absolute; left: ' + (146 * K).toFixed(1) + 'px; width: ' + (124 * K).toFixed(1) + 'px; top: ' + (r * 17 * K).toFixed(1) + 'px; height: ' + (14 * K).toFixed(1) + 'px; display: flex; align-items: center; gap: 5px',
+      sw: 'width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; background: ' + TH[i].color + '; border: 1.2px solid #1c110b; box-sizing: border-box',
+      ls: 'flex: 1; font: 600 11px/14px system-ui, sans-serif; color: #ede9e1', ps: mono }));
+    return {
+      isBar: mode === 'bar', isPie: mode === 'pie', bars, slices, legend, topLabel: TH[order[0]].label,
+      wrap: 'position: relative; width: ' + (p.size ?? 270) + 'px; height: ' + Math.round((p.size ?? 270) * 136 / 270) + 'px', pw: Math.round(136 * K),
+      hub: 'position: absolute; left: ' + (42 * K).toFixed(1) + 'px; top: ' + (52 * K).toFixed(1) + 'px; width: ' + (52 * K).toFixed(1) + 'px; text-align: center; pointer-events: none',
+      label: 'Current thoughts: ' + order.slice(0, 3).map((i) => TH[i].label + ' ' + pc(v[i])).join(', '),
+    };
+  }
+}
+</script>
+</body>
+</html>

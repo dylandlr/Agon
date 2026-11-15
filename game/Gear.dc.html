@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Gear icon</title>
+<script src="./support.js"></script>
+<script src="./art.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>body{margin:0}</style>
+</helmet>
+<svg viewBox="0 0 48 48" width="{{size}}" height="{{size}}" role="img" aria-label="{{label}}" style="display: block; overflow: visible">
+  <sc-for list="{{shapes}}" as="p" hint-placeholder-count="6"><path d="{{p.d}}" fill="{{p.fill}}" stroke="{{p.stroke}}" stroke-width="{{p.sw}}" stroke-linecap="round" stroke-linejoin="round"></path></sc-for>
+</svg>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"cat":{"editor":"enum","default":"weapon","options":["weapon","armor","clothing"]},"tpl":{"editor":"string","default":"spear"},"m0":{"editor":"string","default":"flint"},"m1":{"editor":"string","default":"wood"},"m2":{"editor":"string","default":"sinew"},"size":{"editor":"int","default":40},"$preview":{"width":40,"height":40}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const A = window.AgonArt, p = this.props, cat = p.cat || 'weapon', tpl = p.tpl || 'spear';
+    const mats = [p.m0, p.m1, p.m2].map((m) => (A.MATS[m] ? m : 'wood'));
+    return { size: p.size ?? 40, shapes: A.itemShapes(cat, tpl, mats), label: ((A.TPL[cat] || {})[tpl] || { label: 'Item' }).label };
+  }
+}
+</script>
+</body>
+</html>
