@@ -43,16 +43,36 @@ The last line of `logs/lifesim-bench-<job>.out` reads like
 `RECOMMENDED: --worlds 128 (... agent-steps/s ...)`. Use that number as `WORLDS` below. Benchmark
 each preset you will use: memory per world differs.
 
-## 4. Validation (4 tasks), then the gate
+## 4. Validation (one array task per design), then the gate
 
-    sbatch --export=ALL,PRESET=society30,WORLDS=128 hprc/validate.slurm
+    sbatch --array=0 --export=ALL,PRESET=society30,WORLDS=128 hprc/validate.slurm
 
-This trains four versions, 100M agent-steps each by default (`STEPS=2e8` for more), then lives
-each for 400 days in a continuous world:
-- `caveman`: the preset;
-- `caveman_no_sleep_learning`: learning does not wait for sleep;
-- `blank`: no given skills;
-- `caveman_no_world_model`.
+Each task trains one design, 100M agent-steps by default (`STEPS=2e8` for more), then lives it for 400 days
+in a continuous world. `--array` picks the designs (the file's default is `0`, the baseline). The designs are
+the list in `scripts/experiment.py`:
+
+| K | design | what differs from the baseline |
+|---|---|---|
+| 0 | `caveman` | the preset |
+| 1 | `caveman_entropy_floor` | entropy target 1.5 |
+| 2 | `caveman_no_retention` | retention coefficient 0 |
+| 3 | `caveman_shared_trunk` | shared network trunk |
+| 4 | `caveman_no_world_model` | no world model |
+| 5 | `caveman_no_sleep_learning` | learning does not wait for sleep |
+| 6 | `blank` | no given skills |
+| 7 | `caveman_entropy_floor_high` | entropy target 2.0 |
+| 8 | `caveman_floor_no_retention` | entropy target 1.5 and retention 0 |
+| 9 | `caveman_staged_conditions` | graded hidden conditions (hypothermia, heat illness, dehydration, starvation, frostbite) |
+| 10 | `caveman_heritable_sharing` | per-agent heritable reward-sharing gene, local group of radius 6 |
+
+To compare the baseline, staged conditions and heritable sharing:
+
+    sbatch --array=0,9,10 --export=ALL,PRESET=society30,WORLDS=128 hprc/validate.slurm
+
+All designs train on the same default seed and map, so they are paired, but that is one sample per design:
+judge on survival days and the cause-of-death mix, not training reward (reward is not comparable across
+designs with different damage or reward rules). Design 10 logs `mean_sharing` per window in `history.json`.
+Do not run two heavy jobs at once on the same GPU.
 
 Watch progress with `tail -f logs/lifesim-validate-<job>_0.out`. When all four finish:
 

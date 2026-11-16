@@ -1,12 +1,14 @@
 #!/bin/bash
-# Validation (4 array tasks): the society preset (caveman slate, world model), the same without
-# sleep-consolidated learning, the blank slate, and the society preset without the world model;
-# each trained, then lived for 10 years in a continuous world.
-#   sbatch --export=ALL,WORLDS=128 hprc/validate.slurm          # WORLDS from the benchmark
-#   sbatch --export=ALL,WORLDS=128,STEPS=2e8 hprc/validate.slurm  # a bigger budget
+# Validation: one array task per design in scripts/experiment.py (--only K). Pass the tasks you want:
+#   sbatch --array=0 --export=ALL,PRESET=society30,WORLDS=128 hprc/validate.slurm       # the baseline only (the default)
+#   sbatch --array=0,9,10 --export=ALL,PRESET=society30,WORLDS=128 hprc/validate.slurm  # baseline, staged conditions, heritable sharing
+#   sbatch --array=0,9,10 --export=ALL,PRESET=society30,WORLDS=128,STEPS=2e8 hprc/validate.slurm   # a bigger budget
+# Designs: 0 caveman, 1 entropy_floor, 2 no_retention, 3 shared_trunk, 4 no_world_model, 5 no_sleep_learning,
+# 6 blank, 7 entropy_floor_high, 8 floor_no_retention, 9 staged_conditions, 10 heritable_sharing.
+# Every design trains on the same default seed and map, so designs are paired (one sample each).
 # Then: python scripts/experiment.py report --root $SCRATCH/runs/exp_<code version>_<preset>
 #SBATCH --job-name=lifesim-validate
-#SBATCH --array=0-3
+#SBATCH --array=0
 #SBATCH --time=24:00:00
 #SBATCH --output=logs/%x-%A_%a.out
 #SBATCH --ntasks=1
