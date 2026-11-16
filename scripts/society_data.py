@@ -87,6 +87,16 @@ class World:
         return n
 
 
+# A blow (or other act) the striker's own policy rated less likely than this is a slip: a sampled
+# action, not a choice (events carry "p" from scripts/export_playback.py stamp_choice; older
+# recordings have none, and then every act counts).
+MIN_P = 0.05
+
+
+def deliberate(e, min_p=MIN_P):
+    return e.get("p") is None or e["p"] >= min_p
+
+
 def rankdata(x):
     """Ranks with ties averaged (as scipy.stats.rankdata, without needing scipy)."""
     x = np.asarray(x, float)

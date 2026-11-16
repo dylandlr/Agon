@@ -16,5 +16,5 @@ source "$SCRATCH/venvs/lifesim/bin/activate"
 cd "$SCRATCH/lifesim"
 export XLA_PYTHON_CLIENT_PREALLOCATE=false
 mkdir -p logs
-python scripts/train_phase2.py --preset society --worlds ${WORLDS:-64} --ticks ${TICKS:-100000} \
+python scripts/train_phase2.py --preset ${PRESET:-society} --worlds ${WORLDS:-64} --ticks ${TICKS:-100000} \
   --out "$SCRATCH/runs/${NAME:-single}" --resume --log-every 10 --ckpt-every 10

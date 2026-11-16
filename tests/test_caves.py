@@ -117,11 +117,15 @@ def test_the_layers_do_not_meet():
     v, C = CFG.view_size, E.N_OBS_CHANNELS
     win = obs[:, :v * v * C].reshape(-1, v, v, C)
     agents = E.N_TERRAIN + 2
-    assert win[0, ..., agents].sum() == 0                                   # below, it sees no one
-    assert win[1, ..., agents].sum() == 1 and win[2, ..., agents].sum() == 1   # above, only each other
+    # (with room, the channel is how full each cell is, oneself included)
+    room = np.asarray(E.agent_room(s, CFG, E.body(s, CFG)["ideal_kg"])) / CFG.cell_room
+    r_ = CFG.view_radius
+    assert abs(win[0, ..., agents].sum() - room[0]) < 1e-5                   # below, only itself
+    assert abs(win[1, ..., agents].sum() - room[1] - room[2]) < 1e-5         # above, itself and the other
+    assert abs(win[2, ..., agents].sum() - room[1] - room[2]) < 1e-5
     s2, _, _, info = STEP(s, _act(E.REST, E.STRIKE_N + k, E.REST))          # 1 strikes at that cell
     assert bool(info.struck_by_agent[2]) and not bool(info.struck_by_agent[0])
-    heard = E.heard_messages(s._replace(last_msg=jnp.array([[0, 0, 0], [3, 3, 3], [0, 0, 0]], jnp.int32)), CFG)
+    heard = E.heard_messages(s._replace(last_msg=jnp.zeros((3, E.MSG_LEN), jnp.int32).at[1].set(3)), CFG)
     assert float(np.abs(np.asarray(heard[0])).sum()) == 0 and float(np.abs(np.asarray(heard[2])).sum()) > 0
 
 

@@ -50,7 +50,7 @@ test("standing figure: feet on the ground, height to scale", () => {
 });
 
 test("every pose keeps a foot on the ground and stays in the canvas", () => {
-  for (const action of ["rest", "walk", "eat", "drink", "reach", "touch", "strike"]) for (const phase of [0, 0.25, 0.5, 0.75]) for (const view of ["s", "e", "n"]) {
+  for (const action of ["rest", "walk", "eat", "drink", "reach", "touch", "strike", "relieve"]) for (const phase of [0, 0.25, 0.5, 0.75]) for (const view of ["s", "e", "n"]) {
     const r = B.render({ height: 186 }, { view, action, phase });
     let bot = -1, top = r.height;
     for (let y = 0; y < r.height; y++) for (let x = 0; x < r.width; x++) if (r.slot[y * r.width + x]) { bot = Math.max(bot, y); top = Math.min(top, y); }

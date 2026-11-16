@@ -44,7 +44,8 @@ def scripted_forager(state: E.State, mask, cfg: EnvConfig, i=0):
         near_water = near_water | wp[1 + dr:1 + dr + g, 1 + dc:1 + dc + g]
     near_water = near_water & ~water
     forest = state.terrain == E.FOREST
-    food = (state.plants > 0.5) | (state.meat > 0.5)
+    forage = E.forage_grid(state, cfg)
+    food = (forage > (0.3 * cfg.plant_max if cfg.ecology else 0.5)) | (state.meat > 0.5)
     pred = jnp.zeros((g, g), bool).at[state.predators.pos[:, 0], state.predators.pos[:, 1]].max(
         state.predators.alive)
     pred_dist = jnp.min(jnp.where(state.predators.alive,
@@ -61,7 +62,7 @@ def scripted_forager(state: E.State, mask, cfg: EnvConfig, i=0):
     # Food to pick up here, best first; the scripted agent must select before grasping
     food_here = jnp.where(state.cooked[r0, c0] > 0.1, E.COOKED_MEAT,
                           jnp.where(state.meat[r0, c0] > 0.1, E.RAW_MEAT,
-                                    jnp.where(state.plants[r0, c0] > 0.1, E.PLANT, -1)))
+                                    jnp.where(forage[r0, c0] > (0.1 * cfg.plant_max if cfg.ecology else 0.1), E.PLANT, -1)))
     a_grasp = jnp.where(hand == food_here, E.GRASP, E.SELECT_0 + jnp.maximum(food_here, 0))
     inv = state.inv[i]
     best_food = jnp.where(inv[E.COOKED_MEAT] > 0.05, E.COOKED_MEAT,
