@@ -100,9 +100,15 @@ what to do, `JobDriver` carries it out over ticks (walk there, then work), and
 `ThingGrid` holds what there is to use — beds, a larder, a water butt — with
 reservation, so two pawns are never sent to the same bed.
 
-Not ported yet: worldgen (terrain is a placeholder scatter), emergent tech and staged
-building, migration and ruins, animals and ecology, weather and temperature, rivals,
-the glossary, and saving.
+Also ported: worldgen. `WorldGenerator` builds a map from a seed and a biome —
+elevation, water, ground cover, rock and cliffs, the camp site, and scattered
+boulders — and it is deterministic on every machine, because `Noise` is implemented
+here rather than taken from `Mathf.PerlinNoise`, which Unity does not guarantee
+across platforms or versions. A world you cannot reproduce from its seed cannot be
+debugged from a bug report.
+
+Not ported yet: emergent tech and staged building, migration and ruins, animals and
+ecology, weather beyond temperature, rivals, the glossary, and saving.
 
 ## How the pathfinding and jobs work
 
@@ -122,6 +128,27 @@ than a HashSet, so repeat searches on one map allocate nothing after the first.
 where, to what), and the behaviour lives in the driver, so a job can be cancelled or
 saved without carrying a state machine. Every driver is walk-then-work, which is the
 shape almost all of them have.
+
+## How worldgen works
+
+Passes run in order, and the order matters: elevation first, because every later
+pass reads it; then water, ground cover, rock and cliffs, the camp site, and
+boulders.
+
+Two choices are worth knowing about:
+
+- **The waterline is a quantile, not a height.** Taking the elevation under which
+  the biome's stated share of the map lies is what makes "10% water" true on every
+  seed, rather than some seeds coming out as swamp and others bone dry.
+- **The camp is levelled and cleared, but not stamped bare.** It takes the same
+  ground cover as the rest of the map, with only forest held back because trees
+  block building. The HTML build ran its terrain decision only *outside* the camp,
+  so every camp tile fell through to bare soil and left a dirt scar that regrew at
+  about four tiles a year. `WorldGenTests` has a test whose whole job is to stop
+  that coming back.
+
+The camp site is chosen as the flattest patch that is dry and not stone, which is
+also why the camera points at it rather than at the middle of the map.
 
 ## Notes for the next round
 

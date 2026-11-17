@@ -174,3 +174,45 @@ Not done, carried forward:
   target would stop the retry loop.
 - Interior walls still push shadow sprites (`wsh`) the same as exterior ones.
 - Larder never fills in the HTML build; the thirst loop is still untraced.
+
+
+## Round 23 — Unity worldgen, and a look at the rock art (2026-11-17)
+
+Verified:
+- **Unity worldgen.** `WorldGenerator` builds a map from a seed and a biome:
+  elevation (fractal plus a ridge, so maps have a spine), water, ground cover, rock
+  and impassable cliffs, the camp site, and scattered boulders. `Noise` is
+  implemented rather than taken from `Mathf.PerlinNoise`, which Unity does not
+  guarantee across platforms or versions — a world that cannot be reproduced from
+  its seed cannot be debugged from a bug report. `BiomeDef` holds the six biomes as
+  rows of numbers, so a new biome is a row rather than a branch in the generator.
+  - The waterline is a quantile of the elevation field, not a fixed height, so a
+    biome's stated water share holds on every seed. Measured within 0.02 of target
+    for temperate, jungle, desert and savanna.
+  - The camp is levelled and cleared but **not** stamped bare — it takes the same
+    cover as the rest of the map, forest excluded. There is a test whose only job is
+    to stop the HTML build's dirt-scar regression reappearing here.
+  - Checked over 48 worlds (6 biomes x 8 seeds): every camp site is free of water,
+    rock, forest and boulders, walkable throughout, on flat ground and inland.
+  - `AgonGame` now generates its world instead of scattering placeholder terrain,
+    builds the camp at the chosen site, and points the camera there.
+  - Still not compiled. All 30 .cs parse clean; worldgen was re-implemented
+    independently in JS and run (`tests/verify_worldgen.mjs`, 15 checks, green), as
+    were the A* and job loops from round 22.
+
+Rock textures — a look, not a fix:
+- Screenshot sent (`agon-rock-terrain.png`). The rock/mountain mass reads as a flat
+  brown silhouette next to boulders that are faceted and lit and look right.
+- `rockTex` does exist and does emit — 1848 texture ellipses and 5 rock clip-groups
+  reach the DOM. An earlier probe of mine reported zero and was simply wrong: the
+  SVG is percent-encoded and the probe searched for raw tags. So the texture is
+  there and too faint to read at normal zoom, rather than missing. Waiting on Dyl to
+  confirm the mass in the screenshot is the thing he means before changing anything.
+
+Not done, carried forward:
+- **RimWorld-inspired UI overhaul.** Still wants reference shots.
+- **Rock and mountain textures.** Diagnosis above; awaiting confirmation.
+- Unity: emergent tech and staged building next, then migration and ruins.
+- Unity: `JobGiver` re-offers an unreachable target every tick; a cooldown would fix it.
+- Interior walls still push shadow sprites (`wsh`) the same as exterior ones.
+- Larder never fills in the HTML build; the thirst loop is still untraced.

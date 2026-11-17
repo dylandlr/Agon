@@ -21,12 +21,18 @@ namespace Agon.Bootstrap
         public int MapWidth = 80;
         public int MapHeight = 50;
         public int Seed = 3;
+        public BiomeKind Biome = BiomeKind.Temperate;
 
         [Header("Simulation")]
         public TimeSpeed StartSpeed = TimeSpeed.Normal;
         public int PawnCount = 6;
 
         public Map Map { get; private set; }
+
+        /// <summary>The generated world: elevation, biome and where the camp was sited.</summary>
+        public WorldGenResult World => _world;
+
+        private WorldGenResult _world;
         public TickManager Ticks { get; private set; }
         public IReadOnlyList<Pawn> Pawns => _pawns;
 
@@ -35,10 +41,10 @@ namespace Agon.Bootstrap
 
         private void Awake()
         {
-            Map = new Map(MapWidth, MapHeight);
+            _world = WorldGenerator.Generate(MapWidth, MapHeight, Seed, Biome);
+            Map = _world.Map;
             Ticks = new TickManager { CurTimeSpeed = StartSpeed };
 
-            GenerateTerrain();
             GenerateCamp();
             PlaceThings();
             SpawnPawns();
@@ -78,22 +84,6 @@ namespace Agon.Bootstrap
             return sb.ToString();
         }
 
-        private void GenerateTerrain()
-        {
-            var random = new System.Random(Seed);
-            Map.Terrain.Fill(TerrainKind.Grass);
-
-            // A scatter of forest and soil, enough to read as ground rather than a void.
-            for (int y = 0; y < Map.Height; y++)
-            {
-                for (int x = 0; x < Map.Width; x++)
-                {
-                    double n = random.NextDouble();
-                    if (n < 0.10) Map.Terrain.Set(new Vector2Int(x, y), TerrainKind.Forest);
-                    else if (n < 0.16) Map.Terrain.Set(new Vector2Int(x, y), TerrainKind.Soil);
-                }
-            }
-        }
 
         /// <summary>
         /// A camp laid out to exercise every wall case at once: two rooms sharing a
@@ -102,8 +92,10 @@ namespace Agon.Bootstrap
         /// </summary>
         private void GenerateCamp()
         {
-            int ox = Map.Width / 2 - 9;
-            int oy = Map.Height / 2 - 5;
+            // build at the site worldgen levelled and cleared for us, not at the
+            // map's centre, which may well be a lake or a cliff
+            int ox = _world.CampCentre.x - 9;
+            int oy = _world.CampCentre.y - 5;
 
             // Outer wall of a 18x10 compound, in timber.
             Rectangle(ox, oy, 18, 10, WallMaterial.Timber);
@@ -156,8 +148,8 @@ namespace Agon.Bootstrap
         /// </summary>
         private void PlaceThings()
         {
-            int ox = Map.Width / 2 - 9;
-            int oy = Map.Height / 2 - 5;
+            int ox = _world.CampCentre.x - 9;
+            int oy = _world.CampCentre.y - 5;
 
             // beds down one side of the first room, one per pawn up to the space
             for (int i = 0; i < Mathf.Min(PawnCount, 6); i++)
@@ -175,8 +167,8 @@ namespace Agon.Bootstrap
 
         private void SpawnPawns()
         {
-            int cx = Map.Width / 2;
-            int cy = Map.Height / 2;
+            int cx = _world.CampCentre.x;
+            int cy = _world.CampCentre.y;
 
             for (int i = 0; i < PawnCount; i++)
             {
@@ -200,8 +192,17 @@ namespace Agon.Bootstrap
             }
 
             camera.orthographic = true;
-            camera.orthographicSize = Map.Height * 0.5f;
-            camera.transform.position = new Vector3(Map.Width * 0.5f, Map.Height * 0.5f, -10f);
+            // look at the camp rather than the map's middle, which worldgen may well
+            // have made a lake; close enough in that a pawn is a readable size, and
+            // clamped so the view never hangs off the edge of the world
+            const float halfHeight = 14f;
+            float halfWidth = halfHeight * camera.aspect;
+
+            camera.orthographicSize = Mathf.Min(halfHeight, Map.Height * 0.5f);
+            camera.transform.position = new Vector3(
+                Mathf.Clamp(_world.CampCentre.x + 0.5f, halfWidth, Mathf.Max(halfWidth, Map.Width - halfWidth)),
+                Mathf.Clamp(_world.CampCentre.y + 0.5f, halfHeight, Mathf.Max(halfHeight, Map.Height - halfHeight)),
+                -10f);
             camera.transform.rotation = Quaternion.identity;
             camera.backgroundColor = new Color32(0x3D, 0x4A, 0x2B, 0xFF);
             camera.clearFlags = CameraClearFlags.SolidColor;
