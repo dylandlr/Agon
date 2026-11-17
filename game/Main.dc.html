@@ -2381,7 +2381,9 @@ const SPRITE_CSS = (() => {
       if (!(m & 4)) o += '<rect x="10" y="31" width="28" height="7" fill="' + lite + '"/><rect x="10" y="31" width="28" height="1.5" fill="' + dark + '" opacity="0.7"/>'; if (m & 2) o += '<rect x="24" y="31" width="30" height="7" fill="' + lite + '"/><rect x="24" y="31" width="30" height="1.5" fill="' + dark + '" opacity="0.7"/>'; if (m & 8) o += '<rect x="-6" y="31" width="30" height="7" fill="' + lite + '"/><rect x="-6" y="31" width="30" height="1.5" fill="' + dark + '" opacity="0.7"/>';
       o += '<g fill="' + lite + '" opacity="0.35" transform="translate(0 -1.5)">' + union(m, 0) + '</g><g fill="' + base + '">' + union(m, 0).replace(/<rect /g, '<rect transform="translate(0 1.5)" ') + '</g>' + (!(m & 4) ? '<rect x="10" y="31" width="28" height="7" fill="' + lite + '"/><rect x="10" y="31" width="28" height="1.5" fill="' + dark + '" opacity="0.7"/>' : '') + ((m & 2) ? '<rect x="24" y="31" width="30" height="7" fill="' + lite + '"/><rect x="24" y="31" width="30" height="1.5" fill="' + dark + '" opacity="0.7"/>' : '') + ((m & 8) ? '<rect x="-6" y="31" width="30" height="7" fill="' + lite + '"/><rect x="-6" y="31" width="30" height="1.5" fill="' + dark + '" opacity="0.7"/>' : '') + '</g>';
       if (w) { const horiz = (m & 2) || (m & 8) || !(m & 5); o += horiz ? '<rect x="14" y="13" width="20" height="18" fill="' + INK + '"/><rect x="16" y="15" width="16" height="14" fill="#cfe6f6"/><path d="M24 15 v14 M16 22 h16" stroke="#6b4a2e" stroke-width="2"/><rect x="16" y="15" width="16" height="3" fill="#fff" opacity="0.35"/>' : '<rect x="13" y="14" width="22" height="20" fill="' + INK + '"/><rect x="15" y="16" width="18" height="16" fill="#cfe6f6"/><path d="M24 16 v16 M15 24 h18" stroke="#6b4a2e" stroke-width="2"/><rect x="15" y="16" width="18" height="4" fill="#fff" opacity="0.35"/>'; }
-      c += spr('wl' + mat[0] + m + w, 48, 48, o); } }
+      c += spr('wl' + mat[0] + m + w, 48, 48, o); }
+    // RimWorld's Graphic_LinkedCornerFiller cover quad: a flat patch of the material, laid over the notch where four linked wall tiles meet
+    for (const mat of ['wattle', 'timber', 'stone']) c += spr('wcf' + mat[0], 24, 24, '<rect width="24" height="24" fill="' + WCOL[mat][0] + '"/>'); }
   // a windbreak: two or three hides draped over a leaning frame of branches, pegged at the foot
   c += spr('tent0', 48, 44, '<ellipse cx="24" cy="40" rx="20" ry="3.5" fill="#000" opacity="0.28"/><path d="M4 38 L10 12 L26 6 L44 10 L42 38 Z" fill="' + INK + '"/><path d="M6 36 L11 14 L26 8 L42 12 L40 36 Z" fill="#8a6a46"/><path d="M11 14 L26 8 L28 36 L6 36 Z" fill="#9d7a52"/><path d="M26 8 L42 12 L40 36 L28 36 Z" fill="#7a5a3c"/><path d="M14 16 q6 10 2 20 M30 12 q4 11 1 23" stroke="#5e4330" stroke-width="1.2" fill="none" opacity="0.7"/><path d="M10 12 L6 40 M26 6 L28 40 M44 10 L42 40" stroke="#4a3522" stroke-width="2" fill="none"/><path d="M4 39 h6 M24 40 h8 M40 39 h6" stroke="' + INK + '" stroke-width="2"/><ellipse cx="18" cy="24" rx="4" ry="2.5" fill="#b08a62" opacity="0.5"/>');
   c += '.fire0::before,.fire1::before,.fire0::after,.fire1::after{content:"";position:absolute;left:0;top:0;width:100%;height:100%;background-size:100% 100%;background-repeat:no-repeat;transform-origin:50% 94%;pointer-events:none}';
@@ -2454,6 +2456,15 @@ for (const k of WALLS) for (const mat of (RVWALL.has(k) ? ['wattle'] : ['wattle'
   if (mat === 'wattle') SCENERY.push({ outer: 'position: absolute; left: ' + x * TS + 'px; top: ' + y * TS + 'px; width: 48px; height: 48px; z-index: ' + ((y + 1) * TS - 2) + '; pointer-events: none', inner: 'width: 100%; height: 100%', cls: 'wsh' + m });
   SCENERY.push({ mat: rv ? null : mat, outer: 'position: absolute; left: ' + x * TS + 'px; top: ' + y * TS + 'px; width: 48px; height: 48px; z-index: ' + ((y + 1) * TS), inner: 'width: 100%; height: 100%', cls: 'wl' + mat[0] + m + win });
 }
+// corner filler, as RimWorld's Graphic_LinkedCornerFiller: a diagonal neighbour that links, with both flanking cardinals linked too, gets a flat cover patch over the shared corner; checking each wall's south-east corner once covers every such meeting point
+for (const k of WALLS) {
+  const [x, y] = k.split(',').map(Number);
+  const lk = (dx, dy) => WALLS.has(key(x + dx, y + dy)) || doors.has(key(x + dx, y + dy));
+  if (!(lk(1, 0) && lk(0, 1) && lk(1, 1))) continue;
+  const rv = RVWALL.has(k);
+  for (const mat of (rv ? ['wattle'] : ['wattle', 'timber', 'stone']))
+    SCENERY.push({ mat: rv ? null : mat, outer: 'position: absolute; left: ' + (x * TS + 36) + 'px; top: ' + (y * TS + 36) + 'px; width: 24px; height: 24px; z-index: ' + ((y + 2) * TS) + '; pointer-events: none', inner: 'width: 100%; height: 100%', cls: 'wcf' + mat[0] });
+}
 grMark('storage');
 CRATES.forEach(([x, y], i) => {
   const bx = [x * TS + 6, y * TS + 6, 36, 36];
@@ -2491,12 +2502,19 @@ grMark('shelter');
 DOORS.forEach((d) => addObj({ key: 'f:door:' + d.x + ',' + d.y, g: 3, kind: 'door', title: 'Door', hit: [d.x * TS, d.y * TS, TS, TS], foot: null, sh: null,
   lines: (st) => [['State', doorOpen(st, d) ? 'open (someone is near)' : 'closed'], ['Blocks', 'light when closed; people pass'], ['Tile', d.x + ', ' + d.y]] }));
 function doorParts(d, open) {
+  // the door lives in the wall band: an ink-lined band across the tile, flush with the walls' outline (y 7..41 of the tile), wood at both ends the leaf slides into, and when closed the leaf between them with its south face lit like the walls'. RimWorld doors retract into the wall the same way.
   const L = d.x * TS, T = d.y * TS, v = d.axis === 'v';
-  const [l, t, w, h] = v ? (open ? [L + 3, T + 5, 9, 38] : [L + 13, T + 1, 22, 46]) : (open ? [L + 5, T + 3, 38, 9] : [L + 1, T + 13, 46, 22]);
+  const WOOD = '#9a6a42', WOODD = '#7a5232';
   const grain = 'repeating-linear-gradient(' + (v ? '0deg' : '90deg') + ', transparent 0 5px, rgba(28,17,11,0.2) 5px 6px)';
-  return { outer: 'position: absolute; left: ' + l + 'px; top: ' + t + 'px; width: ' + w + 'px; height: ' + h + 'px; border-radius: 3px; background: ' + INK + '; z-index: ' + (T + 30),
-    inner: 'width: ' + (w - 4) + 'px; height: ' + (h - 4) + 'px; margin: 2px; border-radius: 2px; background-color: #9a6a42; background-image: ' + grain + '; box-shadow: inset ' + (v ? '-4px 0' : '0 -4px') + ' 0 #7a5232',
-    detail: open ? 'display: none' : 'position: absolute; left: ' + (v ? w - 9 : w / 2 - 2) + 'px; top: ' + (v ? h / 2 - 2 : h - 9) + 'px; width: 5px; height: 5px; border-radius: 50%; background: #d4c63c; border: 1px solid ' + INK + '; box-sizing: border-box', cls: '' };
+  const band = v ? 'left: ' + (L + 7) + 'px; top: ' + T + 'px; width: 34px; height: 48px' : 'left: ' + L + 'px; top: ' + (T + 7) + 'px; width: 48px; height: 34px';
+  if (!open) return { outer: 'position: absolute; ' + band + '; background: ' + INK + '; z-index: ' + (T + 30),
+    inner: v ? 'width: 28px; height: 42px; margin: 3px; background-color: ' + WOOD + '; background-image: linear-gradient(rgba(255,255,255,0) 0 32px, rgba(233,221,199,0.42) 32px 42px), ' + grain + '; box-shadow: inset -4px 0 0 ' + WOODD
+             : 'width: 42px; height: 28px; margin: 3px; background-color: ' + WOOD + '; background-image: linear-gradient(rgba(255,255,255,0) 0 18px, rgba(233,221,199,0.42) 18px 28px), ' + grain + '; box-shadow: inset 0 2px 0 ' + WOODD,
+    detail: 'position: absolute; left: ' + (v ? 24 : 22) + 'px; top: ' + (v ? 22 : 24) + 'px; width: 5px; height: 5px; border-radius: 50%; background: #d4c63c; border: 1px solid ' + INK + '; box-sizing: border-box', cls: '' };
+  const stub = (pos) => 'position: absolute; ' + pos + '; background-color: ' + WOOD + '; background-image: ' + grain + '; border: 2px solid ' + INK + '; box-sizing: border-box; box-shadow: inset ' + (v ? '-3px 0' : '0 -3px') + ' 0 ' + WOODD;
+  return { outer: 'position: absolute; ' + band + '; z-index: ' + (T + 30),
+    inner: stub(v ? 'left: 3px; top: 0; width: 28px; height: 12px' : 'left: 0; top: 3px; width: 12px; height: 28px'),
+    detail: stub(v ? 'left: 3px; top: 36px; width: 28px; height: 12px' : 'left: 36px; top: 3px; width: 12px; height: 28px'), cls: '' };
 }
 grMark('bedding');
 BEDS.forEach(([x, y], i) => addObj({ key: 'bed:' + i, g: 3, kind: 'bed', title: 'Bed', hit: [x * TS + 5, y * TS + 4, 38, 88], foot: null, sh: [x * TS + 7, y * TS + 14, 36, 80, '5px'],
