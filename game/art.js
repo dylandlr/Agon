@@ -425,43 +425,59 @@
     'small.marsh': { name: 'Marsh rabbit',  body: '#8a7a62', belly: '#c8baa0', mark: '#5a4e3c', ear: '#c88a80' },
     'pred.marsh':  { name: 'Swamp wolf',    body: '#5e5444', belly: '#8a7e66', mark: '#2a241a', eye: '#c8c83c' },
     'large.marsh': { name: 'Mire boar',     body: '#4e4636', belly: '#766a52', mark: '#7a7a6a', plate: '#6a6a5a' },
-    'small.vole': { name: 'Vole', body: '#8a6e50', belly: '#c4ae8a', mark: '#5a4630', ear: '#c08878' },
-    'small.lemming': { name: 'Lemming', body: '#b88a4e', belly: '#e4cf9c', mark: '#3a2a1a', ear: '#c89888' },
-    'small.pika': { name: 'Pika', body: '#8e8472', belly: '#bdb39c', mark: '#5a5246', ear: '#a88a7c' },
-    'small.jerboa': { name: 'Jerboa', body: '#d4b484', belly: '#f4e6c4', mark: '#8a6a40', ear: '#e0a890' },
-    'grouse.quail': { name: 'Quail', body: '#8c7a5a', belly: '#d8c49a', mark: '#3a2c1c', comb: '#2a2218' },
-    'grouse.turkey': { name: 'Wild turkey', body: '#4a3626', belly: '#7a5a3a', mark: '#1e140c', comb: '#c43a32' },
-    'grouse.duck': { name: 'Marsh duck', body: '#5a7a6a', belly: '#e4e0cc', mark: '#2a4034', comb: '#d8a32a' },
-    'deer.elk': { name: 'Elk', body: '#8a6240', belly: '#d8c6a0', mark: '#3e2a1a', ear: '#c89484', horn: '#d8c8a0' },
-    'deer.moose': { name: 'Moose', body: '#3e2f24', belly: '#6a5646', mark: '#1a120c', ear: '#6a4a3c', horn: '#b8a67c' },
-    'large.bison': { name: 'Bison', body: '#4a3524', belly: '#6a4e36', mark: '#1e140c', plate: '#6e5a46' },
-    'large.yak': { name: 'Yak', body: '#2e2824', belly: '#4e443c', mark: '#14100c', plate: '#5a5048' },
-    'goat.bighorn': { name: 'Bighorn sheep', body: '#a89070', belly: '#e8dcc0', mark: '#6a5a44', horn: '#c8b890' },
-    'large.capybara': { name: 'Capybara', body: '#8a6a4a', belly: '#b8946a', mark: '#5a4430', plate: '#9a7a58' },
-    'large.peccary': { name: 'Peccary', body: '#5e5a52', belly: '#8a857a', mark: '#2a2824', plate: '#a8a094' },
-    'fox.stoat': { name: 'Stoat', body: '#a67a4a', belly: '#f4eddc', mark: '#2a1c10', eye: '#2a2a2a' },
-    'fox.badger': { name: 'Badger', body: '#6e6e70', belly: '#c8c6c0', mark: '#1e1e20', eye: '#2a2a2a' },
-    'grouse.hawk': { name: 'Hawk', body: '#7a5a3a', belly: '#e4d4b4', mark: '#3a2814', comb: '#5a4024', eye: '#f0d040', raptor: 'hawk' },
-    'grouse.owl': { name: 'Owl', body: '#a88c64', belly: '#ecdcc0', mark: '#5a4630', comb: '#a88c64', eye: '#f0c830', raptor: 'owl' },
-    'grouse.vulture': { name: 'Vulture', body: '#2e2a28', belly: '#cfc8b8', mark: '#14100e', comb: '#c8806a', raptor: 'vulture' },
-    'fox.lynx': { name: 'Lynx', body: '#a89478', belly: '#e8dcc4', mark: '#3a2c20', eye: '#d4c63c', tuft: true },
-    'pred.coyote': { name: 'Coyote', body: '#a8906a', belly: '#e0d0aa', mark: '#5a4630', eye: '#d4a83c' },
-    'pred.hyena': { name: 'Hyena', body: '#a89264', belly: '#d0c094', mark: '#3e3020', eye: '#c8a02c', spot: '#5a4630' },
-    'bear.wolverine': { name: 'Wolverine', body: '#4a3828', belly: '#8a6a46', mark: '#241810', eye: '#d4c63c', muzzle: '#a88a60' },
-    'pred.cougar': { name: 'Cougar', body: '#c4a070', belly: '#e8d8b8', mark: '#6a4c2a', eye: '#d4c63c', cat: true },
-    'pred.snowleopard': { name: 'Snow leopard', body: '#cfd0c8', belly: '#f0f0ea', mark: '#4a4c52', eye: '#9ec4cc', cat: true, spot: '#4a4c54' },
-    'deer.impala': { name: 'Impala', body: '#b87a44', belly: '#f0e0c0', mark: '#4a2e18', ear: '#d89888', horn: '#2e241c' },
-    'large.wildebeest': { wil: 1, name: 'Wildebeest', body: '#5a5048', belly: '#7a7064', mark: '#1e1a16', plate: '#8a8070' },
-    'large.elephant': { ele: 1, name: 'Elephant', body: '#8e8a86', belly: '#a8a49e', mark: '#4a4642', plate: '#b4b0a8' },
-    'grouse.ostrich': { name: 'Ostrich', body: '#2a2622', belly: '#e8e2d0', mark: '#14100e', comb: '#d8a898' },
-    'pred.lion': { name: 'Lion', body: '#c9a063', belly: '#ead8b0', mark: '#6a4220', eye: '#d4a83c', cat: true },
-    'large.tapir': { name: 'Tapir', body: '#4a4438', belly: '#6a6454', mark: '#1c1812', plate: '#6e6858' },
-    'pred.jaguar': { name: 'Jaguar', body: '#c9962c', belly: '#f0dcaa', mark: '#3a2410', eye: '#d4c63c', cat: true, spot: '#2a1a0c' },
-    'snake.anaconda': { name: 'Anaconda', body: '#4a5a30', belly: '#b8b878', mark: '#1c2410', eye: '#d4c63c' },
-    'grouse.macaw': { name: 'Macaw', body: '#c02a2a', belly: '#e8c43a', mark: '#1a3a8a', comb: '#2a5ac8' },
-    'small.paca': { name: 'Paca', body: '#7a5a3e', belly: '#d8c4a0', mark: '#e8dcc0', ear: '#b88878' },
-    'large.boar': { name: 'Wild boar', body: '#4a3e32', belly: '#6a5a48', mark: '#1e1810', plate: '#7a6a58' },
-    'small.beaver': { name: 'Beaver', body: '#6a4a30', belly: '#9a7a54', mark: '#3a2616', ear: '#8a6a50' },
+    'small.vole': { x: 'vole', name: 'Vole', body: '#8a6e50', belly: '#c4ae8a', mark: '#5a4630', ear: '#c08878' },
+    'small.lemming': { x: 'lemming', name: 'Lemming', body: '#b88a4e', belly: '#e4cf9c', mark: '#3a2a1a', ear: '#c89888' },
+    'small.pika': { x: 'pika', name: 'Pika', body: '#8e8472', belly: '#bdb39c', mark: '#5a5246', ear: '#a88a7c' },
+    'small.jerboa': { x: 'jerboa', name: 'Jerboa', body: '#d4b484', belly: '#f4e6c4', mark: '#8a6a40', ear: '#e0a890' },
+    'grouse.quail': { x: 'quail', name: 'Quail', body: '#8c7a5a', belly: '#d8c49a', mark: '#3a2c1c', comb: '#2a2218' },
+    'grouse.turkey': { x: 'turkey', name: 'Wild turkey', body: '#4a3626', belly: '#7a5a3a', mark: '#1e140c', comb: '#c43a32' },
+    'grouse.duck': { x: 'duck', name: 'Marsh duck', body: '#5a7a6a', belly: '#e4e0cc', mark: '#2a4034', comb: '#d8a32a' },
+    'deer.elk': { x: 'elk', name: 'Elk', body: '#8a6240', belly: '#d8c6a0', mark: '#3e2a1a', ear: '#c89484', horn: '#d8c8a0' },
+    'deer.moose': { x: 'moose', name: 'Moose', body: '#3e2f24', belly: '#6a5646', mark: '#1a120c', ear: '#6a4a3c', horn: '#b8a67c' },
+    'large.bison': { x: 'bison', name: 'Bison', body: '#4a3524', belly: '#6a4e36', mark: '#1e140c', plate: '#6e5a46' },
+    'large.yak': { x: 'yak', name: 'Yak', body: '#2e2824', belly: '#4e443c', mark: '#14100c', plate: '#5a5048' },
+    'goat.bighorn': { x: 'bighorn', name: 'Bighorn sheep', body: '#a89070', belly: '#e8dcc0', mark: '#6a5a44', horn: '#c8b890' },
+    'large.capybara': { x: 'capybara', name: 'Capybara', body: '#8a6a4a', belly: '#b8946a', mark: '#5a4430', plate: '#9a7a58' },
+    'large.peccary': { x: 'peccary', name: 'Peccary', body: '#5e5a52', belly: '#8a857a', mark: '#2a2824', plate: '#a8a094' },
+    'fox.stoat': { x: 'stoat', name: 'Stoat', body: '#a67a4a', belly: '#f4eddc', mark: '#2a1c10', eye: '#2a2a2a' },
+    'fox.badger': { x: 'badger', name: 'Badger', body: '#6e6e70', belly: '#c8c6c0', mark: '#1e1e20', eye: '#2a2a2a' },
+    'grouse.hawk': { x: 'hawk', name: 'Hawk', body: '#7a5a3a', belly: '#e4d4b4', mark: '#3a2814', comb: '#5a4024', eye: '#f0d040', raptor: 'hawk' },
+    'grouse.owl': { x: 'owl', name: 'Owl', body: '#a88c64', belly: '#ecdcc0', mark: '#5a4630', comb: '#a88c64', eye: '#f0c830', raptor: 'owl' },
+    'grouse.vulture': { x: 'vulture', name: 'Vulture', body: '#2e2a28', belly: '#cfc8b8', mark: '#14100e', comb: '#c8806a', raptor: 'vulture' },
+    'fox.lynx': { x: 'lynx', name: 'Lynx', body: '#a89478', belly: '#e8dcc4', mark: '#3a2c20', eye: '#d4c63c', tuft: true },
+    'pred.wolf': { x: 'wolf', name: 'Gray wolf', body: '#8a867c', belly: '#dcd6c6', mark: '#3e3c38', eye: '#d4a83c' },
+    'grouse.heron': { x: 'heron', name: 'Great blue heron', body: '#7a8ea4', belly: '#dfe4ea', mark: '#3a4658', eye: '#e8c840', bill: '#d6a83c', leg: '#7a6a48' },
+    'fox.otter': { x: 'otter', name: 'River otter', body: '#6a4a32', belly: '#c4a888', mark: '#3e2a1c', eye: '#2a2a2a' },
+    'bear.polarbear': { x: 'polarbear', name: 'Polar bear', body: '#f0ecdf', belly: '#fffdf4', mark: '#b9b3a4', eye: '#2a2a2a', muzzle: '#ddd4bc' },
+    'large.muskox': { x: 'muskox', name: 'Muskox', body: '#3a2c22', belly: '#5a4636', mark: '#241a14', eye: '#2a2a2a', muzzle: '#8a7260' },
+    'deer.camel': { x: 'camel', name: 'Dromedary camel', body: '#c4985a', belly: '#e0c08a', mark: '#8a6a38', eye: '#2a2a2a', muzzle: '#d8b078' },
+    'fox.fennec': { x: 'fennec', name: 'Fennec fox', body: '#e6c894', belly: '#fbf0d8', mark: '#8a6a3a', eye: '#2a2a2a', ear: '#e8b4a0' },
+    'pred.coyote': { x: 'coyote', name: 'Coyote', body: '#a8906a', belly: '#e0d0aa', mark: '#5a4630', eye: '#d4a83c' },
+    'pred.hyena': { x: 'hyena', name: 'Hyena', body: '#a89264', belly: '#d0c094', mark: '#3e3020', eye: '#c8a02c', spot: '#5a4630' },
+    'bear.wolverine': { x: 'wolverine', name: 'Wolverine', body: '#4a3828', belly: '#8a6a46', mark: '#241810', eye: '#d4c63c', muzzle: '#a88a60' },
+    'pred.cougar': { x: 'cougar', name: 'Cougar', body: '#c4a070', belly: '#e8d8b8', mark: '#6a4c2a', eye: '#d4c63c', cat: true },
+    'pred.snowleopard': { x: 'snowleopard', name: 'Snow leopard', body: '#cfd0c8', belly: '#f0f0ea', mark: '#4a4c52', eye: '#9ec4cc', cat: true, spot: '#4a4c54' },
+    'deer.caribou': { x: 'caribou', name: 'Caribou', body: '#7a6a58', belly: '#e8e2d6', mark: '#4a3e32', ear: '#c0a898', horn: '#cdbf9e' },
+    'small.hare': { x: 'hare', name: 'Arctic hare', body: '#dcd8d0', belly: '#f4f2ee', mark: '#3a3a38', ear: '#c8bcb4' },
+    'grouse.ptarmigan': { x: 'ptarmigan', name: 'Ptarmigan', body: '#e4e0d8', belly: '#f6f4f0', mark: '#8a6a4a', comb: '#c8363a' },
+    'deer.impala': { x: 'impala', name: 'Impala', body: '#b87a44', belly: '#f0e0c0', mark: '#4a2e18', ear: '#d89888', horn: '#2e241c' },
+    'large.wildebeest': { x: 'wildebeest', wil: 1, name: 'Wildebeest', body: '#5a5048', belly: '#7a7064', mark: '#1e1a16', plate: '#8a8070' },
+    'large.elephant': { x: 'elephant', ele: 1, name: 'Elephant', body: '#8e8a86', belly: '#a8a49e', mark: '#4a4642', plate: '#b4b0a8' },
+    'grouse.ostrich': { x: 'ostrich', name: 'Ostrich', body: '#2a2622', belly: '#e8e2d0', mark: '#14100e', comb: '#d8a898' },
+    'pred.lion': { x: 'lion', name: 'Lion', body: '#c9a063', belly: '#ead8b0', mark: '#6a4220', eye: '#d4a83c', cat: true },
+    'large.tapir': { x: 'tapir', name: 'Tapir', body: '#4a4438', belly: '#6a6454', mark: '#1c1812', plate: '#6e6858' },
+    'pred.jaguar': { x: 'jaguar', name: 'Jaguar', body: '#c9962c', belly: '#f0dcaa', mark: '#3a2410', eye: '#d4c63c', cat: true, spot: '#2a1a0c' },
+    'snake.anaconda': { x: 'anaconda', name: 'Anaconda', body: '#4a5a30', belly: '#b8b878', mark: '#1c2410', eye: '#d4c63c' },
+    'grouse.macaw': { x: 'macaw', name: 'Macaw', body: '#c02a2a', belly: '#e8c43a', mark: '#1a3a8a', comb: '#2a5ac8' },
+    'small.paca': { x: 'paca', name: 'Paca', body: '#7a5a3e', belly: '#d8c4a0', mark: '#e8dcc0', ear: '#b88878' },
+    'large.boar': { x: 'boar', name: 'Wild boar', body: '#4a3e32', belly: '#6a5a48', mark: '#1e1810', plate: '#7a6a58' },
+    'small.beaver': { x: 'beaver', name: 'Beaver', body: '#6a4a30', belly: '#9a7a54', mark: '#3a2616', ear: '#8a6a50' },
+    'large.tortoise': { x: 'tortoise', name: 'Giant tortoise', body: '#7a6a44', belly: '#a8a47a', mark: '#3e3624', plate: '#8c7c52' },
+    'small.hyrax': { x: 'hyrax', name: 'Rock hyrax', body: '#8a7a62', belly: '#c8b898', mark: '#4a3e30', ear: '#a88878' },
+    'snake.komodo': { x: 'komodo', name: 'Komodo dragon', body: '#6a5a46', belly: '#a89878', mark: '#3a3024', eye: '#d4a83c' },
+    'pred.cheetah': { x: 'cheetah', name: 'Cheetah', body: '#d8b070', belly: '#f2e4c0', mark: '#3a2a18', eye: '#d4a83c', cat: true, spot: '#3a2a18' },
+    'grouse.eagle': { x: 'eagle', name: 'Bald eagle', body: '#4a3a2a', belly: '#f4f0e6', mark: '#2a1e14', comb: '#d8a63a', eye: '#f0d040' },
+    'fox.ocelot': { x: 'ocelot', name: 'Ocelot', body: '#c8a060', belly: '#f0e4c8', mark: '#3a2814', eye: '#d4c63c', spot: '#3a2814' },
     'snake.crocodile': { name: 'Crocodile', body: '#4a5a3a', belly: '#b4b07a', mark: '#1c2812', eye: '#d4c63c', croc: true }
   };
   var VAR_OF = { tundra: 'snow', alpine: 'snow', highlands: 'snow', desert: 'sand', badlands: 'sand', volcanic: 'ash', wetland: 'marsh' };
@@ -623,7 +639,7 @@
   /* perishables. Clock: 50 ticks a day. Shelf life is in days at 15 C; spoilage speeds up about 2.2x per +10 C and nearly stops below freezing (a cold store keeps raw meat roughly four days,
      frozen ground for weeks). The same rate runs a body from fresh to bare bone in DECAY_TICKS ticks at 15 C: about three weeks, a month and a half at 5 C, months under ice. */
   var DAY_TICKS = 50;
-  var PERISH = { fruit: { days: 3, label: 'fruit' }, meat: { days: 2, label: 'raw meat', risk: 0.6 }, berry: { days: 5, label: 'berries' }, nightshade: { days: 5, label: 'berries' }, mushroom: { days: 3, label: 'mushrooms' }, toadstool: { days: 3, label: 'mushrooms' }, cactus: { days: 14, label: 'prickly pear', frz: 3 }, cattail: { days: 6, label: 'cattail shoots', frz: 4 }, lichen: { days: 40, label: 'lichen', risk: 0.25 }, herb: { days: 7, label: 'herbs', frz: 3 }, tuber: { days: 90, label: 'roots', frz: 8 }, nut: { days: 180, label: 'nuts', risk: 0.25 }, grain: { days: 240, label: 'grain', risk: 0.3 } };
+  var PERISH = { fruit: { days: 3, label: 'fruit' }, meat: { days: 2, label: 'raw meat', risk: 0.6 }, berry: { days: 5, label: 'berries' }, nightshade: { days: 5, label: 'berries' }, mushroom: { days: 3, label: 'mushrooms' }, toadstool: { days: 3, label: 'mushrooms' }, cactus: { days: 14, label: 'prickly pear', frz: 3 }, cattail: { days: 6, label: 'cattail shoots', frz: 4 }, lichen: { days: 40, label: 'lichen', risk: 0.25 }, herb: { days: 7, label: 'herbs', frz: 3 }, tuber: { days: 90, label: 'roots', frz: 8 }, nut: { days: 180, label: 'nuts', risk: 0.25 }, grain: { days: 240, label: 'grain', risk: 0.3 }, apple: { days: 20, label: 'apples', frz: 4 }, grape: { days: 5, label: 'grapes' }, banana: { days: 4, label: 'bananas', frz: 2 }, date: { days: 60, label: 'dates' }, olive: { days: 14, label: 'olives' }, allium: { days: 40, label: 'wild onions', frz: 6 }, carrot: { days: 21, label: 'wild carrots', frz: 5 }, gourd: { days: 45, label: 'gourds', frz: 3 } };
   /* shelf-life multipliers for preserved food, for when colonists learn drying, smoking, cooking or cold storage */
   var PRESERVE = { cooked: 2, dried: 8, smoked: 10, salted: 12, cellar: 2.5 };
   function spoilRate(T) { return T <= -2 ? 0.04 : Math.max(0.04, Math.min(3, Math.pow(2.2, (T - 15) / 10))); }
@@ -831,31 +847,39 @@
     sinew:  { label: 'Sinew',  color: '#d9c9a0', hard: 0, sharp: 0, weight: 0.3, flex: 5, ins: 0, rain: 1, dur: 4, src: 'prey' },
     shell:  { label: 'Shell',  color: '#d9cdbb', hard: 4, sharp: 3.5, weight: 1, flex: 0, ins: 0, rain: 3, dur: 2, src: 'shores and river banks' },
     copper: { label: 'Native copper', color: '#b8693a', hard: 4.5, sharp: 3, weight: 4, flex: 1, ins: 0, rain: 3, dur: 4, src: 'stream beds and rocky ground' },
+    resin:  { label: 'Resin',  color: '#c89a3c', hard: 1, sharp: 0, weight: 0.3, flex: 2, ins: 1, rain: 5, dur: 3, src: 'conifers and acacia' },
+    horn:   { label: 'Horn',   color: '#c9b78a', hard: 4, sharp: 4, weight: 1.5, flex: 1, ins: 0, rain: 3, dur: 3, src: 'antlered and horned herd animals' },
+    tusk:   { label: 'Tusk',   color: '#f2ead6', hard: 5, sharp: 4, weight: 2,   flex: 0, ins: 0, rain: 3, dur: 4, src: 'boar, peccary and elephant' },
+    claw:   { label: 'Claw',   color: '#3a352e', hard: 4, sharp: 5, weight: 0.3, flex: 0, ins: 0, rain: 3, dur: 3, src: 'cats, bears, raptors and diggers' },
+    feather:{ label: 'Feather',color: '#d8d2c4', hard: 0, sharp: 0, weight: 0.1, flex: 4, ins: 2, rain: 2, dur: 1, src: 'birds' },
+    hoof:   { label: 'Hoof',   color: '#4a3e34', hard: 3, sharp: 0, weight: 1,   flex: 0, ins: 0, rain: 3, dur: 3, src: 'hoofed herd animals' },
+    scale:  { label: 'Scales', color: '#6f8a5a', hard: 4, sharp: 0, weight: 1,   flex: 2, ins: 0, rain: 3, dur: 3, src: 'snakes and lizards' },
+    fat:    { label: 'Tallow', color: '#efe2b0', hard: 0, sharp: 0, weight: 0.8, flex: 3, ins: 3, rain: 3, dur: 2, src: 'fat animals' },
     gold:   { label: 'Native gold', color: '#d4a82a', hard: 2, sharp: 0.5, weight: 6, flex: 2, ins: 0, rain: 3, dur: 2, src: 'stream gravels' }
   };
-  var MAT_ORDER = ['wood', 'stone', 'flint', 'bone', 'hide', 'fur', 'fiber', 'sinew', 'shell', 'copper', 'gold'];
+  var MAT_ORDER = ['wood', 'stone', 'flint', 'bone', 'hide', 'fur', 'fiber', 'sinew', 'resin', 'shell', 'horn', 'tusk', 'claw', 'feather', 'hoof', 'scale', 'fat', 'copper', 'gold'];
   var ALLM = MAT_ORDER;
   // part: [key, label, allowed materials, share of the item]
   var TPL = {
     weapon: {
       club:   { label: 'Striker', blunt: true, base: 2, hw: 0.7, sw: 0, reach: 1, wf: 0.5, parts: [['head', 'Head', ['wood', 'stone', 'bone', 'copper', 'shell', 'gold'], 1], ['grip', 'Grip', ['hide', 'fur', 'fiber'], 0.4]] },
-      spear:  { label: 'Reacher', base: 1.5, hw: 0.3, sw: 0.9, reach: 2, wf: 0.4, parts: [['head', 'Point', ['flint', 'stone', 'bone', 'wood', 'shell', 'copper', 'gold'], 0.5], ['shaft', 'Shaft', ['wood', 'bone'], 1], ['bind', 'Binding', ['sinew', 'fiber', 'hide'], 0.3]] },
-      axe:    { label: 'Splitter', base: 2, hw: 0.5, sw: 0.7, reach: 1, wf: 0.6, parts: [['head', 'Head', ['stone', 'flint', 'bone', 'copper', 'shell', 'gold'], 1], ['haft', 'Haft', ['wood', 'bone'], 0.8], ['bind', 'Binding', ['sinew', 'fiber', 'hide'], 0.3]] },
-      knife:  { label: 'Slicer', base: 1, hw: 0.1, sw: 1.1, reach: 0.5, wf: 0.25, parts: [['head', 'Edge', ['flint', 'bone', 'stone', 'shell', 'copper', 'gold'], 0.6], ['handle', 'Handle', ['wood', 'bone', 'hide', 'fur'], 0.5], ['bind', 'Binding', ['fiber', 'sinew'], 0.2]] },
-      bow:    { label: 'Launcher', ranged: true, base: 1.5, hw: 0.2, sw: 0.5, reach: 5, wf: 0.3, parts: [['head', 'Arm', ['wood', 'bone'], 1], ['string', 'String', ['sinew', 'fiber'], 0.3], ['grip', 'Grip', ['hide', 'fur', 'fiber'], 0.3]] }
+      spear:  { label: 'Reacher', base: 1.5, hw: 0.3, sw: 0.9, reach: 2, wf: 0.4, parts: [['head', 'Point', ['flint', 'stone', 'bone', 'wood', 'shell', 'horn', 'tusk', 'claw', 'copper', 'gold'], 0.5], ['shaft', 'Shaft', ['wood', 'bone'], 1], ['bind', 'Binding', ['sinew', 'resin', 'fiber', 'hide'], 0.3]] },
+      axe:    { label: 'Splitter', base: 2, hw: 0.5, sw: 0.7, reach: 1, wf: 0.6, parts: [['head', 'Head', ['stone', 'flint', 'bone', 'horn', 'tusk', 'copper', 'shell', 'gold'], 1], ['haft', 'Haft', ['wood', 'bone'], 0.8], ['bind', 'Binding', ['sinew', 'resin', 'fiber', 'hide'], 0.3]] },
+      knife:  { label: 'Slicer', base: 1, hw: 0.1, sw: 1.1, reach: 0.5, wf: 0.25, parts: [['head', 'Edge', ['flint', 'bone', 'stone', 'shell', 'claw', 'horn', 'tusk', 'copper', 'gold'], 0.6], ['handle', 'Handle', ['wood', 'bone', 'hide', 'fur'], 0.5], ['bind', 'Binding', ['fiber', 'sinew'], 0.2]] },
+      bow:    { label: 'Launcher', ranged: true, base: 1.5, hw: 0.2, sw: 0.5, reach: 5, wf: 0.3, parts: [['head', 'Arm', ['wood', 'bone'], 1], ['string', 'String', ['sinew', 'resin', 'fiber'], 0.3], ['grip', 'Grip', ['hide', 'fur', 'fiber'], 0.3]] }
     },
     armor: {
-      vest:   { label: 'Torso cover', slotW: 1, parts: [['plate', 'Plates', ['hide', 'bone', 'wood', 'stone'], 1], ['back', 'Backing', ['hide', 'fur', 'fiber'], 0.7], ['lace', 'Lacing', ['sinew', 'fiber', 'hide'], 0.2]] },
-      helm:   { label: 'Head cover', slotW: 0.4, parts: [['plate', 'Shell', ['bone', 'wood', 'stone', 'hide'], 1], ['back', 'Lining', ['fur', 'hide', 'fiber'], 0.5], ['lace', 'Strap', ['hide', 'sinew', 'fiber'], 0.2]] },
-      greaves:{ label: 'Limb cover', slotW: 0.5, parts: [['plate', 'Plates', ['hide', 'bone', 'wood', 'stone'], 1], ['back', 'Backing', ['hide', 'fur', 'fiber'], 0.6], ['lace', 'Lacing', ['sinew', 'fiber', 'hide'], 0.2]] },
+      vest:   { label: 'Torso cover', slotW: 1, parts: [['plate', 'Plates', ['hide', 'bone', 'scale', 'hoof', 'wood', 'stone'], 1], ['back', 'Backing', ['hide', 'fur', 'fiber'], 0.7], ['lace', 'Lacing', ['sinew', 'resin', 'fiber', 'hide'], 0.2]] },
+      helm:   { label: 'Head cover', slotW: 0.4, parts: [['plate', 'Shell', ['bone', 'horn', 'scale', 'wood', 'stone', 'hide'], 1], ['back', 'Lining', ['fur', 'hide', 'fiber'], 0.5], ['lace', 'Strap', ['hide', 'sinew', 'fiber'], 0.2]] },
+      greaves:{ label: 'Limb cover', slotW: 0.5, parts: [['plate', 'Plates', ['hide', 'bone', 'scale', 'hoof', 'wood', 'stone'], 1], ['back', 'Backing', ['hide', 'fur', 'fiber'], 0.6], ['lace', 'Lacing', ['sinew', 'resin', 'fiber', 'hide'], 0.2]] },
       shield: { label: 'Ward', slotW: 0.8, parts: [['plate', 'Face', ['wood', 'hide', 'bone'], 1], ['back', 'Rim', ['bone', 'wood', 'stone'], 0.5], ['lace', 'Handle', ['wood', 'hide', 'sinew'], 0.2]] }
     },
     clothing: {
-      tunic:  { label: 'Body wrap', parts: [['body', 'Body', ['hide', 'fiber', 'fur'], 1], ['trim', 'Trim', ['fur', 'fiber', 'hide'], 0.3], ['stitch', 'Stitching', ['sinew', 'fiber'], 0.15]] },
+      tunic:  { label: 'Body wrap', parts: [['body', 'Body', ['hide', 'fiber', 'fur'], 1], ['trim', 'Trim', ['fur', 'fiber', 'hide'], 0.3], ['stitch', 'Stitching', ['sinew', 'resin', 'fiber'], 0.15]] },
       cloak:  { label: 'Shoulder wrap', parts: [['body', 'Outer', ['hide', 'fur', 'fiber'], 1], ['trim', 'Lining', ['fur', 'fiber', 'hide'], 0.7], ['stitch', 'Clasp', ['bone', 'wood', 'stone'], 0.1]] },
-      boots:  { label: 'Foot wrap', parts: [['body', 'Upper', ['hide', 'fur', 'fiber'], 0.8], ['trim', 'Sole', ['hide', 'wood', 'fur'], 0.6], ['stitch', 'Lacing', ['sinew', 'fiber'], 0.15]] },
-      gloves: { label: 'Hand wrap', parts: [['body', 'Palm', ['hide', 'fur', 'fiber'], 0.6], ['trim', 'Cuff', ['fur', 'fiber', 'hide'], 0.3], ['stitch', 'Stitching', ['sinew', 'fiber'], 0.1]] },
-      hat:    { label: 'Head wrap', parts: [['body', 'Crown', ['fur', 'hide', 'fiber'], 0.7], ['trim', 'Band', ['fiber', 'hide', 'fur'], 0.2], ['stitch', 'Stitching', ['sinew', 'fiber'], 0.1]] }
+      boots:  { label: 'Foot wrap', parts: [['body', 'Upper', ['hide', 'fur', 'fiber'], 0.8], ['trim', 'Sole', ['hide', 'hoof', 'wood', 'fur'], 0.6], ['stitch', 'Lacing', ['sinew', 'resin', 'fiber'], 0.15]] },
+      gloves: { label: 'Hand wrap', parts: [['body', 'Palm', ['hide', 'fur', 'fiber'], 0.6], ['trim', 'Cuff', ['fur', 'fiber', 'hide'], 0.3], ['stitch', 'Stitching', ['sinew', 'resin', 'fiber'], 0.1]] },
+      hat:    { label: 'Head wrap', parts: [['body', 'Crown', ['fur', 'hide', 'fiber'], 0.7], ['trim', 'Band', ['feather', 'fiber', 'hide', 'fur'], 0.2], ['stitch', 'Stitching', ['sinew', 'resin', 'fiber'], 0.1]] }
     }
   };
 
@@ -1233,6 +1257,8 @@
     { key: 'binding',   label: 'Binding',      tier: 0, cost: 6,   req: [], schem: ['clothing.tunic'], machines: [], fx: {}, text: 'Tie and wrap with fiber, sinew and hide.' },
     { key: 'hafting',   label: 'Hafting',      tier: 1, cost: 18,  req: ['shaping', 'binding'], schem: ['weapon.spear', 'weapon.axe'], machines: [], fx: { skill: 0.5 }, text: 'Fix a working head to a handle.' },
     { key: 'tanning',   label: 'Tanning',      tier: 1, cost: 20,  req: ['binding'], schem: ['armor.vest', 'armor.helm', 'clothing.cloak', 'clothing.hat', 'clothing.gloves', 'clothing.boots'], machines: [], fx: { skill: 0.5 }, text: 'Cure hide and fur so they last and shape.' },
+    { key: 'spearfishing', label: 'Spear fishing', tier: 2, cost: 26, req: ['hafting'], schem: [], machines: [], fx: { fish: 1 }, text: 'Stand braced at the bank and strike down at a fish with a hafted spear. Needs a spear in hand. Takes the big fish (trout, pike, carp, catfish, eel, salmon, sturgeon) that bare hands cannot.' },
+    { key: 'polefishing', label: 'Pole fishing', tier: 2, cost: 34, req: ['spearfishing', 'spinning'], schem: [], machines: [], fx: { fish: 2 }, text: 'A long wooden pole, a cord line and a bone or claw hook: wait for a bite instead of striking. Slower than the spear but it takes perch, trout and carp without spooking the shoal. Needs a pole (wood), cord (fiber) and a hook (bone, claw or horn) in the store; the line wears out now and then.' },
     { key: 'leverage',  label: 'Leverage',     tier: 1, cost: 22,  req: ['shaping'], schem: [], machines: ['lever', 'roller'], fx: { carry: 2 }, text: 'Beam on a fulcrum, logs under a load.' },
     { key: 'spinning',  label: 'Spinning',     tier: 1, cost: 22,  req: ['binding'], schem: [], machines: ['spindle'], fx: {}, text: 'Twist fiber into cord.' },
     { key: 'tension',   label: 'Tension',      tier: 2, cost: 42,  req: ['hafting', 'spinning'], schem: ['weapon.bow'], machines: [], fx: {}, text: 'Store force in a flexed limb.' },
@@ -1482,7 +1508,7 @@
   /* ---------- discovery by experiment: nothing is researched; colonists try verb x tool x target combinations through the interaction layer.
      A combination that works is learned by that person, can be shown to others, watched and copied, and is forgotten when the last one who knows it dies.
      A technology exists only while the colony's living knowledge still satisfies its pattern. ---------- */
-  var MAT2T = { wood: 'stick', stone: 'rock', flint: 'flint', bone: 'bone', hide: 'hide', fur: 'hide', fiber: 'fiber', sinew: 'fiber', shell: 'shell', copper: 'copper', gold: 'gold' };
+  var MAT2T = { wood: 'stick', stone: 'rock', flint: 'flint', bone: 'bone', hide: 'hide', fur: 'hide', fiber: 'fiber', sinew: 'fiber', resin: 'fiber', horn: 'bone', tusk: 'bone', claw: 'bone', feather: 'fiber', hoof: 'bone', scale: 'shell', fat: 'hide', shell: 'shell', copper: 'copper', gold: 'gold' };
   var XVERBS = ['hit', 'cut', 'pierce', 'break', 'craft', 'burn', 'douse', 'fill', 'cook', 'gather', 'climb'], PVERBS = { climb: 1, gather: 1 };
   function opSig(sg) { var p = sg.split(':'), o = THINGS[p[p.length - 1]] ? opOf(p[p.length - 1]) : null; if (!o) return null; for (var i = p.length - 2; i >= 0; i--) { var r = interact(p[i], o); if (!r.ok || !r.operand) return null; o = r.operand; } return o; }
   var SIGC = {};
@@ -1539,6 +1565,8 @@
     leverage:   { min: 2, p: [['hit', 'wood', 'stone'], ['break', 'wood', 'solid'], ['break', 'stone', 'wood']] },
     spinning:   { min: 2, p: [['craft', 'bone', 'fiber'], ['cut', 'sharp', 'fiber'], ['burn', 'flame', 'fiber']] },
     footwork:   { min: 1, p: [['ev', 'hunt', 4]] },
+    spearfishing: { min: 1, p: [['ev', 'fish', 3]] },
+    polefishing: { min: 1, p: [['ev', 'spearfish', 4]] },
     herbalism:  { min: 2, p: [['gather', 'living', 'plant'], ['eat', 'living', 'edible'], ['cut', 'sharp', 'plant']] },
     cultivation: { min: 2, p: [['gather', 'living', 'plant'], ['cut', 'sharp', 'plant'], ['hit', 'wood', 'plant']] },
     tension:    { min: 2, p: [['hit', 'wood', 'wood'], ['break', 'wood', 'wood'], ['craft', 'wood', 'fiber']] },
