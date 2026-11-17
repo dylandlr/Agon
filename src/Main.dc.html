@@ -203,6 +203,7 @@ body.agon-paused *{animation-play-state:paused !important}
       <button onClick="{{setSpeed1}}" aria-pressed="{{s1}}" style="{{sp1Style}}">1x</button>
       <button onClick="{{setSpeed2}}" aria-pressed="{{s2}}" style="{{sp2Style}}">2x</button>
       <button onClick="{{setSpeed4}}" aria-pressed="{{s4}}" style="{{sp4Style}}">4x</button>
+      <button onClick="{{toggleMute}}" aria-pressed="{{muted}}" title="{{muteTitle}}" style="{{muteStyle}}">{{muteLabel}}</button>
       <sc-if value="{{war.show}}" hint-placeholder-val="{{ false }}"><button onClick="{{war.prevEv}}" style="{{sp1Style}}">&lt; Event</button><button onClick="{{war.nextEv}}" style="{{sp1Style}}">Event &gt;</button><button onClick="{{war.live}}" style="{{sp1Style}}">Latest</button></sc-if>
     </div>
   </div></div>
@@ -4292,6 +4293,58 @@ class Component extends DCLogic {
     this._pl = null; this._mac = null; this._gk = null;
     this.setWorld(undefined, undefined, undefined, 1 + Math.floor(Math.random() * 9998), undefined, undefined, { px: pc.x, py: pc.y, x: c ? c.x : undefined, y: c ? c.y : undefined, ps: st.planetSeed || 1 });
   }
+  // migration: the colony moves to another local area instead of being replaced by a
+  // brand new one. Until now any change of local cell ran setWorld, which resets the
+  // tick to 0 and takes its agents and store straight from the freshly generated
+  // world — so walking to the next valley silently killed the colony and handed you
+  // a different one. What travels is what people can carry: themselves, what they
+  // hold, the stores, and what they have worked out how to do. The camp, its beds and
+  // its plots stay behind, because a house cannot be carried. The journey takes days
+  // on the clock and the needs those days drain.
+  migrate(cell) {
+    const s = this.state, alive = (s.agents || []).filter((a) => a.alive);
+    if (!alive.length) { this.setWorld(undefined, undefined, undefined, undefined, undefined, undefined, cell); return; }
+    // distance is measured on whichever map the move was made from: a step to the
+    // next local cell is a short walk, a move to another planet region is a trek, so
+    // region hops are weighted up to keep the day count honest.
+    const local = !cell || cell.px === undefined;
+    const from = (local ? s.cell : s.pcell) || { x: 0, y: 0 };
+    const tx = local ? (cell && cell.x !== undefined ? cell.x : from.x) : cell.px;
+    const ty = local ? (cell && cell.y !== undefined ? cell.y : from.y) : cell.py;
+    const dist = Math.max(1, Math.hypot(tx - from.x, ty - from.y) * (local ? 1 : 8));
+    // capped: distance should make a move costly, not impossible. Uncapped, a move to
+    // the far side of the planet billed 521 days, which is over a year in which
+    // nothing simulates and every need bottoms out — a silent colony-killer rather
+    // than a decision. A month on the road is the most any one march can cost.
+    const days = Math.max(1, Math.min(30, Math.round(dist * 1.5))), ticks = days * 50;
+    this._carry = { agents: alive, store: s.store, tick: (s.tick || 0) + ticks, days, dist, from };
+    this.setWorld(undefined, undefined, undefined, undefined, undefined, undefined, cell);
+    // setWorld refuses a target it cannot site (open sea, or the cell we are already
+    // on) and returns having changed nothing. Drop the carry rather than let it sit
+    // and be picked up by whatever world change comes next.
+    this._carry = null;
+  }
+  // place the carried colony on the newly generated map and charge it for the walk
+  applyCarry(carry, w) {
+    const spots = (w.agents || []).map((a) => [a.x, a.y]), E = this.E, H0 = E.HEARTH;
+    // the march costs a need some ground but stops at a floor — and never gives any
+    // back, so arriving cannot be a way to feed someone who set out starving
+    const dip = (v, d, floor) => { const x = v ?? 1; return Math.min(x, Math.max(floor, x - d)); };
+    const agents = carry.agents.map((a, i) => {
+      const p = spots[i] || [H0[0] + (i % 5) - 2, H0[1] + Math.floor(i / 5) - 1];
+      // days on the road: hunger and thirst bite, and they arrive tired. Floored
+      // well above zero so a march is costly but never by itself fatal.
+      const wear = Math.min(0.55, carry.days * 0.06);
+      return Object.assign({}, a, { x: p[0], y: p[1], bed: -1, act: 'idle', bub: '', bubT: 0, tgt: null, path: null,
+        sat: dip(a.sat, wear, 0.2), hyd: dip(a.hyd, wear * 1.2, 0.2), ene: dip(a.ene, wear, 0.15) });
+    });
+    // rations eaten on the way: everyone eats about a fifth of a unit a day
+    const store = Object.assign({}, carry.store || {});
+    store.food = Math.max(0, (store.food || 0) - Math.round(agents.length * carry.days * 0.2));
+    store.water = 0;   // skins are drunk dry by the time they arrive
+    store.shelterT = null; store.wallMat = undefined;   // nothing is built here yet
+    return { agents, store };
+  }
   setWorld(k, f, b, sd, nr, gp, cell) {
     this._Q = {}; this._K = {}; this._KC = {}; this._away = [];
     const st = this.state, kk = k || st.size, ff = f ?? st.form;
@@ -4313,7 +4366,9 @@ class Component extends DCLogic {
     this.applyCss();
     // open on our camp: a world of several tiles starts zoomed so one tile fills the view, centred on the camp
     const cam0 = (() => { const E = this.E, WP = E.W * TS, HP = E.H * TS, fit = Math.min(VP.w / WP, VP.h / HP), fx = (VP.w - WP * fit) / 2, fy = (VP.h - HP * fit) / 2, zk = Math.max(1, Math.min(5, 0.78 / fit)); if (zk <= 1.01) return { zoom: 1, panX: 0, panY: 0, follow: false }; const cx = E.CAMPC[0] * TS + 24, cy = E.CAMPC[1] * TS + 24; return { zoom: zk, panX: clampAx(VP.w / 2 - fx - cx * fit * zk, VP.w, fx, WP * fit * zk), panY: clampAx(VP.h / 2 - fy - cy * fit * zk, VP.h, fy, HP * fit * zk), follow: false }; })();
-    this.setState({ ...cam0, jump: true, eco: null, story: null, cdisc: [], crub: [], layerCave: false, gp: gg, planetSeed: ps, pcell: pc, cell: c, explored: ex, regionPick: null, size: kk, form: ff, biome: bb, wseed: ss, nRiv: nn, rel: null, tick: 0, sel: 0, agents: w.agents, animals: w.animals, bushes: w.bushes, carc: [], plots: w.plots, store: w.store, fires: [], burnt: [], strike: null, log: [{ t: 0, text: (this.E.SC && this.E.SC.label !== 'Built community' ? this.E.SC.label + ': ' : '') + 'New ' + BIOMES[bb].label.toLowerCase() + ' ' + kk + ' world ' + SIZES[kk][0] + ' x ' + SIZES[kk][1] + ', formation scale ' + ff.toFixed(1) + (nn ? ', ' + this.E.RIVALS.length + ' rival camp' + (this.E.RIVALS.length === 1 ? '' : 's') : ''), kind: 'info' }], history: [JSON.stringify({ tick: 0, ...w })], hEnd: 0, keys: [{ t: 0, j: JSON.stringify({ tick: 0, ...w }) }], hover: null, pin: null, part: null });
+    const CARRY = this._carry; this._carry = null;
+    const CAR = CARRY ? this.applyCarry(CARRY, w) : null;
+    this.setState({ ...cam0, jump: true, eco: null, story: null, cdisc: [], crub: [], layerCave: false, gp: gg, planetSeed: ps, pcell: pc, cell: c, explored: ex, regionPick: null, size: kk, form: ff, biome: bb, wseed: ss, nRiv: nn, rel: null, tick: CARRY ? CARRY.tick : 0, sel: 0, agents: CAR ? CAR.agents : w.agents, animals: w.animals, bushes: w.bushes, carc: [], plots: w.plots, store: CAR ? CAR.store : w.store, fires: [], burnt: [], strike: null, log: [{ t: 0, text: (this.E.SC && this.E.SC.label !== 'Built community' ? this.E.SC.label + ': ' : '') + 'New ' + BIOMES[bb].label.toLowerCase() + ' ' + kk + ' world ' + SIZES[kk][0] + ' x ' + SIZES[kk][1] + ', formation scale ' + ff.toFixed(1) + (nn ? ', ' + this.E.RIVALS.length + ' rival camp' + (this.E.RIVALS.length === 1 ? '' : 's') : ''), kind: 'info' }], history: [JSON.stringify({ tick: 0, ...w })], hEnd: 0, keys: [{ t: 0, j: JSON.stringify({ tick: 0, ...w }) }], hover: null, pin: null, part: null });
   }
   spawn(kind) {
     const { syncNames, H, W, terAt, BLOCK, WALLS, FLOORS, inCamp, ANK, mkChild, mkAgent, mkAnimal, LOWLIGHT } = this.E;
@@ -6204,7 +6259,8 @@ class Component extends DCLogic {
         biome: !known ? 'Unexplored' : water ? (bi === 'deep' ? 'Deep ocean' : 'Ocean') : BM.label, note: !known ? 'Fog of war. Settle here to explore it; you will see nothing about this cell until you do.' : water ? 'Open water. Pick a land cell to settle.' : BM.note,
         rows: !known ? [{ k: 'Site', v: site.x + ', ' + site.y }, { k: 'Status', v: 'unexplored' }] : water ? [{ k: 'Site', v: site.x + ', ' + site.y }] : [{ k: 'Site', v: site.x + ', ' + site.y }, { k: 'Climate', v: tC + ' C mean' }, { k: 'Moisture', v: Math.round(PL.wet[site.y * PL.PW + site.x] * 100) + '%' }, { k: 'Berries', v: BM.bush + ' per 800 tiles' }, { k: 'Fauna', v: 'x' + BM.fauna.toFixed(1) }, { k: 'Rivals within 16', v: String(near) }, { k: 'Camps spawned', v: nr + ' (' + s.size + ' world)' }].concat(ecoRows),
         lens: () => this.setState({ ecoLens: !lensOn }), lensTxt: lensOn ? 'Ecosystem lens: on' : 'Ecosystem lens: off', lensStyle: 'min-height: 26px; border-radius: 4px; font-size: 12px; font-weight: 700; border: 1px solid ' + (lensOn ? '#7fc36a' : 'var(--border-strong)') + '; background: ' + (lensOn ? '#7fc36a' : 'transparent') + '; color: ' + (lensOn ? '#1c110b' : 'var(--ink)'), news,
-        settle: () => { if (known && water) return; this.setWorld(undefined, undefined, undefined, undefined, nr, undefined, { px: site.x, py: site.y }); },
+        settle: () => { if (known && water) return; const live = (s.agents || []).filter((a) => a.alive).length;
+          if (live) this.migrate({ px: site.x, py: site.y }); else this.setWorld(undefined, undefined, undefined, undefined, nr, undefined, { px: site.x, py: site.y }); },
         settleStyle: 'min-height: 32px; border-radius: 4px; font-size: 13px; font-weight: 700; border: 1px solid ' + (known && water ? 'var(--border)' : '#ffd23f') + '; background: ' + (known && water ? 'transparent' : '#ffd23f') + '; color: ' + (known && water ? 'var(--ink-muted)' : '#1c110b'),
         settleTxt: known && water ? 'Cannot settle water' : known ? 'Settle here' : 'Travel here (unexplored)',
         legend: [].concat(Object.keys(BIOMES).map((k) => ({ sw: 'width: 10px; height: 10px; border-radius: 2px; border: 1px solid #1c110b; background: ' + BIOMES[k].col, txt: BIOMES[k].label + ' ' + Math.round((PL.cnt[k] || 0) / PL.bio.length * 100) + '%' })), [{ sw: 'width: 10px; height: 10px; border-radius: 2px; border: 1px solid #1c110b; background: #2f5f93', txt: 'Ocean ' + Math.round(((PL.cnt.ocean || 0) + (PL.cnt.deep || 0)) / PL.bio.length * 100) + '%' }]),
@@ -6238,7 +6294,17 @@ class Component extends DCLogic {
         pickStyle: 'position: absolute; left: ' + (pk.x * S - 3) + 'px; top: ' + (pk.y * S - 3) + 'px; width: ' + (S + 6) + 'px; height: ' + (S + 6) + 'px; border: 2px solid #ffd23f; box-shadow: 0 0 0 1px #1c110b; pointer-events: none',
         scaleStyle: 'position: absolute; left: 14px; bottom: 14px; width: ' + Math.round(50000 / CELLM * S) + 'px; height: 5px; background: #fff; border: 1px solid #1c110b; pointer-events: none', scaleTxt: '50 km',
         rows: [{ k: 'Cell', v: pk.x + ', ' + pk.y }, { k: 'Elevation', v: Math.round(M.H[k]) + ' m' }, { k: 'Temperature', v: M.T[k].toFixed(1) + ' C mean' }, { k: 'Rainfall', v: Math.round(M.R[k] * 100) + '%' }, { k: 'Bedrock', v: AM.GEO[M.G[k]] }, { k: 'Cave potential', v: Math.round(M.cave[k] * 100) + '%' }, { k: 'Drainage', v: M.H[k] <= 0 ? 'open sea, ' + Math.round(-M.H[k]) + ' m deep' : lk > 0.5 ? 'lake, ' + Math.round(lk) + ' m deep' : area > 60 ? 'river (' + Math.round(area) + ' cells upstream)' : 'slope' }, { k: 'Biome here', v: BIOMES[ps2.biome].label }, { k: 'Distance from camp', v: (Math.hypot(pk.x - cs.x, pk.y - cs.y) * CELLM / 1000).toFixed(1) + ' km' }],
-        settle: () => this.setWorld(undefined, undefined, undefined, undefined, undefined, undefined, { x: pk.x, y: pk.y }), settleTxt: M.H[k] <= 0 || lk > 0.5 ? 'Settle on an islet in the ' + (M.H[k] <= 0 ? 'sea' : 'lake') : 'Settle here (' + BIOMES[ps2.biome].label + ')',
+        // with a colony already alive this is a migration, not a fresh start: the
+        // agonists walk there and take their stores and know-how with them. Only an
+        // empty world settles outright.
+        settle: () => { const live = (s.agents || []).filter((a) => a.alive).length;
+          if (live) this.migrate({ x: pk.x, y: pk.y }); else this.setWorld(undefined, undefined, undefined, undefined, undefined, undefined, { x: pk.x, y: pk.y }); },
+        settleTxt: (() => { const live = (s.agents || []).filter((a) => a.alive).length, cf = s.cell || { x: pk.x, y: pk.y },
+            days = Math.max(1, Math.round(Math.max(1, Math.hypot(pk.x - cf.x, pk.y - cf.y)) * 1.5));
+          if (M.H[k] <= 0 || lk > 0.5) return 'Settle on an islet in the ' + (M.H[k] <= 0 ? 'sea' : 'lake');
+          return live ? 'Move the colony here (' + live + ' agonist' + (live === 1 ? '' : 's') + ', ' + days + ' day' + (days === 1 ? '' : 's') + ' walk)'
+                      : 'Settle here (' + BIOMES[ps2.biome].label + ')'; })(),
+
         note: 'Your camp is the red ring. The house is 17 tiles (' + 17 * tileM + ' m) across, ' + (houseCells * 100).toFixed(0) + '% of one cell, and the playable area is ' + W + ' x ' + H + ' tiles (' + W * tileM + ' x ' + H * tileM + ' m), a window cut from the cell marked red. Settling another cell rebuilds the local map there from its elevation, slope, rock, climate and rivers.',
       };
     }
@@ -6257,7 +6323,9 @@ class Component extends DCLogic {
         camp: inA ? 'position: absolute; left: ' + (acx - 6) + 'px; top: ' + (acy - 6) + 'px; width: 12px; height: 12px; border-radius: 50%; border: 2px solid #e0302a; box-shadow: 0 0 0 1px #fff; pointer-events: none' : 'display: none',
         scale: 'position: absolute; left: 12px; bottom: 12px; width: ' + Math.round(5000 / CELLM * AS) + 'px; height: 5px; background: #fff; border: 1px solid #1c110b; pointer-events: none', scaleTxt: '5 km',
         rows: [{ k: 'Cell', v: pk.x + ', ' + pk.y }, { k: 'Elevation', v: Math.round(M.H[k]) + ' m' }, { k: 'Temperature', v: M.T[k].toFixed(1) + ' C mean' }, { k: 'Rainfall', v: Math.round(M.R[k] * 100) + '%' }, { k: 'Bedrock', v: AM.GEO[M.G[k]] }, { k: 'Cave potential', v: Math.round(M.cave[k] * 100) + '%' }, { k: 'Drainage', v: M.H[k] <= 0 ? 'open sea' : lk > 0.5 ? 'lake, ' + Math.round(lk) + ' m deep' : area > 60 ? 'river (' + Math.round(area) + ' cells upstream)' : 'slope' }, { k: 'Biome here', v: BIOMES[ps2.biome].label }],
-        settle: () => this.setWorld(undefined, undefined, undefined, undefined, undefined, undefined, { x: pk.x, y: pk.y }), settleTxt: wat ? 'Settle on an islet in the ' + (M.H[k] <= 0 ? 'sea' : 'lake') : 'Settle here (' + BIOMES[ps2.biome].label + ')',
+        settle: () => { const live = (s.agents || []).filter((a) => a.alive).length;
+          if (live) this.migrate({ x: pk.x, y: pk.y }); else this.setWorld(undefined, undefined, undefined, undefined, undefined, undefined, { x: pk.x, y: pk.y }); },
+        settleTxt: wat ? 'Settle on an islet in the ' + (M.H[k] <= 0 ? 'sea' : 'lake') : 'Settle here (' + BIOMES[ps2.biome].label + ')',
       };
     }
     const hs = s.hEnd - s.history.length + 1, tkMax = s.hEnd, tkMin = Math.min(hs, s.keys && s.keys.length ? s.keys[0].t : hs);
@@ -6629,6 +6697,13 @@ class Component extends DCLogic {
       togglePlay: () => this.setState({ playing: !s.playing }), playLabel: s.playing ? 'Pause' : 'Resume',
       playStyle: 'min-height: 44px; padding: 0 18px; border-radius: 4px; border: 1px solid var(--border-strong); background: #d4c63c; color: #1c110b; font-size: 13px; font-weight: 600',
       setSpeed1: () => this.setState({ speed: 1 }), setSpeed2: () => this.setState({ speed: 2 }), setSpeed4: () => this.setState({ speed: 4 }),
+      // mute: the same 'aOn' switch the Volume settings hold, put where it is wanted —
+      // beside the speed controls. prefSet writes the pref and audioApply ramps the
+      // master gain, so this stays in step with the settings panel either way round.
+      muted: !this.optGet('aOn', true), muteLabel: this.optGet('aOn', true) ? 'Sound on' : 'Muted',
+      muteTitle: this.optGet('aOn', true) ? 'Mute all sound' : 'Unmute',
+      muteStyle: segBtn(!this.optGet('aOn', true)),
+      toggleMute: () => { const on = !this.optGet('aOn', true); this.prefSet('aOn', on); if (on && this._auStart) this._auStart(); this.audioApply(); },
       s1: s.speed === 1, s2: s.speed === 2, s4: s.speed === 4, sp1Style: segBtn(s.speed === 1), sp2Style: segBtn(s.speed === 2), sp4Style: segBtn(s.speed === 4),
       log: s.log.slice().reverse().map((e) => ({ t: String(e.t).padStart(4, '0'), text: e.text, style: kc[e.kind] })),
       sel: {

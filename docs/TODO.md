@@ -79,3 +79,54 @@ Not done, carried forward:
 - Window size unchanged.
 - Larder never fills; the thirst loop (colonists walking to camp with water already
   in the skin) is still untraced.
+
+
+## Round 21 — mute button, colony migration (2026-11-17)
+
+Verified:
+- **Mute button.** The audio system already had an `aOn` switch, but only inside the
+  Volume settings. There is now a button beside the speed controls that toggles the
+  same pref, so the settings panel and the button always agree. It starts the audio
+  context on unmute, since browsers only allow that from a gesture. Measured through
+  the real WebAudio graph: master gain 0.603 -> 0.003 on mute -> 0.597 on unmute,
+  with the label, title and aria-pressed flipping each time.
+
+- **The colony can now move between local areas.** This was the "agents migrating
+  with no support" gap, and it was worse than missing polish: every change of local
+  cell ran `setWorld`, which sets `tick: 0` and takes `agents` and `store` straight
+  from the freshly generated world. Walking to the next valley silently destroyed the
+  colony and handed back a different one with a reset clock. New `migrate(cell)`
+  carries the living agonists, what they hold, the stores and the techs; `setWorld`
+  applies them through `applyCarry` instead of the fresh world's. Left behind:
+  buildings, beds and plots, because a house cannot be carried.
+  - Journey cost: days scale with distance (region hops weighted x8), bounded at 30
+    days. Rations are eaten on the way (about a fifth of a unit per agonist per day),
+    water skins arrive empty, and hunger, thirst and energy take a hit that floors
+    rather than zeroes — and never *raises* a need, so arriving cannot feed someone
+    who set out starving (that was a real bug in the first cut: a colonist at sat 0
+    arrived at 0.2).
+  - All three `settle` buttons now route through it when a colony is alive; an empty
+    world still settles outright. The button says what it will cost, e.g.
+    "Move the colony here (17 agonists, 3 days walk)".
+  - Measured, seed 3: local step, tick 300 -> 400, 16 agonists with their names and
+    3 techs intact, food 60 -> 54, sat 1 -> 0.88. Region trek, tick 300 -> 900 (12
+    days), 18 agonists, 11 techs, food 99 -> 56, sat 1 -> 0.45. A non-migrating
+    `setWorld` still resets exactly as before: tick 0, different colonists, 0 techs.
+  - Uncapped, a cross-planet move billed 521 days, over a year in which nothing
+    simulates and every need bottoms out. Capped to 30 days: tick 900 -> 2400.
+  - A refused target (open sea, or the cell already occupied) leaves `setWorld`
+    unchanged, so the carry is dropped afterwards rather than leaking into whatever
+    world change comes next.
+
+Not done, carried forward:
+- **RimWorld-inspired UI overhaul.** Asked for, not started. The dock is a fixed
+  460px bar centred on the map; a RimWorld-style layout wants a bottom-left
+  inspector, bottom-right minimap, and an architect-style build menu. Worth its own
+  round and a look at reference shots first.
+- **Rock and mountain textures.** Still queued, still needs direction on what is
+  wrong with them.
+- **Unity port: pathfinding and the job system**, then worldgen.
+- Migration leaves animals, bushes and plots fresh each time; a returning colony
+  finds no trace of its old camp. Ruins would be the richer behaviour.
+- Interior walls still push shadow sprites (`wsh`) the same as exterior ones.
+- Larder never fills; the thirst loop is still untraced.
