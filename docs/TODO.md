@@ -33,5 +33,15 @@ Not done / open:
 - Interior walls still push shadow sprites (wsh) same as exterior.
 - Window size unchanged.
 - Larder never fills; thirst loop (colonists walk to camp with water in skin) untraced.
-- Merge decision pending: this branch (r18+walls) vs game/p14-worldgen-forest
-  (camp spring / soil model / tech-gated camp line).
+- Branch question settled (2026-11-17, by evidence, not assumption): colony-sim is a
+  strict superset of game/p14-worldgen-forest, so there is nothing to merge. An
+  exhaustive token set-difference of the two Main.dc.html files found 96 tokens
+  present in worldgen-forest and absent here, every one of them accounted for:
+  SVG path data and hex colours from sprite art that rounds 11-18 redrew; the
+  capH-based "cap + face" wall layout that the autotile replaced; the hardcoded
+  'itlm'/'wasdqe' key strings, since refactored into the remappable KB table; and
+  the word "plantains" in one flora note, restored in this commit. Zero feature
+  identifiers and zero system names — nothing from that branch's headline work
+  (camp spring, passable forest, thirst fixes, tech-gated camp, soil model) is
+  missing; those markers all appear MORE here (spring 14 -> 21, soil 23 -> 42).
+  The earlier "merge round pending" note was wrong. colony-sim is canonical.
