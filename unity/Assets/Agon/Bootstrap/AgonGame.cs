@@ -40,6 +40,7 @@ namespace Agon.Bootstrap
 
             GenerateTerrain();
             GenerateCamp();
+            PlaceThings();
             SpawnPawns();
 
             Map.Links.RecomputeAll();
@@ -53,6 +54,28 @@ namespace Agon.Bootstrap
         private void Update()
         {
             Ticks.Update(Time.deltaTime);
+        }
+
+        /// <summary>One line per pawn: where it is, what it is doing, and how it is faring.</summary>
+        public string DebugReport()
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.Append("tick ").Append(Ticks.TicksGame).Append("  day ").Append(Ticks.DayOfYear)
+              .Append("  season ").Append(Ticks.Season).Append('\n');
+
+            foreach (Pawn p in _pawns)
+            {
+                sb.Append(p.Id).Append(p.Alive ? "  " : " (dead) ")
+                  .Append(p.Position).Append("  ")
+                  .Append(p.Jobs.CurrentJob != null ? p.Jobs.CurrentJob.ToString() : "-")
+                  .Append("  food ").Append(p.Needs.Food.CurLevel.ToString("0.00"))
+                  .Append(" water ").Append(p.Needs.Water.CurLevel.ToString("0.00"))
+                  .Append(" rest ").Append(p.Needs.Rest.CurLevel.ToString("0.00"))
+                  .Append(" hp ").Append(p.Health.ToString("0.00"))
+                  .Append("  done ").Append(p.Jobs.JobsDone).Append('\n');
+            }
+
+            return sb.ToString();
         }
 
         private void GenerateTerrain()
@@ -123,6 +146,31 @@ namespace Agon.Bootstrap
                 Map.Edifices.Set(new Vector2Int(x, y + i), EdificeKind.Wall, material);
                 Map.Edifices.Set(new Vector2Int(x + width - 1, y + i), EdificeKind.Wall, material);
             }
+        }
+
+        /// <summary>
+        /// The things the pawns need in order to have anything to do: beds to sleep in,
+        /// a larder to eat from, a water butt, and a pond to fall back on when the butt
+        /// runs dry. Without these every pawn would want for something it could never
+        /// reach, so the job giver would hand out nothing but Wait.
+        /// </summary>
+        private void PlaceThings()
+        {
+            int ox = Map.Width / 2 - 9;
+            int oy = Map.Height / 2 - 5;
+
+            // beds down one side of the first room, one per pawn up to the space
+            for (int i = 0; i < Mathf.Min(PawnCount, 6); i++)
+                Map.Things.Add(ThingKind.Bed, new Vector2Int(ox + 2 + i, oy + 7));
+
+            Map.Things.Add(ThingKind.FoodStore, new Vector2Int(ox + 3, oy + 2), 24f);
+            Map.Things.Add(ThingKind.WaterSource, new Vector2Int(ox + 5, oy + 2), 18f);
+            Map.Things.Add(ThingKind.Hearth, new Vector2Int(ox + 4, oy + 4));
+
+            // a pond outside, so thirst has somewhere to go once the butt is empty
+            for (int y = oy - 2; y <= oy - 1; y++)
+                for (int x = ox + 12; x <= ox + 14; x++)
+                    Map.Terrain.Set(new Vector2Int(x, y), TerrainKind.Water);
         }
 
         private void SpawnPawns()

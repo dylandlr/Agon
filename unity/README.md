@@ -93,15 +93,43 @@ materials, the full wall rendering path, needs (food/water/rest) with the
 cold-makes-hunger-fall-faster coupling, pawn health, and a bootstrap that puts a
 camp on screen.
 
-Not ported yet: worldgen (terrain is a placeholder scatter), pathfinding, the job
-system, emergent tech and staged building, animals and ecology, weather and
-temperature, rivals, the glossary, and saving. Pawns currently stand still and have
-needs; they do not act on them.
+Also ported: A* pathfinding, path following with terrain cost, and the job system —
+pawns now act on their needs. `JobGiver` picks the most urgent need, `Job` records
+what to do, `JobDriver` carries it out over ticks (walk there, then work), and
+`JobTracker` holds the one job a pawn has and asks for another when it ends.
+`ThingGrid` holds what there is to use — beds, a larder, a water butt — with
+reservation, so two pawns are never sent to the same bed.
+
+Not ported yet: worldgen (terrain is a placeholder scatter), emergent tech and staged
+building, migration and ruins, animals and ecology, weather and temperature, rivals,
+the glossary, and saving.
+
+## How the pathfinding and jobs work
+
+**A\*** over the grid, eight-directional, with two rules that matter:
+
+- **No corner cutting.** A diagonal step needs both of the cells it passes between to
+  be walkable, or pawns slip through the join between two wall corners and walk out
+  of sealed rooms.
+- **Octile heuristic.** Straight-line distance underestimates grid movement badly
+  enough that A\* explores most of the map; octile is the exact cost of an
+  unobstructed eight-way walk, so it stays admissible and still prunes.
+
+The open set is a binary heap; closed cells use a generation-stamped array rather
+than a HashSet, so repeat searches on one map allocate nothing after the first.
+
+**Jobs** follow RimWorld's Job / JobDriver split: the job is a plain record (what,
+where, to what), and the behaviour lives in the driver, so a job can be cancelled or
+saved without carrying a state machine. Every driver is walk-then-work, which is the
+shape almost all of them have.
 
 ## Notes for the next round
 
 - `WallRenderer` draws with `Graphics.DrawMesh` each frame. Once wall counts grow,
   move to a `MeshRenderer` per material, or to `Graphics.RenderMeshIndirect`.
+- `JobGiver` re-offers an unreachable target every tick, so a pawn that cannot get
+  to the only store retries forever rather than giving up on it for a while. It is
+  correct but wasteful; a short cooldown on a failed target is the fix.
 - `AgonGame.GenerateTerrain` is a placeholder. The HTML build's worldgen (ramps,
   pads, caves, rivers, biomes) is the real target and is the largest single piece
   left.

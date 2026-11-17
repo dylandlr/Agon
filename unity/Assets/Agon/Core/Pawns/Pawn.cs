@@ -12,6 +12,8 @@ namespace Agon.Core
         public readonly string Id;
         public readonly Map Map;
         public readonly NeedsTracker Needs;
+        public readonly PathFollower Path;
+        public readonly JobTracker Jobs;
 
         public Vector2Int Position;
 
@@ -36,6 +38,8 @@ namespace Agon.Core
             Map = map;
             Position = position;
             Needs = new NeedsTracker(this);
+            Path = new PathFollower(this);
+            Jobs = new JobTracker(this);
         }
 
         public void Tick()
@@ -44,7 +48,15 @@ namespace Agon.Core
                 return;
 
             Needs.NeedsTrackerTick();
+            Jobs.Tick();
             HealthTick();
+
+            // a pawn that just died must not keep a bed or a store claimed
+            if (!Alive)
+            {
+                Jobs.EndCurrentJob();
+                Map.Things.ReleaseAll(this);
+            }
         }
 
         private void HealthTick()

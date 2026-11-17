@@ -16,6 +16,8 @@ namespace Agon.Core
         public readonly TerrainGrid Terrain;
         public readonly EdificeGrid Edifices;
         public readonly LinkGrid Links;
+        public readonly ThingGrid Things;
+        public readonly PathFinder Pathing;
 
         public int CellCount => Width * Height;
 
@@ -30,6 +32,8 @@ namespace Agon.Core
             Terrain = new TerrainGrid(this);
             Edifices = new EdificeGrid(this);
             Links = new LinkGrid(this);
+            Things = new ThingGrid(this);
+            Pathing = new PathFinder(this);
         }
 
         public bool InBounds(Vector2Int c) =>

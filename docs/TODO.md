@@ -130,3 +130,47 @@ Not done, carried forward:
   finds no trace of its old camp. Ruins would be the richer behaviour.
 - Interior walls still push shadow sprites (`wsh`) the same as exterior ones.
 - Larder never fills; the thirst loop is still untraced.
+
+
+## Round 22 — ruins, and the Unity port gets pathfinding and jobs (2026-11-17)
+
+Verified:
+- **Ruins** (see the r22 commit for the detail): a camp a colony walks away from stays
+  standing, decaying over about a decade, and sits alongside a rebuild rather than
+  replacing it. Returning to your own camp is a head start: measured at seed 3, 59 of
+  65 walls and all 80 floors still there a year on, rebuilding to 65 and 5 doors.
+
+- **Unity port: A\* pathfinding and the job system.** Pawns now act on their needs
+  instead of merely having them.
+  - `PathFinder` — eight-directional A\* with a binary heap and generation-stamped
+    closed set, octile heuristic, and no corner cutting (a diagonal needs both
+    flanking cells open, or pawns walk out of sealed rooms along the diagonals).
+  - `PathFollower` — walks the path paying each cell's terrain cost, and recomputes
+    when something blocks the way after the path was found.
+  - `Job` / `JobDriver` / `JobGiver` / `JobTracker` — RimWorld's split: the job is a
+    plain record, the driver carries it out over ticks as walk-then-work, the giver
+    picks by which need has fallen furthest past its own threshold, and the tracker
+    holds the one current job. Drivers for Eat, Drink, Sleep, Goto, Wait.
+  - `ThingGrid` — beds, larder, water butt, hearth, with stock and reservation, so
+    two pawns are never sent to the same bed and an empty store is skipped. Falls
+    back to drinking from open water, standing on the bank.
+  - `AgonGame` places those things and has a `DebugReport()` giving a line per pawn.
+  - Still not compiled (no Unity, no .NET, unity.com unreachable). All 26 .cs files
+    parse clean under a C# grammar, and both subsystems were re-implemented
+    independently in JS and run: `tests/verify_astar.mjs` (15 checks) and
+    `tests/verify_jobs.mjs` (24 checks), both green.
+  - The cross-check earned its keep three times: two of my A\* fixtures were wrong
+    maps rather than wrong code (one "doorway" map was in fact sealed), and the sleep
+    test's loop exited while the pawn was still in bed, so its "and they get up
+    afterwards" assertion would have failed in Unity. All fixed before commit.
+
+Not done, carried forward:
+- **RimWorld-inspired UI overhaul.** Still wants reference shots and a direction
+  before any code: the dock is a fixed 460px centred bar, and a RimWorld layout wants
+  a bottom-left inspector, bottom-right minimap and an architect-style build menu.
+- **Rock and mountain textures.** Still needs a direction on what is wrong with them.
+- Unity: worldgen is next, then the emergent tech and staged building.
+- Unity: `JobGiver` re-offers an unreachable target every tick; a cooldown on a failed
+  target would stop the retry loop.
+- Interior walls still push shadow sprites (`wsh`) the same as exterior ones.
+- Larder never fills in the HTML build; the thirst loop is still untraced.
