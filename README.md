@@ -58,3 +58,13 @@ needed again.
 - Never push to `main`.
 - The Design-canvas artifact (claude.ai) holds an older copy; this branch is
   canonical for the colony sim.
+
+## Unity port
+
+`unity/` holds the Unity 6 port of the sim — see `unity/README.md`. The HTML build
+in `src/` remains the reference implementation and the one that runs today; the
+Unity tree grows system by system against it.
+
+The wall rendering in both is ported from RimWorld's own linked-texture drawing;
+`docs/walls-rimworld-linked-atlas.md` describes the algorithm and the differences
+between the two implementations.
