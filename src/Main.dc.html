@@ -2829,13 +2829,38 @@ function applyCamp(st) {
   const stage = full ? 99 : on.shelter && st.store && st.store.shelterT != null ? Math.floor(((st.tick || 0) - st.store.shelterT) / BUILD_T) : -1;
   for (let i = 0; i < NROOM; i++) on['room' + i] = on.shelter && stage >= i;
   on.annex = !!ANX && on.shelter && on.carpentry && on.bedding && stage >= NROOM + 4;
+  // ruins: a camp a colony walked away from. What it had finished still stands here,
+  // less the share of the walls that weather has taken — more of it the longer the
+  // place has stood empty. Ruins sit alongside a rebuild rather than replacing it: a
+  // group the colony has put back up is whole, and a group it has not reached yet
+  // shows the old broken walls. That way returning to your own camp is a head start
+  // (walls and floors already there, so the rooms go up around them) instead of
+  // either a pristine house or a museum piece. Doors, bedding and the fire come only
+  // from the living colony — timber, hides and a lit hearth do not survive being left.
+  const R = st.ruin && !full ? st.ruin : null;
+  let ruinYrs = 0, ruinOn = null;
+  if (R) {
+    ruinYrs = Math.max(0, ((st.tick || 0) - (R.tick || 0)) / YEAR);
+    ruinOn = {}; for (const k in on) ruinOn[k] = !!(R.on && R.on[k]) && !on[k];
+  }
   on.preannex = !!ANX && !on.annex && (() => { const [x] = [...ANXDK][0].split(',').map(Number); let g = null; for (let i = 0; i < NROOM; i++) if (x >= ROOMX[i][0] && x <= ROOMX[i][1]) g = 'room' + i; return !!(g && on[g]); })();
-  const sig = Object.keys(on).map((k) => (on[k] ? 1 : 0)).join('');
+  // the collapse advances in quarter-years, so it has to be part of the signature or
+  // the cached early-return would freeze a ruin at the state it was first drawn in
+  const sig = Object.keys(on).map((k) => (on[k] ? 1 : 0)).join('')
+    + (R ? 'R' + Math.floor(ruinYrs * 4) + Object.keys(ruinOn).map((k) => (ruinOn[k] ? 1 : 0)).join('') : '');
   if (sig === campSig) return false;
   campSig = sig; Object.assign(CAMPON, on);
   const tileOn = (k) => { const [x, y] = k.split(',').map(Number), g = campGrp(x, y); return g ? !!on[g] : on.shelter; };
-  for (const k of CAMPW0) { if (tileOn(k)) WALLS.add(k); else WALLS.delete(k); }
-  for (const k of CAMPF0) { if (tileOn(k)) FLOORS.add(k); else FLOORS.delete(k); }
+  // which tiles fall is fixed per camp, so a ruin looks the same each time it is
+  // revisited and simply loses more of itself as the years pass. Gradual on purpose:
+  // a wall or two is down within the year and about a decade takes most of the rest,
+  // where a steeper curve made every ruin over four years old look identical.
+  const h01 = (s0) => { let h = 2166136261; for (let i = 0; i < s0.length; i++) { h ^= s0.charCodeAt(i); h = Math.imul(h, 16777619); } return ((h >>> 0) % 10000) / 10000; };
+  const fall = R ? Math.min(0.7, 0.15 + ruinYrs * 0.06) : 0;
+  const tileRuin = (k) => { if (!R) return false; const [x, y] = k.split(',').map(Number), g = campGrp(x, y); return !!(g ? ruinOn[g] : ruinOn.shelter); };
+  const wallRuin = (k) => tileRuin(k) && h01(k + '|' + (R.tick || 0)) >= fall;
+  for (const k of CAMPW0) { if (tileOn(k) || wallRuin(k)) WALLS.add(k); else WALLS.delete(k); }
+  for (const k of CAMPF0) { if (tileOn(k) || tileRuin(k)) FLOORS.add(k); else FLOORS.delete(k); }
   for (const k of CAMPK) { const [x, y] = k.split(',').map(Number); if (x >= 0 && y >= 0 && x < W && y < H) TILESX[y * W + x] = tileOn(k) ? TILES[y * W + x] : TILES0[y * W + x]; }
   DOORS.length = 0; for (const d of DOORS_ALL) { const k = key(d.x, d.y); if (!CAMPK.has(k) || (ANXDK.has(k) ? on.annex : tileOn(k))) DOORS.push(d); }
   BEDS.length = 0; for (const b of BEDS_ALL) { const k = key(b[0], b[1]); if (ANXK.has(k) ? on.annex : on.bedding) BEDS.push(b); }
@@ -4301,8 +4326,32 @@ class Component extends DCLogic {
   // hold, the stores, and what they have worked out how to do. The camp, its beds and
   // its plots stay behind, because a house cannot be carried. The journey takes days
   // on the clock and the needs those days drain.
+  // which local area the colony is standing in, as a key for anything remembered per
+  // area. The planet seed is part of it because a different planet is a different world.
+  cellKey(st) {
+    const s = st || this.state, pc = s.pcell || { x: 0, y: 0 }, c = s.cell || { x: 0, y: 0 };
+    return (s.planetSeed || 1) + ':' + pc.x + ',' + pc.y + ':' + c.x + ',' + c.y;
+  }
+  ruinHere() { const s = this.state; return (s.ruins || {})[this.cellKey(s)] || null; }
   migrate(cell) {
     const s = this.state, alive = (s.agents || []).filter((a) => a.alive);
+    // leave the camp standing behind: what had been finished when they walked out,
+    // and when, so the decay can be measured from the moment they left
+    // only the emergent game leaves ruins: in the full-camp sandbox the house is
+    // simply always there, so there is nothing that was built and then abandoned
+    const E = this.E;
+    // shelterT is set when this colony started building here and cleared by the walk,
+    // so it is exactly the test for "they built this camp" — CAMPON alone is not, since
+    // it still holds the previous area's state until applyCamp next runs
+    if (E && E.CAMPON && (s.store || {}).shelterT != null && s.disc === 'emergent' && !(window.AGON_P || {}).fullCamp) {
+      const ruins = Object.assign({}, s.ruins || {});
+      ruins[this.cellKey(s)] = { tick: s.tick || 0, on: Object.assign({}, E.CAMPON), mat: (s.store || {}).wallMat, left: alive.length };
+      // a long game hops many times; keep only the most recently abandoned camps so
+      // this cannot grow without bound in the save
+      const ks = Object.keys(ruins);
+      if (ks.length > 32) { ks.sort((a, b) => ruins[a].tick - ruins[b].tick).slice(0, ks.length - 32).forEach((k) => delete ruins[k]); }
+      this.setState({ ruins });
+    }
     if (!alive.length) { this.setWorld(undefined, undefined, undefined, undefined, undefined, undefined, cell); return; }
     // distance is measured on whichever map the move was made from: a step to the
     // next local cell is a short walk, a move to another planet region is a trek, so
@@ -4531,7 +4580,7 @@ class Component extends DCLogic {
       for (const k of was) if (!nt.includes(k)) lorePend.push({ t: tick, text: 'The knowledge of ' + A.techOf(k).label.toLowerCase() + ' is lost: no one alive remembers how.', kind: 'warn' });
       store.techs = nt;
     }
-    if (s.disc === 'emergent' && store.techs && store.techs.includes('shelter') && store.shelterT == null) store.shelterT = tick; this.E.applyCamp({ disc: s.disc, store, tick });
+    if (s.disc === 'emergent' && store.techs && store.techs.includes('shelter') && store.shelterT == null) store.shelterT = tick; this.E.applyCamp({ disc: s.disc, store, tick, ruin: this.ruinHere() });
     // founders' kit (experiment switch AGON_P.startCloth = tick-0 hide cloak for each adult): a naked founder dropped at -30 C dies in a day, which the tests cannot tell apart from a failure of the colonists' own decisions
     if ((window.AGON_P || {}).startCloth && s.tick < 2) { const av = {}; for (const k of A.MAT_ORDER) av[k] = 9; for (const a of agents) if (!a.fac && !a.gear.clothing) { const m = A.pickMats('clothing', 'cloak', av); if (m) a.gear = { ...a.gear, clothing: A.craftStats('clothing', 'cloak', m, A.qualityOf((a.trained || 0) / YEAR, 0.5)) }; } }
     // how much food the camp can keep: 8 per living colonist (16 at least), doubled once they know storage; a winter costs each colonist about 8 units, so a full store is one winter for everyone
@@ -5886,7 +5935,7 @@ class Component extends DCLogic {
     vpCalc();
     const { BIOMEK: BIOMEK_, inCamp, windF, TILES, CAVE_AT, CAVE_IN, caveUri, NOTILE, bushBox, WPX, HPX, W, H, ASZ, svgBg, msgKeyOf, statusesOf, injuriesOf, fxOf, fightTag, BEDS, bedParts, DOORS, doorParts, doorOpen, pawnBox, animalBox, HEARTH, MTN, hull, svgUri, DLH, OBJS, CANOPY_LH, PLH, ALH, occLayers, AMB, findTarget, terAt, SHELVES, TABLE, rs, BANDC, elevM, TERN, MINI_URI, hitTest, SCENERY, RIVAL_PROPS, EMBERS, SHADOWS, shapeSt } = this.E;
     window.__anvar = A.VAR_OF[BIOMEK_] || '';
-    const s = this.state, E0 = this.E, ms = Math.round(A.TICK_MS / s.speed); E0.applyCamp(s); const q04 = (v) => (Math.round(v * 50) / 50).toFixed(2);
+    const s = this.state, E0 = this.E, ms = Math.round(A.TICK_MS / s.speed); E0.applyCamp(Object.assign({ ruin: this.ruinHere() }, s)); const q04 = (v) => (Math.round(v * 50) / 50).toFixed(2);
     CUE.p = s.cueP !== false; CUE.t = s.cueT !== false; CUE.i = s.cueI !== false;
     const sel = s.agents[s.sel];
     const pct = (v) => Math.round(v * 100) + '%';
