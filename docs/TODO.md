@@ -45,3 +45,37 @@ Not done / open:
   (camp spring, passable forest, thirst fixes, tech-gated camp, soil model) is
   missing; those markers all appear MORE here (spring 14 -> 21, soil 23 -> 42).
   The earlier "merge round pending" note was wrong. colony-sim is canonical.
+
+
+## Round 20 — hearth light, camp dirt (2026-11-17)
+
+Verified:
+- **Hearth light no longer outlives the hearth.** The night-darkness overlay's mask
+  punched its lit circles at the hearth position unconditionally, so with the fire
+  gone (`CAMPON.fire` false) a bright pool stayed where the hearth had been. The
+  fire sprite and its glow rings were already gated; the mask was not. Now the
+  hearth hole and the shadows it casts are built only when the fire exists, which
+  also skips most of the light-mask work when it doesn't. Measured at night, seed 3:
+  fire on -> 4 mask circles, fire gone -> 0, night overlay still drawn in both.
+- **The camp is no longer a permanent dirt scar.** Worldgen ran the terrain decision
+  only for tiles outside the camp (`if (!inCamp(x,y)) {...}`), so every camp tile
+  fell through to the `let t = 0` default and became soil. Grass could only creep
+  back in from the perimeter: measured at seed 3, 174 of 174 camp cells were soil at
+  spawn and still 140 after 8 in-game years, about four tiles reclaimed a year.
+  Camp tiles now take the same coverage-model terrain as the rest of the map
+  (`b > GTH ? grass : soil`), with forest excluded since trees would block building.
+  Seed 3 goes 174 -> 4 soil at spawn and reaches 0 by year 8.
+  Checked with real biome switching via `setWorld` (an earlier run that passed
+  `AGON_P.biome` silently stayed temperate and produced identical numbers for every
+  biome — the result is read from component state, not AGON_P): temperate 201 grass
+  / 10 soil, desert 210 soil / 0 grass, tundra 221 soil, savanna 197 soil / 5 grass,
+  jungle 159 grass, taiga 205 grass. Zero unbuildable camp tiles in any of them.
+
+Not done, carried forward:
+- **Rock and mountain textures need work.** Not started this round.
+- **Unity port: pathfinding and the job system.** Pawns in the Unity build have
+  needs but no way to act on them; that is the next system, then worldgen.
+- Interior walls still push shadow sprites (`wsh`) the same as exterior ones.
+- Window size unchanged.
+- Larder never fills; the thirst loop (colonists walking to camp with water already
+  in the skin) is still untraced.

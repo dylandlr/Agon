@@ -1528,6 +1528,12 @@ for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
   const b = COVB(x, y) + 2.0 * ripD(x, y);
   const e = ELEV[y * W + x];
   let t = 0;
+  // the camp is levelled and held clear of water, cliff and rock so it can be built
+  // on — but that is no reason for it to be bare. Grass grows here as it does
+  // anywhere else of the same fertility; only forest is kept out, since trees would
+  // block building. Stamping the whole footprint as soil left a dirt scar that
+  // regrew at about four tiles a year and so never closed.
+  if (inCamp(x, y)) t = b > GTH ? 1 : 0;
   if (!inCamp(x, y)) { if (isLake(x, y)) t = 4; else if (SEAM && e < 0.5 && nearSea(x, y, 2)) t = 10; else if (e >= 0.86) t = 5; else if (e >= 0.36) { const fe = FERTN(x, y), thr = 0.34 + 1.15 * (e - 0.36) - ((window.AGON_P || {}).hiGrass ?? 0), green = !B.lava && B.snow < 0.9 && B.bush >= 8; t = green && e < 0.8 && fe > thr + 0.28 && B.forest > 0.4 && FTH < 99 ? 2 : green && e < 0.84 && fe > thr ? 1 : 3; } else if (b > FTH) t = 2; else if (b > GTH) t = 1; }
   TER.push(t);
 }
@@ -6011,22 +6017,28 @@ class Component extends DCLogic {
     const mtnShadowStyle = 'position: absolute; left: 0; top: 0; width: ' + WPX + 'px; height: ' + HPX + 'px; z-index: 4; pointer-events: none; opacity: ' + q04(Math.min(0.5, shOp * 1.15)) + '; background-image: ' + (mtnPolys || 'none') + '; filter: blur(' + ((1 - (LIGHT.softness[weather] ?? 1)) * 4).toFixed(1) + 'px)';
     const warm = Math.max(0, 1 - Math.abs(Math.sin(2 * Math.PI * tph / 50)) * 3.2);
     const hcx = hearth[0] * TS + 24, hcy = hearth[1] * TS + 24;
+    // no fire, no firelight: the hearth's lit circle and the shadows it casts are
+    // built only while the hearth exists, or the night mask keeps a bright hole
+    // where the fire used to be. Skipping the occluders is also most of the
+    // light-mask work, so an unbuilt or lost hearth costs nothing to draw.
+    const fireOn = !!E0.CAMPON.fire;
     const occ = [];
-    for (const d of DOORS) if (!doorOpen(s, d)) occ.push({ r: [d.x * TS, d.y * TS, TS, TS], ht: DLH[0], op: DLH[1] });
-    for (const o of OBJS) {
+    if (fireOn) for (const d of DOORS) if (!doorOpen(s, d)) occ.push({ r: [d.x * TS, d.y * TS, TS, TS], ht: DLH[0], op: DLH[1] });
+    if (fireOn) for (const o of OBJS) {
       if (o.grp && !E0.CAMPON[o.grp]) continue;
       if (o.kind === 'mountain') continue; // rock faces are far from the hearth and tile-shaped occluders read as stray squares
       if (o.foot && Math.hypot(o.foot[0] + o.foot[2] / 2 - hcx, o.foot[1] + o.foot[3] / 2 - hcy) < 330) occ.push({ r: o.foot, ht: o.lh[0], op: o.lh[1] });
       if (o.foot2 && Math.hypot(o.foot2[0] + o.foot2[2] / 2 - hcx, o.foot2[1] + o.foot2[3] / 2 - hcy) < 330) occ.push({ r: o.foot2, ht: CANOPY_LH[0], op: CANOPY_LH[1] });
     }
     // perf: moving pawns/animals only reshape the light mask when they are near the hearth light, and only while it is dark enough to show; rects snap to 6px so the mask string (re-decoded by the browser each time it changes) changes less often
-    const litDark = LM.darkness * LIGHT.darkK >= 0.005, litR = LIGHT.hearth.outer + 48, snap6 = (r) => r.map((v) => Math.round(v / 6) * 6), nearH = (r) => Math.hypot(r[0] + r[2] / 2 - hcx, r[1] + r[3] / 2 - hcy) < litR;
+    const litDark = fireOn && LM.darkness * LIGHT.darkK >= 0.005, litR = LIGHT.hearth.outer + 48, snap6 = (r) => r.map((v) => Math.round(v / 6) * 6), nearH = (r) => Math.hypot(r[0] + r[2] / 2 - hcx, r[1] + r[3] / 2 - hcy) < litR;
     if (litDark) {
       for (const a of s.agents) if (a.alive && !(a.act === 'sleep' && BEDS.some(([bx, by]) => bx === a.x && by === a.y))) { const r = pawnBox(a).foot; if (nearH(r)) occ.push({ r: snap6(r), ht: PLH[0], op: PLH[1] }); }
       for (const p of s.animals) if (!p.dead) { const r = animalBox(p).foot; if (nearH(r)) occ.push({ r: snap6(r), ht: ALH[p.k][0], op: ALH[p.k][1] }); }
     }
     const layers = occLayers([hcx, hcy], occ);
-    const maskUri = svgUri('<defs><mask id="m" color-interpolation="sRGB" maskUnits="userSpaceOnUse" x="0" y="0" width="' + WPX + '" height="' + HPX + '"><rect width="' + WPX + '" height="' + HPX + '" fill="#fff"/><circle cx="' + hcx + '" cy="' + hcy + '" r="' + LIGHT.hearth.outer + '" fill="#808080"/><circle cx="' + hcx + '" cy="' + hcy + '" r="' + LIGHT.hearth.inner + '" fill="#000"/>' + layers.map((g) => '<path d="' + g.d + '" fill="#fff" fill-opacity="' + g.op + '" fill-rule="evenodd"/>').join('') + '</mask></defs><rect width="' + WPX + '" height="' + HPX + '" fill="#000" mask="url(#m)"/>');
+    const hearthHole = !fireOn ? '' : '<circle cx="' + hcx + '" cy="' + hcy + '" r="' + LIGHT.hearth.outer + '" fill="#808080"/><circle cx="' + hcx + '" cy="' + hcy + '" r="' + LIGHT.hearth.inner + '" fill="#000"/>' + layers.map((g) => '<path d="' + g.d + '" fill="#fff" fill-opacity="' + g.op + '" fill-rule="evenodd"/>').join('');
+    const maskUri = svgUri('<defs><mask id="m" color-interpolation="sRGB" maskUnits="userSpaceOnUse" x="0" y="0" width="' + WPX + '" height="' + HPX + '"><rect width="' + WPX + '" height="' + HPX + '" fill="#fff"/>' + hearthHole + '</mask></defs><rect width="' + WPX + '" height="' + HPX + '" fill="#000" mask="url(#m)"/>');
     const maskCss = '-webkit-mask-image: ' + maskUri + '; mask-image: ' + maskUri + '; mask-size: ' + WPX + 'px ' + HPX + 'px; mask-repeat: no-repeat';
     const glowUri = (rad, a) => svgUri('<circle cx="' + hcx + '" cy="' + hcy + '" r="' + rad + '" fill="rgb(255,150,70)" fill-opacity="' + a + '"/>' + layers.map((g) => '<path d="' + g.d + '" fill="#000" fill-opacity="' + g.op + '" fill-rule="evenodd"/>').join(''));
     const ring = (rad, a, night, ms, flick) => 'position: absolute; left: 0; top: 0; width: ' + WPX + 'px; height: ' + HPX + 'px; pointer-events: none; z-index: 61; mix-blend-mode: screen; background-image: ' + glowUri(rad, a) + '; opacity: ' + q04(Math.min(1, night * 1.4)) + (flick ? '; animation: flicker 1.1s ease-in-out infinite' : '');
