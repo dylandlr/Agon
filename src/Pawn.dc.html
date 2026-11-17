@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Agent pawn</title>
+<script src="./support.js"></script>
+<script src="./art.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>body{margin:0}</style>
+</helmet>
+<svg viewBox="0 0 48 48" width="{{size}}" height="{{size}}" aria-hidden="true" style="display: block; overflow: visible">
+  <g transform="{{tf}}">
+  <ellipse cx="24" cy="43" rx="16" ry="5.2" fill="#000000" opacity="{{shOpO}}"></ellipse>
+  <ellipse cx="24" cy="43" rx="13" ry="3.8" fill="#000000" opacity="{{shOp}}"></ellipse>
+  <g opacity="{{fleshOp}}">
+  <g style="{{bobAnim}}"><g transform="{{upTf}}"><g style="{{headAnim}}"><g transform="{{headTf}}"><sc-for list="{{hairBack}}" as="q" hint-placeholder-count="0"><path d="{{q.d}}" fill="{{q.fill}}" stroke="{{q.stroke}}" stroke-width="{{q.sw}}" opacity="{{q.op}}" transform="{{q.tf}}" stroke-linecap="round" stroke-linejoin="round"></path></sc-for></g></g></g></g>
+  <g style="{{legAnimL}}"><path d="{{legLd}}" fill="{{legCL}}" stroke="#1c110b" stroke-width="1.8" stroke-linejoin="round"></path>
+  <ellipse cx="{{feetL}}" cy="{{feetLy}}" rx="{{feetRx}}" ry="{{bootRy}}" fill="{{bootCL}}" stroke="#1c110b" stroke-width="1.3"></ellipse></g>
+  <g style="{{legAnimR}}"><path d="{{legRd}}" fill="{{legC}}" stroke="#1c110b" stroke-width="1.8" stroke-linejoin="round"></path>
+  <ellipse cx="{{feetR}}" cy="{{feetRy}}" rx="{{feetRx}}" ry="{{bootRy}}" fill="{{bootC}}" stroke="#1c110b" stroke-width="1.3"></ellipse></g>
+  <g transform="translate(0 {{footDy}})"><sc-for list="{{gFeet}}" as="q" hint-placeholder-count="0"><path d="{{q.d}}" fill="{{q.fill}}" stroke="{{q.stroke}}" stroke-width="{{q.sw}}" stroke-linecap="round" stroke-linejoin="round"></path></sc-for>
+  <sc-for list="{{dFeet}}" as="q" hint-placeholder-count="0"><path d="{{q.d}}" fill="{{q.fill}}" stroke="{{q.stroke}}" stroke-width="{{q.sw}}" opacity="{{q.op}}" stroke-linecap="round" stroke-linejoin="round"></path></sc-for></g>
+  <g style="{{bobAnim}}"><g transform="{{upTf}}">
+  <g style="{{armAnimB}}"><sc-for list="{{armsBack}}" as="q" hint-placeholder-count="0"><path d="{{q.d}}" fill="{{q.fill}}" stroke="{{q.stroke}}" stroke-width="{{q.sw}}" opacity="{{q.op}}" stroke-linecap="round" stroke-linejoin="round"></path></sc-for></g>
+  <sc-for list="{{outBack}}" as="q" hint-placeholder-count="0"><path d="{{q.d}}" fill="{{q.fill}}" stroke="{{q.stroke}}" stroke-width="{{q.sw}}" opacity="{{q.op}}" stroke-linecap="round" stroke-linejoin="round"></path></sc-for>
+  <path d="{{neckBD}}" fill="{{skinShade}}" stroke="#1c110b" stroke-width="1.4" stroke-linejoin="round"></path>
+  <path d="{{torsoD}}" fill="{{clothShade}}" stroke="#1c110b" stroke-width="2" stroke-linejoin="round"></path>
+  <path d="{{torsoD}}" transform="{{torsoLit}}" fill="{{cloth}}"></path>
+  <sc-for list="{{bodyLines}}" as="q" hint-placeholder-count="0"><path d="{{q.d}}" fill="none" stroke="{{q.stroke}}" stroke-width="{{q.sw}}" opacity="{{q.op}}" stroke-linecap="round"></path></sc-for>
+  <sc-for list="{{outFront}}" as="q" hint-placeholder-count="0"><path d="{{q.d}}" fill="{{q.fill}}" stroke="{{q.stroke}}" stroke-width="{{q.sw}}" opacity="{{q.op}}" stroke-linecap="round" stroke-linejoin="round"></path></sc-for>
+  <sc-for list="{{dTorso}}" as="q" hint-placeholder-count="0"><path d="{{q.d}}" fill="{{q.fill}}" stroke="{{q.stroke}}" stroke-width="{{q.sw}}" opacity="{{q.op}}" stroke-linecap="round" stroke-linejoin="round"></path></sc-for>
+  <path d="{{beltD}}" fill="none" stroke="#2a1d15" stroke-width="2" stroke-linecap="butt"></path>
+  <path d="{{torsoD}}" fill="none" stroke="#1c110b" stroke-width="2" stroke-linejoin="round"></path>
+  <sc-for list="{{gBody}}" as="q" hint-placeholder-count="0"><path d="{{q.d}}" fill="{{q.fill}}" stroke="{{q.stroke}}" stroke-width="{{q.sw}}" stroke-linecap="round" stroke-linejoin="round"></path></sc-for>
+  <sc-for list="{{dNeck}}" as="q" hint-placeholder-count="0"><path d="{{q.d}}" fill="{{q.fill}}" stroke="{{q.stroke}}" stroke-width="{{q.sw}}" opacity="{{q.op}}" stroke-linecap="round" stroke-linejoin="round"></path></sc-for>
+  <path d="{{neckD}}" fill="{{skinShade}}" stroke="#1c110b" stroke-width="1.4" stroke-linejoin="round"></path>
+  <g style="{{armAnimL}}"><sc-for list="{{armsFrontL}}" as="q" hint-placeholder-count="0"><path d="{{q.d}}" fill="{{q.fill}}" stroke="{{q.stroke}}" stroke-width="{{q.sw}}" opacity="{{q.op}}" stroke-linecap="round" stroke-linejoin="round"></path></sc-for></g>
+  <g style="{{armAnimR}}"><sc-for list="{{armsFrontR}}" as="q" hint-placeholder-count="0"><path d="{{q.d}}" fill="{{q.fill}}" stroke="{{q.stroke}}" stroke-width="{{q.sw}}" opacity="{{q.op}}" stroke-linecap="round" stroke-linejoin="round"></path></sc-for></g>
+  <sc-for list="{{gHands}}" as="q" hint-placeholder-count="0"><path d="{{q.d}}" fill="{{q.fill}}" stroke="{{q.stroke}}" stroke-width="{{q.sw}}" stroke-linecap="round" stroke-linejoin="round"></path></sc-for>
+  <g style="{{headAnim}}"><g transform="{{headTf}}">
+  <sc-for list="{{rHeadBack}}" as="q" hint-placeholder-count="0"><path d="{{q.d}}" fill="{{q.fill}}" stroke="{{q.stroke}}" stroke-width="{{q.sw}}" opacity="{{q.op}}" transform="{{q.tf}}" stroke-linecap="round" stroke-linejoin="round"></path></sc-for>
+  <circle cx="24" cy="19.5" r="9.6" fill="{{skinShade}}" stroke="#1c110b" stroke-width="2"></circle>
+  <circle cx="23.2" cy="18.7" r="8.2" fill="{{skin}}"></circle>
+  <sc-for list="{{rSkin}}" as="q" hint-placeholder-count="0"><path d="{{q.d}}" fill="{{q.fill}}" stroke="{{q.stroke}}" stroke-width="{{q.sw}}" opacity="{{q.op}}" transform="{{q.tf}}" stroke-linecap="round" stroke-linejoin="round"></path></sc-for>
+  <sc-if value="{{hasTint}}" hint-placeholder-val="{{ false }}"><circle cx="24" cy="19.5" r="8.4" fill="{{tint}}" opacity="0.3"></circle></sc-if>
+  <sc-for list="{{rFace}}" as="q" hint-placeholder-count="0"><path d="{{q.d}}" fill="{{q.fill}}" stroke="{{q.stroke}}" stroke-width="{{q.sw}}" opacity="{{q.op}}" transform="{{q.tf}}" stroke-linecap="round" stroke-linejoin="round"></path></sc-for>
+  <sc-for list="{{rFront}}" as="q" hint-placeholder-count="0"><path d="{{q.d}}" fill="{{q.fill}}" stroke="{{q.stroke}}" stroke-width="{{q.sw}}" opacity="{{q.op}}" transform="{{q.tf}}" stroke-linecap="round" stroke-linejoin="round"></path></sc-for>
+  <sc-for list="{{gHead}}" as="q" hint-placeholder-count="0"><path d="{{q.d}}" fill="{{q.fill}}" stroke="{{q.stroke}}" stroke-width="{{q.sw}}" stroke-linecap="round" stroke-linejoin="round"></path></sc-for>
+  </g></g>
+  <!-- side and three-quarter views: the near arm hangs from the shoulder in front of the neck and the jaw, so it is drawn above the head -->
+  <g style="{{armAnimL}}"><sc-for list="{{armsOverL}}" as="q" hint-placeholder-count="0"><path d="{{q.d}}" fill="{{q.fill}}" stroke="{{q.stroke}}" stroke-width="{{q.sw}}" opacity="{{q.op}}" stroke-linecap="round" stroke-linejoin="round"></path></sc-for></g>
+  <g style="{{armAnimR}}"><sc-for list="{{armsOverR}}" as="q" hint-placeholder-count="0"><path d="{{q.d}}" fill="{{q.fill}}" stroke="{{q.stroke}}" stroke-width="{{q.sw}}" opacity="{{q.op}}" stroke-linecap="round" stroke-linejoin="round"></path></sc-for></g>
+  <sc-for list="{{gHandsOver}}" as="q" hint-placeholder-count="0"><path d="{{q.d}}" fill="{{q.fill}}" stroke="{{q.stroke}}" stroke-width="{{q.sw}}" stroke-linecap="round" stroke-linejoin="round"></path></sc-for>
+  </g>
+  </g></g>
+  <g transform="{{upTf}}"><g style="{{heldAnim}}"><g transform="{{heldTf}}"><sc-for list="{{gHeld}}" as="q" hint-placeholder-count="0"><path d="{{q.d}}" fill="{{q.fill}}" stroke="{{q.stroke}}" stroke-width="{{q.sw}}" stroke-linecap="round" stroke-linejoin="round"></path></sc-for></g></g></g>
+  <sc-if value="{{rotOn}}" hint-placeholder-val="{{ false }}">
+    <sc-for list="{{rotItems}}" as="q" hint-placeholder-count="6"><path d="{{q.d}}" fill="{{q.fill}}" stroke="{{q.stroke}}" stroke-width="{{q.sw}}" stroke-linejoin="round"></path></sc-for>
+  </sc-if>
+  <sc-if value="{{boneOn}}" hint-placeholder-val="{{ false }}">
+    <g opacity="{{boneOp}}"><sc-for list="{{boneItems}}" as="b" hint-placeholder-count="30"><path d="{{b.d}}" transform="{{b.tf}}" fill="{{b.fill}}" stroke="{{b.stroke}}" stroke-width="{{b.sw}}" stroke-linecap="round" stroke-linejoin="round"></path></sc-for></g>
+  </sc-if>
+  <sc-if value="{{fly1}}" hint-placeholder-val="{{ false }}"><circle cx="19" cy="14" r="0.9" fill="#1c110b" style="animation: ag-fly 0.9s ease-in-out infinite"></circle></sc-if>
+  <sc-if value="{{fly2}}" hint-placeholder-val="{{ false }}"><circle cx="30" cy="27" r="0.9" fill="#1c110b" style="animation: ag-fly 0.7s ease-in-out -0.3s infinite"></circle></sc-if>
+  <sc-if value="{{fly3}}" hint-placeholder-val="{{ false }}"><circle cx="24" cy="33" r="0.9" fill="#1c110b" style="animation: ag-fly 1.1s ease-in-out -0.6s infinite"></circle></sc-if>
+</g>
+</svg>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"muscle":{"editor":"float","default":1},"stamina":{"editor":"float","default":1},"frame":{"editor":"float","default":1},"fat":{"editor":"float","default":1},"strength":{"editor":"float","default":1},"build":{"editor":"enum","default":"average","options":["lean","lanky","average","athletic","stocky","barrel","pear","stout","heavy","child"]},"scale":{"editor":"float","default":1},"decay":{"editor":"float","default":0},"grow":{"editor":"float","default":-1},"old":{"editor":"float","default":0},"shadow":{"editor":"boolean","default":true},"ge":{"editor":"string","default":""},"sx":{"editor":"string","default":"M"},"a0":{"editor":"float","default":0.5},"a1":{"editor":"float","default":0.5},"a2":{"editor":"float","default":0.5},"closed":{"editor":"boolean","default":false},"lk":{"editor":"string","default":""},"phy":{"editor":"string","default":""},"gait":{"editor":"enum","default":"","options":["","walk","run","carry"]},"cm":{"editor":"string","default":""},"cmN":{"editor":"float","default":0},"lx":{"editor":"float","default":0},"ly":{"editor":"float","default":1},"cmD":{"editor":"float","default":540},"lmp":{"editor":"float","default":0},"lmpS":{"editor":"float","default":1},"gaitMs":{"editor":"float","default":600},"look":{"editor":"enum","default":"S","options":["S","N","E","SE","NE"]},"expression":{"editor":"enum","default":"neutral","options":["neutral","happy","tired","hungry","thirsty","scared","angry","hurt","sick","cold","sleep","dead"]},"wa":{"editor":"string","default":""},"wc":{"editor":"string","default":""},"ww":{"editor":"string","default":""},"size":{"editor":"int","default":48},"$preview":{"width":96,"height":96}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const A = window.AgonArt, p = this.props;
+    const dm = A.pawnDims(p.strength, p.build, p.scale, { muscle: p.muscle, stamina: p.stamina, frame: p.frame, fat: p.fat, phy: p.phy }, { grow: p.grow == null ? -1 : p.grow, old: p.old || 0 });
+    const dc = (p.decay || 0) > 0 ? A.decayOf(p.decay) : null;
+    const bloat = dc ? dc.bloat : 0, bw0 = dm.bw * (1 + bloat), bh = dm.bh * (1 + bloat * 0.7);
+    const T = dc ? dc.tint : (c) => c;
+    const KXv = { S: 1, N: 1, E: 0.7, SE: 0.86, NE: 0.86 }[['S', 'N', 'E', 'SE', 'NE'].includes(p.look) ? p.look : 'S'], bw = bw0 * KXv;
+    let L = A.look(p.a0 ?? 0.5, p.a1 ?? 0.5, p.a2 ?? 0.5, p.ge || null, p.sx || 'M');
+    if (p.lk) { try { L = { ...L, ...JSON.parse(p.lk) }; } catch (e) { /* ignore bad override */ } }
+    const E = A.EXPR[p.closed && p.expression !== 'dead' ? 'sleep' : p.expression] || A.EXPR.neutral;
+    const ex = E.eyes, LK = ['S', 'N', 'E', 'SE', 'NE'].includes(p.look) ? p.look : 'S', dead = p.expression === 'dead';
+    // per-direction geometry: body narrows in profile, feet and arms offset, face turns with a hair-covered back of head, nose and ear in profile
+    const KX = { S: 1, N: 1, E: 0.7, SE: 0.86, NE: 0.86 }[LK];
+    const LINE = {
+      happy: ['M18.6 22.2 q1.6 -2.8 3.2 0', 'M26.2 22.2 q1.6 -2.8 3.2 0'],
+      closed: ['M18.6 21.6 q1.6 1.4 3.2 0', 'M26.2 21.6 q1.6 1.4 3.2 0'],
+      pain: ['M18.8 19.8 l2.6 1.6 l-2.6 1.6', 'M29.2 19.8 l-2.6 1.6 l2.6 1.6'],
+      x: ['M18.7 20.2 l3 2.4 M21.7 20.2 l-3 2.4', 'M26.3 20.2 l3 2.4 M29.3 20.2 l-3 2.4'],
+    };
+    const ln = LINE[ex];
+    const by = 18.2 - E.lift * 0.3, t = E.tilt * 0.3;
+    const MOUTH = {
+      smile: ['M22.4 25.3 q1.6 1.5 3.2 0', 'none'],
+      grin: ['M22 25 q2 2.8 4 0 z', '#6a2a22'],
+      calm: ['M22.8 25.8 q1.2 0.5 2.4 0', 'none'],
+      flat: ['M22.8 25.9 h2.4', 'none'],
+      frown: ['M22.5 26.5 q1.5 -1.6 3 0', 'none'],
+      o: ['M24 25 a0.9 1.2 0 1 0 0.01 0 Z', '#6a2a22'],
+      wave: ['M22.3 25.9 q0.9 -1 1.9 0 t1.9 0', 'none'],
+      pant: ['M22.8 25 q1.2 2.6 2.4 0 z', '#6a2a22'],
+      sleep: ['M23 25.9 q1 0.6 2 0', 'none'],
+    };
+    const mo = MOUTH[E.mouth] || MOUTH.calm;
+    const clothC = dc ? A.mix(L.cloth, '#5a4a36', Math.min(1, dc.D * 0.9)) : L.cloth, trimC = dc ? A.mix(L.trim, '#5a4a36', Math.min(1, dc.D * 0.9)) : L.trim;
+    const Lt = { ...L, trim: trimC }, hairC = T(L.hair), hairS = A.shade(hairC, 0.78);
+    const fixOp = (l) => l.map((q) => ({ ...q, op: q.op == null ? 1 : q.op }));
+    const OK = A.outfitKit(Lt, clothC, trimC, bw, bh, LK);
+    const GEO = {
+      S:  { hl: 24 - bw - 1, hr: 24 + bw + 1, fL: 19, fR: 29, fLy: 41, fRy: 41, earL: 14.8, earR: 33.2, earLOn: true, earROn: true, lockL: 12.4, lockR: 31.4, lockROn: true, arm: false },
+      N:  { hl: 24 - bw - 1, hr: 24 + bw + 1, wg: { shield: 24 + bw + 2.6, held: 24 - bw - 0.6 }, fL: 19, fR: 29, fLy: 41, fRy: 41, earL: 14.8, earR: 33.2, earLOn: true, earROn: true, lockL: 12.4, lockR: 31.4, lockROn: true, arm: false, hb: 'full', part: 'M24 12.4 Q22.4 19.5 24 27', faceOp: 0, mouthOp: 0 },
+      E:  { hl: 21.6, hr: 27.8, wg: { feet: [29.6], feetRx: 3.8, gloves: [26.4], gloveY: 34.4, shield: 29, shieldRx: 3.4, held: 27.6 }, heldTf: 'rotate(36 27.6 36.4)', fL: 22, fR: 27.6, fLy: 40.6, fRy: 41.6, earL: 14.8, earR: 33.2, earLOn: false, earROn: false, lockL: 12.8, lockR: 31.4, lockROn: false, arm: 25.4, face: 'translate(2.6 0)', mouthTf: 'translate(31.4 0) scale(0.55 1) translate(-24 0)', hb: 22.6, part: '', nose: [33.4, 22.8, 1.9], earTop: 23.4 },
+      SE: { hl: 24 - bw - 1, hr: 24 + bw + 1, wg: { feet: [20.4, 29.4], feetRx: 3.9 }, fL: 19.6, fR: 28.6, fLy: 41, fRy: 41, earL: 15.2, earR: 33.2, earLOn: true, earROn: false, lockL: 12.4, lockR: 31.4, lockROn: false, arm: false, face: 'translate(26.2 1) scale(0.86 1) translate(-24 0)', mouthTf: 'translate(26.2 0) scale(0.8 1) translate(-24 0)', hb: 20.4, part: '', nose: [32.6, 23.4, 1.5] },
+      NE: { hl: 24 - bw - 1, hr: 24 + bw + 1, wg: { feet: [20.4, 29.4], feetRx: 3.9 }, fL: 19.6, fR: 28.6, fLy: 41, fRy: 41, earL: 15.2, earR: 33.2, earLOn: true, earROn: false, lockL: 12.4, lockR: 31.4, lockROn: false, arm: false, face: 'translate(28.4 -1.6) scale(0.8 1) translate(-24 0)', hb: 23, part: '', mouthOp: 0 },
+    }[LK];
+    const legD = (x, y) => 'M' + (x - ST.hw).toFixed(2) + ' 35 L' + (x - ST.hw).toFixed(2) + ' ' + (y - 0.4) + ' L' + (x + ST.hw).toFixed(2) + ' ' + (y - 0.4) + ' L' + (x + ST.hw).toFixed(2) + ' 35Z';
+    function hbPath(c) {
+      if (c === 'full') return 'M15.1 19.6 a8.9 8.9 0 1 0 17.8 0 a8.9 8.9 0 1 0 -17.8 0Z';
+      if (typeof c !== 'number') return '';
+      // hairline: top front, receding over the temple, down behind the ear to the nape (a curve, never a straight cut)
+      const cx = 23.2, cy = 18.8, r = 8.5, tx = c + 6.2, ty = cy - Math.sqrt(Math.max(0, r * r - (tx - cx) * (tx - cx))), bx = c - 3, by = cy + Math.sqrt(Math.max(0, r * r - (bx - cx) * (bx - cx)));
+      return 'M' + tx.toFixed(2) + ' ' + ty.toFixed(2) + ' A' + r + ' ' + r + ' 0 ' + (((Math.atan2(ty - cy, tx - cx) - Math.atan2(by - cy, bx - cx) + 4 * Math.PI) % (2 * Math.PI)) > Math.PI ? 1 : 0) + ' 0 ' + bx.toFixed(2) + ' ' + by.toFixed(2) + ' Q' + (c - 0.4).toFixed(2) + ' ' + (cy + 2.6) + ' ' + (c + 2.6).toFixed(2) + ' ' + (cy - 2) + ' Q' + (c + 4.2).toFixed(2) + ' ' + (cy - 5) + ' ' + tx.toFixed(2) + ' ' + ty.toFixed(2) + 'Z';
+    }
+    const fixDet = (l) => (dc ? [] : l);
+    const DK = A.detailKit(Lt, { clothShade: A.shade(clothC, 0.72), skinShade: A.shade(T(L.skin), 0.8), hair: hairC, hairShade: hairS }, bw, bh, LK, GEO.wg && GEO.wg.feet ? GEO.wg.feet : [19, 29]);
+    const AK = A.armKit(LK, bw, bh, dm.fit, clothC, T(L.skin), A.shade(T(L.skin), 0.8), dm);
+    const BKt = A.bodyKit(bw, bh, dm.fit, dm.fat, LK, clothC, dm);
+    /* hip width decides the stance: legs sit under the hip joints, thicker with the hips (see A.legStance) */
+    const ST = A.legStance(LK, BKt.wa);
+    GEO.fL = ST.x[0]; GEO.fR = ST.x[1]; GEO.fLy = ST.y[0]; GEO.fRy = ST.y[1];
+    { const _fd = { E: 2, SE: 0.8, NE: 0.8 }[LK] || 0; if (GEO.wg && GEO.wg.feet) GEO.wg = { ...GEO.wg, feet: LK === 'E' ? [ST.x[1] + _fd] : [ST.x[0] + _fd, ST.x[1] + _fd], feetRx: ST.rx - 0.4 }; }
+    const RG = A.RIG.build(Lt, { skin: T(L.skin), skinShade: A.shade(T(L.skin), 0.8), hair: hairC, hairShade: hairS, hairHi: A.shade(hairC, 1.22) }, LK, { child: p.build === 'child', sex: dm.sex, eyes: ex, tilt: E.tilt, lift: E.lift, brow: E.tilt !== 0, blush: E.mouth === 'grin', mouth: mo });
+    // walk cycle: legs swing from the hip joints, arms from the shoulder joints, in opposite phase. Front and back views step up and down; side views swing.
+    const GT = { walk: [28, 34, 4], run: [42, 52, 7], carry: [20, 18, 2] }[p.gait || ''] || null, cyc = Math.max(0.2, (p.gaitMs || 600) / 1000) * (p.gait === 'run' ? 0.7 : 1) * (1 + 0.5 * (p.lmp || 0)), LM = Math.max(0, Math.min(1, p.lmp || 0));
+    const _hx = A.armJoints(LK, bw, bh, dm.fit, dm).map((j) => j.ha[0]), HXL = LK === 'E' ? GEO.hl : Math.min(..._hx), HXR = LK === 'E' ? GEO.hr : Math.max(..._hx);
+    const WG2 = LK === 'E' ? GEO.wg : { ...(GEO.wg || {}), feet: LK === 'S' || LK === 'N' ? [ST.x[0], ST.x[1]] : (GEO.wg || {}).feet, feetRx: ST.rx - 0.4, skin: T(L.skin), handY: 33 + 0.6 * bh, ...(LK === 'N' ? { shield: HXR + 1.6, held: HXL - 0.3 } : LK === 'S' ? { held: HXR + 0.3 } : {}) };
+    const FDX = { E: 2, SE: 0.8, NE: 0.8 }[LK] || 0;
+    const side = LK === 'E' || LK === 'SE' || LK === 'NE', AJs = A.armJoints(LK, bw, bh, dm.fit, dm), shiftY = 4.6 + dm.lg;
+    const moving = !!GT && !dead && !dc, striking = p.gait === 'strike' && !dead && !dc;
+    const legSt = (x, ph) => moving && LM > 0.05 && (ph ? (p.lmpS >= 0) : (p.lmpS < 0)) ? 'transform-origin: ' + x + 'px 35.4px; animation: ' + (LK === 'S' || LK === 'N' ? 'ag-stepF ' : 'ag-stepS ') + cyc.toFixed(2) + 's ' + (LK === 'S' || LK === 'N' ? 'linear' : 'ease-in-out') + ' infinite; animation-delay: ' + (ph ? (-cyc / 2).toFixed(2) : 0) + 's; --sw: ' + (GT[0] * (1 - 0.7 * LM)).toFixed(1) + 'deg' : moving ? 'transform-origin: ' + x + 'px 35.4px; animation: ' + (LK === 'S' || LK === 'N' ? 'ag-stepF ' + cyc.toFixed(2) + 's linear infinite' : 'ag-stepS ' + cyc.toFixed(2) + 's ease-in-out infinite') + '; animation-delay: ' + (ph ? (-cyc / 2).toFixed(2) : 0) + 's; --sw: ' + (GT ? GT[0] : 0) + 'deg' : '';
+    const CMk = p.cm && !dead && !dc && A.CMX[p.cm] ? A.CMX[p.cm] : null, held = (GEO.wg || {}).held, JA0 = AJs.filter((J) => !J.far), atkJ = JA0.length ? JA0.reduce((b, J) => (b === null || Math.abs(J.sh[0] - (held == null ? 99 : held)) < Math.abs(b.sh[0] - (held == null ? 99 : held)) ? J : b), null) : null;
+    const cmArm = (J) => J ? 'transform-origin: ' + J.sh[0].toFixed(1) + 'px ' + J.sh[1].toFixed(1) + 'px; --sg: ' + (J.s || 1) + '; animation: ' + A.cmAnim(p.cm, J === atkJ || J.far ? 'atk' : 'sup', (p.cmN | 0) % 2, p.cmD) : '';
+    const armSt = (J, ph) => CMk && (CMk.atk || CMk.sup) && J ? cmArm(J) : striking && J ? 'transform-origin: ' + J.sh[0].toFixed(1) + 'px ' + J.sh[1].toFixed(1) + 'px; animation: ' + (ph ? 'ag-armBrace' : 'ag-armHit') + ' 0.6s ease-in-out infinite; animation-delay: 0s; --sg: ' + (J.s || 1) : !moving || !J ? '' : 'transform-origin: ' + J.sh[0].toFixed(1) + 'px ' + J.sh[1].toFixed(1) + 'px; animation: ' + (side ? 'ag-armS ' : 'ag-armF ') + cyc.toFixed(2) + 's ease-in-out infinite; animation-delay: ' + (ph ? (-cyc / 2).toFixed(2) : 0) + 's; --aw: ' + GT[1] + 'deg; --sg: ' + (J.s || 1);
+    const JL = AJs.find((J) => !J.far && J.s < 0) || null, JR = AJs.find((J) => !J.far && J.s >= 0) || null, JB = AJs.find((J) => J.far) || null;
+    return {
+      ...(((W) => ({ gFeet: W.feet, gHands: LK === 'E' || LK === 'SE' || LK === 'NE' ? [] : W.hands, gHandsOver: LK === 'E' || LK === 'SE' || LK === 'NE' ? W.hands : [], gBody: W.body, gHead: W.head, gHeld: W.held }))(A.wornParts(p.wa, p.wc, p.ww, bw, bh, HXL, HXR, WG2))), size: p.size ?? 48, closed: !!p.closed, bw, bh, bwLit: Math.max(2, bw - 3), handLx: GEO.hl, handRx: GEO.hr,
+      armsBack: AK.back, armsFront: AK.front, armsFrontL: LK === 'E' || LK === 'SE' || LK === 'NE' ? [] : AK.frontL, armsFrontR: LK === 'E' || LK === 'SE' || LK === 'NE' ? [] : AK.frontR, armsOverL: LK === 'E' || LK === 'SE' || LK === 'NE' ? AK.frontL : [], armsOverR: LK === 'E' || LK === 'SE' || LK === 'NE' ? AK.frontR : [], torsoD: BKt.d, torsoLit: BKt.lit, bodyLines: dc ? [] : BKt.lines, tf: A.scaleTf(dm.scale), shOp: p.shadow === false ? 0 : 0.32, shOpO: p.shadow === false ? 0 : 0.12, fleshOp: dc ? dc.fleshOp : 1,
+      rotOn: !!dc && dc.D > 0.4, rotItems: dc ? A.rotItems(dc.D) : [],
+      boneOn: !!dc && dc.boneOp > 0, boneOp: dc ? dc.boneOp : 0, boneItems: dc && dc.boneOp > 0 ? A.skeleton(LK, bw, bh, dm).filter((q) => !(q.g === 'organ' && dc.D > 0.8)) : [],
+      fly1: !!dc && dc.flies >= 1, fly2: !!dc && dc.flies >= 2, fly3: !!dc && dc.flies >= 3,
+      beltD: BKt.belt,
+      eDot: ex === 'dot', eWide: ex === 'wide', eHalf: ex === 'half', eLine: !!ln,
+      eyeL: ln ? ln[0] : '', eyeR: ln ? ln[1] : '',
+      browOn: E.tilt !== 0, browL: 'M18.4 ' + (by - t) + ' L21.9 ' + (by + t), browR: 'M29.6 ' + (by - t) + ' L26.1 ' + (by + t),
+      mouthD: mo[0], mouthFill: mo[1],
+      feetL: GEO.fL + FDX, feetR: GEO.fR + FDX, bootCL: LK === 'E' ? A.shade(T(L.boots), 0.78) : T(L.boots), legCL: LK === 'E' ? A.shade(T(L.pants), 0.8) : T(L.pants), feetLy: GEO.fLy + 1.4, feetRy: GEO.fRy + 1.4, feetRx: ST.rx,
+      earLOn: GEO.earLOn, earROn: GEO.earROn, earLx: GEO.earL, earRx: GEO.earR, lockLx: GEO.lockL, lockRx: GEO.lockR, lockROn: GEO.lockROn,
+      armOn: GEO.arm !== false, armX: GEO.arm || 0,
+      hbOn: !!GEO.hb && (!dead || LK === 'N'), hbD: hbPath(GEO.hb), hbFill: L.hairStyle === 3 ? T(L.skin) : hairC,  hbStroke: GEO.hb === 'full' ? '#1c110b' : 'none', hbPart: L.hairStyle === 3 ? '' : (GEO.part || ''),
+      mouthTf: GEO.mouthTf || '', mouthOp: GEO.mouthOp === 0 ? 0 : 1,
+      noseOn: !!GEO.nose && !dead, noseX: GEO.nose ? GEO.nose[0] : 0, noseX2: GEO.nose ? GEO.nose[0] - 0.9 : 0, noseY: GEO.nose ? GEO.nose[1] : 0, noseR: GEO.nose ? GEO.nose[2] : 0, noseRx: GEO.nose ? GEO.nose[2] * 1.15 : 0, noseR2: GEO.nose ? GEO.nose[2] - 0.7 : 0, noseRx2: GEO.nose ? GEO.nose[2] * 0.95 : 0,
+      earTopOn: LK === 'E', earTopX: GEO.earTop || 0,
+      faceOp: GEO.faceOp === 0 ? 0 : 1, faceTf: GEO.face || '',
+      hasTint: !!E.tint, tint: E.tint || '#000000', blushOn: E.mouth === 'grin',
+      skin: T(L.skin), skinShade: A.shade(T(L.skin), 0.8), hair: T(L.hair), hairShade: A.shade(T(L.hair), 0.78),
+      cloth: dc ? A.mix(L.cloth, '#5a4a36', Math.min(1, dc.D * 0.9)) : L.cloth, clothShade: A.shade(dc ? A.mix(L.cloth, '#5a4a36', Math.min(1, dc.D * 0.9)) : L.cloth, 0.72),
+      heldTf: GEO.heldTf || '', heldAnim: CMk && CMk.atk && atkJ ? cmArm(atkJ) : striking && atkJ ? 'transform-origin: ' + atkJ.sh[0].toFixed(1) + 'px ' + atkJ.sh[1].toFixed(1) + 'px; animation: ag-armHit 0.6s ease-in-out infinite; --sg: ' + (atkJ.s || 1) : '', upTf: 'translate(0 ' + (-4.6 - dm.lg).toFixed(2) + ')', headTf: 'translate(0 ' + (-A.NECK).toFixed(2) + ') translate(24 29.5) scale(' + (0.9 * dm.hd).toFixed(3) + ') translate(-24 -29.5)', bootC: T(L.boots), footDy: 1.4, bootRy: 2.0, legC: T(L.pants), legLd: legD(GEO.fL, GEO.fLy + 1.4), legRd: legD(GEO.fR, GEO.fRy + 1.4),
+      headAnim: dead ? 'transform-origin: 24px 28px; animation: ag-head 1.7s linear forwards' : '', armAnimL: dead ? 'transform-origin: ' + (GEO.hl + 1) + 'px 28px; animation: ag-armL 1.7s linear forwards' : armSt(JL, 1), armAnimR: dead ? 'transform-origin: ' + (GEO.hr - 1) + 'px 28px; animation: ag-armR 1.7s linear forwards' : armSt(JR, 0), armAnimB: dead ? 'transform-origin: ' + (GEO.hl + 1) + 'px 28px; animation: ag-armL 1.7s linear forwards' : armSt(JB, 0), bobAnim: moving ? 'transform-origin: 24px 40px; animation: ag-bob ' + (cyc / 2).toFixed(2) + 's ease-in-out infinite, ag-sway ' + cyc.toFixed(2) + 's ease-in-out infinite; --bu: ' + GT[2] * 0.8 * (1 + LM * 0.8) + 'px; --sy: ' + (side ? 1.4 : 3.4) * (1 + LM * 2.2) + 'deg' : '', legAnimL: legSt(GEO.fL, 0), legAnimR: legSt(GEO.fR, 1),
+      dTorso: A.solid(fixDet(DK.torso), clothC), dNeck: A.solid(fixDet(DK.neck), T(L.skin)), dSkin: [], dHair: [], dFeet: A.solid(fixDet(DK.feet), T(L.boots)),
+            neckD: (LK === 'E' || LK === 'N') ? '' : (function(){var t=33-bh-3.4,b=33-bh+1.6;return 'M21.9 '+t.toFixed(2)+' V'+b.toFixed(2)+' Q24 '+(b+1.8).toFixed(2)+' 26.1 '+b.toFixed(2)+' V'+t.toFixed(2)+'Z';})(),
+            /* side and back: the neck is a plain column that goes behind the collar (the torso is drawn over its foot), and in profile it sits under the back of the jaw, not the middle of the face */
+            neckBD: LK === 'E' ? (function(){var t=33-bh-3.4,b=33-bh+1.2;return 'M21.8 '+t.toFixed(2)+' V'+b.toFixed(2)+' H25.4 V'+t.toFixed(2)+'Z';})() : LK === 'N' ? (function(){var t=33-bh-3.4,b=33-bh+1.2;return 'M21.9 '+t.toFixed(2)+' V'+b.toFixed(2)+' H26.1 V'+t.toFixed(2)+'Z';})() : '', hairBack: RG.back, rHeadBack: RG.headBack, rSkin: RG.headSkin, rFace: RG.face, rFront: RG.headFront, outBack: A.solid(fixOp(OK.back), clothC), outFront: A.solid(fixOp(OK.front), clothC),
+    };
+  }
+}
+</script>
+</body>
+</html>

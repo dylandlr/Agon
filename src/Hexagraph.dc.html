@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hexagon skill graph</title>
+<script src="./support.js"></script>
+<script src="./art.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>body{margin:0}</style>
+</helmet>
+<div style="{{wrap}}">
+<svg viewBox="0 0 270 214" width="{{w}}" height="{{h}}" role="img" aria-label="{{label}}" style="display: block; overflow: visible">
+  <polygon points="{{outer}}" fill="none" stroke="#1c110b" stroke-width="7" stroke-linejoin="round"></polygon>
+  <sc-for list="{{rings}}" as="r" hint-placeholder-count="3">
+    <polygon points="{{r.pts}}" fill="{{r.fill}}" stroke="#624a3b" stroke-width="1.6" stroke-linejoin="round"></polygon>
+  </sc-for>
+  <sc-for list="{{axes}}" as="a" hint-placeholder-count="6">
+    <line x1="135" y1="106" x2="{{a.x}}" y2="{{a.y}}" stroke="#624a3b" stroke-width="1.6"></line>
+  </sc-for>
+  <polygon points="{{poly}}" fill="{{col}}" fill-opacity="0.34" stroke="#1c110b" stroke-width="7" stroke-linejoin="round"></polygon>
+  <polygon points="{{poly}}" fill="none" stroke="{{col}}" stroke-width="2.6" stroke-linejoin="round"></polygon>
+  <sc-for list="{{dots}}" as="d" hint-placeholder-count="6">
+    <circle cx="{{d.x}}" cy="{{d.y}}" r="4.4" fill="{{col}}" stroke="#1c110b" stroke-width="2"></circle>
+  </sc-for>
+</svg>
+<sc-for list="{{labels}}" as="l" hint-placeholder-count="6"><div style="{{l.style}}"><div style="{{l.ns}}">{{l.name}}</div><div style="{{l.vs}}">{{l.num}}</div></div></sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"mode":{"editor":"enum","default":"agent","options":["agent","creature","needs","mind"]},"r0":{"editor":"float","default":1},"r1":{"editor":"float","default":1},"r2":{"editor":"float","default":1},"r3":{"editor":"float","default":1},"r4":{"editor":"float","default":1},"r5":{"editor":"float","default":1},"r6":{"editor":"float","default":0.5},"r7":{"editor":"float","default":0.5},"size":{"editor":"int","default":270},"$preview":{"width":270,"height":214}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const A = window.AgonArt, p = this.props, mode = p.mode || 'agent';
+    const cx = 135, cy = 106, R = 70;
+    const NAMES = { agent: ['Strength', 'Speed', 'Metabolism', 'Resistance', 'Insulation', 'Lifespan'], creature: ['Strength', 'Speed', 'Senses', 'Hardiness', 'Aggression', 'Fertility'], needs: ['Satiety', 'Hydration', 'Energy', 'Health', 'Warmth', 'Calm'], mind: A.PERS }[mode] || [];
+    const N = NAMES.length, IDX = NAMES.map((n, i) => i);
+    const raw = [p.r0, p.r1, p.r2, p.r3, p.r4, p.r5, p.r6, p.r7].slice(0, N).map((v) => (v === undefined || v === null ? 1 : v));
+    // genes are multipliers around 1.0: map 0.25..4 (log2 -2..2) onto 0..1, so 1.0 sits at the half ring. Needs and traits are already 0..1.
+    const val = raw.map((r) => mode === 'agent' ? Math.max(0.04, Math.min(1, (Math.log2(Math.max(0.01, r)) + 2) / 4)) : Math.max(0.04, Math.min(1, r)));
+    const num = raw.map((r) => mode === 'agent' ? 'x' + r.toFixed(2) : String(Math.round(r * 100)));
+    const ang = (i) => -Math.PI / 2 + i * 2 * Math.PI / N;
+    const pt = (i, k) => [cx + Math.cos(ang(i)) * R * k, cy + Math.sin(ang(i)) * R * k];
+    const pts = (k) => IDX.map((i) => pt(i, k).map((v) => v.toFixed(1)).join(',')).join(' ');
+    const poly = IDX.map((i) => pt(i, val[i]).map((v) => v.toFixed(1)).join(',')).join(' ');
+    const labels = IDX.map((i) => {
+      const c = Math.cos(ang(i)), s = Math.sin(ang(i));
+      const x = cx + c * (R + 12), y = cy + s * (R + 12);
+      const top = i === 0, bot = N % 2 === 0 && i === N / 2;
+      const k = (p.size ?? 270) / 270, anchor = top || bot ? 'middle' : c > 0 ? 'start' : 'end';
+      const ty = top ? y - 26 : bot ? y : y - 12;
+      return { style: 'position: absolute; left: ' + (x * k).toFixed(1) + 'px; top: ' + (ty * k).toFixed(1) + 'px; transform: translateX(' + (anchor === 'middle' ? '-50%' : anchor === 'end' ? '-100%' : '0') + '); text-align: ' + (anchor === 'middle' ? 'center' : anchor === 'end' ? 'right' : 'left') + '; white-space: nowrap; pointer-events: none', ns: 'font: 700 11px/13px system-ui, sans-serif; color: #ede9e1', vs: 'font: 11px/13px ui-monospace, Menlo, Consolas, monospace; color: #aea69a', name: NAMES[i], num: num[i] };
+    });
+    return {
+      wrap: 'position: relative; width: ' + (p.size ?? 270) + 'px; height: ' + Math.round((p.size ?? 270) * 214 / 270) + 'px', w: p.size ?? 270, h: Math.round((p.size ?? 270) * 214 / 270), label: ({ agent: 'Agent gene', creature: 'Creature', needs: 'Current needs', mind: 'Personality' }[mode] || 'Skill') + ' graph: ' + NAMES.map((n, i) => n + ' ' + num[i]).join(', '),
+      col: { agent: '#d4c63c', creature: '#e08a78', needs: '#7fbf8e', mind: '#b49ae0' }[mode] || '#d4c63c',
+      outer: pts(1), rings: [1 / 3, 2 / 3, 1].map((k, i) => ({ pts: pts(k), fill: i === 1 ? 'rgba(165,138,115,0.08)' : 'none' })),
+      axes: IDX.map((i) => { const q = pt(i, 1); return { x: q[0].toFixed(1), y: q[1].toFixed(1) }; }),
+      poly, dots: IDX.map((i) => { const q = pt(i, val[i]); return { x: q[0].toFixed(1), y: q[1].toFixed(1) }; }), labels,
+    };
+  }
+}
+</script>
+</body>
+</html>

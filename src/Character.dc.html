@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Agon character generator</title>
+<script src="./support.js"></script>
+<script src="./art.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+:root{--ground:#30231b;--surface:#463429;--surface-raised:#523e32;--border:#624a3b;--border-strong:#a58a73;--ink:#ede9e1;--ink-muted:#aea69a;--accent-blue:#7cacdf;--fill-blue:#2f5f93;--fill-green:#2f5d45;--signal-yellow:#d4c63c;--on-signal:#1c110b;--danger:#e08a78;--ok:#7fbf8e}
+body{margin:0;background:#30231b}
+button{font:inherit;color:inherit;cursor:pointer}
+a{color:#7cacdf}
+:focus-visible{outline:2px solid #a58a73;outline-offset:2px}
+</style>
+</helmet>
+<div style="width: 100%; min-height: 900px; box-sizing: border-box; background: var(--ground); color: var(--ink); font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 15px; line-height: 22px; display: flex; flex-direction: column">
+
+  <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 12px 24px; background: var(--surface); border-bottom: 1px solid var(--border)">
+    <div style="font-size: 24px; line-height: 30px; font-weight: 700">Agon</div>
+    <div style="font-size: 18px; line-height: 24px; font-weight: 600; color: var(--ink-muted)">Character generator</div>
+    <div style="flex-grow: 1"></div>
+    <button onClick="{{rollFounder}}" style="min-height: 44px; padding: 0 20px; border-radius: 4px; border: 1px solid var(--border-strong); background: var(--signal-yellow); color: var(--on-signal); font-size: 13px; font-weight: 600">Roll founder</button>
+    <button onClick="{{resetAll}}" style="min-height: 44px; padding: 0 16px; border-radius: 4px; border: 1px solid var(--border-strong); background: var(--surface-raised); font-size: 13px; font-weight: 600">Reset to neutral</button>
+    <a href="Main.dc.html" style="min-height: 44px; box-sizing: border-box; display: inline-flex; align-items: center; padding: 0 16px; border-radius: 4px; border: 1px solid var(--border-strong); background: var(--fill-blue); color: var(--ink); text-decoration: none; font-size: 13px; font-weight: 600">Simulation view</a>
+  </header>
+
+  <main style="display: flex; flex-wrap: wrap; gap: 24px; padding: 24px; flex-grow: 1; align-items: flex-start">
+
+    <section style="flex: 1 1 440px; min-width: 0; display: flex; flex-direction: column; gap: 24px">
+      <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 16px">
+        <h2 style="margin: 0; font-size: 18px; line-height: 24px; font-weight: 600">Physical</h2>
+        <sc-for list="{{physical}}" as="x" hint-placeholder-count="6">
+          <div style="display: flex; flex-direction: column; gap: 2px">
+            <div style="display: flex; justify-content: space-between; gap: 16px">
+              <label for="{{x.id}}" style="font-size: 13px; line-height: 18px; font-weight: 600">{{x.label}}</label>
+              <span style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; line-height: 18px">{{x.display}}</span>
+            </div>
+            <input id="{{x.id}}" type="range" min="{{x.min}}" max="{{x.max}}" step="{{x.step}}" value="{{x.slider}}" onInput="{{x.set}}" style="width: 100%; accent-color: #d4c63c">
+            <span style="font-size: 12px; line-height: 16px; color: var(--ink-muted)">{{x.hint}}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 16px">
+        <h2 style="margin: 0; font-size: 18px; line-height: 24px; font-weight: 600">Temperament</h2>
+        <sc-for list="{{temperament}}" as="x" hint-placeholder-count="4">
+          <div style="display: flex; flex-direction: column; gap: 2px">
+            <div style="display: flex; justify-content: space-between; gap: 16px">
+              <label for="{{x.id}}" style="font-size: 13px; line-height: 18px; font-weight: 600">{{x.label}}</label>
+              <span style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; line-height: 18px">{{x.display}}</span>
+            </div>
+            <input id="{{x.id}}" type="range" min="{{x.min}}" max="{{x.max}}" step="{{x.step}}" value="{{x.slider}}" onInput="{{x.set}}" style="width: 100%; accent-color: #d4c63c">
+            <span style="font-size: 12px; line-height: 16px; color: var(--ink-muted)">{{x.hint}}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 16px">
+        <h2 style="margin: 0; font-size: 18px; line-height: 24px; font-weight: 600">Plasticity</h2>
+        <sc-for list="{{plasticity}}" as="x" hint-placeholder-count="4">
+          <div style="display: flex; flex-direction: column; gap: 2px">
+            <div style="display: flex; justify-content: space-between; gap: 16px">
+              <label for="{{x.id}}" style="font-size: 13px; line-height: 18px; font-weight: 600">{{x.label}}</label>
+              <span style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; line-height: 18px">{{x.display}}</span>
+            </div>
+            <input id="{{x.id}}" type="range" min="{{x.min}}" max="{{x.max}}" step="{{x.step}}" value="{{x.slider}}" onInput="{{x.set}}" style="width: 100%; accent-color: #d4c63c">
+            <span style="font-size: 12px; line-height: 16px; color: var(--ink-muted)">{{x.hint}}</span>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+
+    <section style="flex: 1 1 360px; min-width: 0; display: flex; flex-direction: column; gap: 24px">
+      <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 16px; align-items: center">
+        <div style="border-radius: 10px; border: 1px solid var(--border-strong); overflow: hidden; line-height: 0; position: sticky; top: 12px; z-index: 3; box-shadow: 0 0 0 10px var(--surface)">
+          <dc-import name="Portrait" strength="{{cur.strength}}" speed="{{cur.speed}}" metabolism="{{cur.metabolism}}" insulation="{{cur.insulation}}" build="{{cur.build}}" phy="{{cur.phy}}" lk="{{cur.lk}}" scale="{{cur.scale}}" expression="{{expr}}" a0="{{ap0}}" a1="{{ap1}}" a2="{{ap2}}" size="{{256}}" hint-size="256px,320px"></dc-import>
+        </div>
+        <div style="align-self: stretch; display: flex; flex-direction: column; gap: 16px">
+          <h2 style="margin: 0; font-size: 18px; line-height: 24px; font-weight: 600">Appearance</h2>
+          <div style="font-size: 12px; line-height: 16px; color: var(--ink-muted)">Five heritable channels the simulation lets other agents see, so kin can resemble each other. Skin, hair and clothing set the look; definition and curves are the inherited bias on how cut or curvy the body reads. Sex and build are set below.</div>
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <div style="font-size: 13px; line-height: 18px; font-weight: 600">Build</div>
+            <div style="display: flex; gap: 6px; flex-wrap: wrap"><sc-for list="{{buildOpts}}" as="o" hint-placeholder-count="10"><button onClick="{{o.pick}}" style="{{o.style}}">{{o.v}}</button></sc-for></div>
+            <div style="font-size: 13px; line-height: 18px; font-weight: 600">Sex</div>
+            <div style="display: flex; gap: 6px"><sc-for list="{{sexOpts}}" as="o" hint-placeholder-count="2"><button onClick="{{o.pick}}" style="{{o.style}}">{{o.t}}</button></sc-for></div>
+          </div>
+          <sc-for list="{{looks}}" as="lk" hint-placeholder-count="8">
+            <div style="display: flex; flex-direction: column; gap: 6px">
+              <div style="font-size: 13px; line-height: 18px; font-weight: 600">{{lk.label}}</div>
+              <div style="display: flex; gap: 6px; flex-wrap: wrap"><sc-for list="{{lk.opts}}" as="o" hint-placeholder-count="10"><button onClick="{{o.pick}}" title="{{o.t}}" style="{{o.style}}">{{o.t}}</button></sc-for></div>
+            </div>
+          </sc-for>
+          <div style="display: flex; flex-direction: column; gap: 2px">
+            <div style="display: flex; justify-content: space-between"><label for="height" style="font-size: 13px; line-height: 18px; font-weight: 600">Height</label><span style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px">{{hDisp}}</span></div>
+            <input id="height" type="range" min="0.75" max="1.35" step="0.01" value="{{hVal}}" onInput="{{setH}}" style="width: 100%; accent-color: #d4c63c">
+          </div>
+          <sc-for list="{{appearance}}" as="x" hint-placeholder-count="5">
+            <div style="display: flex; flex-direction: column; gap: 2px">
+              <div style="display: flex; justify-content: space-between"><label for="{{x.id}}" style="font-size: 13px; line-height: 18px; font-weight: 600">{{x.label}}</label><span style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px">{{x.display}}</span></div>
+              <input id="{{x.id}}" type="range" min="0" max="0.999" step="0.01" value="{{x.slider}}" onInput="{{x.set}}" style="width: 100%; accent-color: #d4c63c">
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 8px">
+        <h2 style="margin: 0; font-size: 18px; line-height: 24px; font-weight: 600">What these genes do in a run</h2>
+        <sc-for list="{{derived}}" as="d" hint-placeholder-count="6">
+          <div style="display: flex; justify-content: space-between; gap: 16px; font-size: 13px; line-height: 18px; padding: 4px 0; border-bottom: 1px solid var(--border)">
+            <span style="color: var(--ink-muted); flex: 1 1 auto">{{d.label}}</span>
+            <span style="font-family: ui-monospace, Menlo, Consolas, monospace; text-align: right; white-space: nowrap">{{d.value}}</span>
+          </div>
+        </sc-for>
+        <div style="font-size: 12px; line-height: 16px; color: var(--ink-muted)">Computed from the default EnvConfig and the gene comments in genotype.py.</div>
+      </div>
+    </section>
+
+    <section style="flex: 1 1 400px; min-width: 0; display: flex; flex-direction: column; gap: 24px">
+      <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 16px">
+        <h2 style="margin: 0; font-size: 18px; line-height: 24px; font-weight: 600">Breed</h2>
+        <div style="display: flex; gap: 16px; flex-wrap: wrap">
+          <div style="flex: 1 1 150px; display: flex; flex-direction: column; gap: 8px; align-items: center; background: var(--surface-raised); border-radius: 4px; padding: 12px">
+            <div style="font-size: 13px; font-weight: 600">Parent A</div>
+            <sc-if value="{{hasA}}" hint-placeholder-val="{{ false }}">
+              <dc-import name="Portrait" strength="{{pa.strength}}" speed="{{pa.speed}}" metabolism="{{pa.metabolism}}" insulation="{{pa.insulation}}" build="{{pa.build}}" phy="{{pa.phy}}" lk="{{pa.lk}}" scale="{{pa.scale}}" a0="{{paAp0}}" a1="{{paAp1}}" a2="{{paAp2}}" size="{{80}}" hint-size="80px,100px"></dc-import>
+            </sc-if>
+            <sc-if value="{{noA}}" hint-placeholder-val="{{ true }}"><div style="height: 96px; display: flex; align-items: center; font-size: 12px; line-height: 16px; color: var(--ink-muted)">Empty</div></sc-if>
+            <button onClick="{{setA}}" style="min-height: 44px; width: 100%; border-radius: 4px; border: 1px solid var(--border-strong); background: var(--surface); font-size: 13px; font-weight: 600">Use current as A</button>
+          </div>
+          <div style="flex: 1 1 150px; display: flex; flex-direction: column; gap: 8px; align-items: center; background: var(--surface-raised); border-radius: 4px; padding: 12px">
+            <div style="font-size: 13px; font-weight: 600">Parent B</div>
+            <sc-if value="{{hasB}}" hint-placeholder-val="{{ false }}">
+              <dc-import name="Portrait" strength="{{pb.strength}}" speed="{{pb.speed}}" metabolism="{{pb.metabolism}}" insulation="{{pb.insulation}}" build="{{pb.build}}" phy="{{pb.phy}}" lk="{{pb.lk}}" scale="{{pb.scale}}" a0="{{pbAp0}}" a1="{{pbAp1}}" a2="{{pbAp2}}" size="{{80}}" hint-size="80px,100px"></dc-import>
+            </sc-if>
+            <sc-if value="{{noB}}" hint-placeholder-val="{{ true }}"><div style="height: 96px; display: flex; align-items: center; font-size: 12px; line-height: 16px; color: var(--ink-muted)">Empty</div></sc-if>
+            <button onClick="{{setB}}" style="min-height: 44px; width: 100%; border-radius: 4px; border: 1px solid var(--border-strong); background: var(--surface); font-size: 13px; font-weight: 600">Use current as B</button>
+          </div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <div style="display: flex; justify-content: space-between"><label for="mut" style="font-size: 13px; line-height: 18px; font-weight: 600">Mutation scale</label><span style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px">{{mutText}}</span></div>
+          <input id="mut" type="range" min="0" max="0.3" step="0.01" value="{{mut}}" onInput="{{setMut}}" style="width: 100%; accent-color: #d4c63c">
+          <span style="font-size: 12px; line-height: 16px; color: var(--ink-muted)">Each gene is taken whole from one parent, then nudged by random noise at this scale.</span>
+        </div>
+        <button onClick="{{breed}}" style="min-height: 44px; border-radius: 4px; border: 1px solid var(--border-strong); background: var(--signal-yellow); color: var(--on-signal); font-size: 13px; font-weight: 600; opacity: {{breedOpacity}}">Breed A and B</button>
+        <div style="font-size: 12px; line-height: 16px; color: var(--ink-muted)">{{breedHint}}</div>
+
+        <sc-if value="{{hasChild}}" hint-placeholder-val="{{ false }}">
+          <div style="border-top: 1px solid var(--border); padding-top: 16px; display: flex; flex-direction: column; gap: 16px">
+            <div style="display: flex; gap: 16px; align-items: center">
+              <div style="border-radius: 10px; border: 1px solid var(--border-strong); overflow: hidden; line-height: 0">
+                <dc-import name="Portrait" strength="{{ch.strength}}" speed="{{ch.speed}}" metabolism="{{ch.metabolism}}" insulation="{{ch.insulation}}" build="{{ch.build}}" phy="{{ch.phy}}" lk="{{ch.lk}}" scale="{{ch.scale}}" a0="{{chAp0}}" a1="{{chAp1}}" a2="{{chAp2}}" size="{{112}}" hint-size="112px,140px"></dc-import>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 8px">
+                <div style="font-size: 18px; line-height: 24px; font-weight: 600">Child</div>
+                <button onClick="{{loadChild}}" style="min-height: 44px; padding: 0 16px; border-radius: 4px; border: 1px solid var(--border-strong); background: var(--fill-blue); font-size: 13px; font-weight: 600">Edit child</button>
+              </div>
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 4px">
+              <sc-for list="{{childChips}}" as="c" hint-placeholder-count="8">
+                <span style="{{c.style}}">{{c.text}}</span>
+              </sc-for>
+            </div>
+            <div style="font-size: 12px; line-height: 16px; color: var(--ink-muted)">Chip letter shows which parent each gene came from.</div>
+          </div>
+        </sc-if>
+      </div>
+
+      <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 16px">
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap">
+          <h2 style="margin: 0; font-size: 18px; line-height: 24px; font-weight: 600">Founders ({{rosterCount}} of 8)</h2>
+          <button onClick="{{saveCurrent}}" style="min-height: 44px; padding: 0 16px; border-radius: 4px; border: 1px solid var(--border-strong); background: var(--surface-raised); font-size: 13px; font-weight: 600">Save current</button>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px">
+          <sc-for list="{{roster}}" as="r" hint-placeholder-count="2">
+            <button onClick="{{r.load}}" aria-label="{{r.label}}" style="min-width: 44px; min-height: 44px; padding: 4px; border-radius: 4px; border: 1px solid var(--border-strong); background: var(--surface-raised)">
+              <dc-import name="Portrait" strength="{{r.g.strength}}" speed="{{r.g.speed}}" metabolism="{{r.g.metabolism}}" insulation="{{r.g.insulation}}" build="{{r.g.build}}" phy="{{r.g.phy}}" lk="{{r.g.lk}}" scale="{{r.g.scale}}" a0="{{r.a0}}" a1="{{r.a1}}" a2="{{r.a2}}" size="{{56}}" hint-size="56px,70px"></dc-import>
+            </button>
+          </sc-for>
+          <sc-if value="{{rosterEmpty}}" hint-placeholder-val="{{ true }}"><span style="font-size: 12px; line-height: 16px; color: var(--ink-muted)">No saved founders yet</span></sc-if>
+        </div>
+        <label for="json" style="font-size: 13px; line-height: 18px; font-weight: 600">Genotype as JSON</label>
+        <textarea id="json" readonly="" rows="9" style="width: 100%; box-sizing: border-box; background: var(--ground); color: var(--ink); border: 1px solid var(--border-strong); border-radius: 4px; padding: 8px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; line-height: 16px">{{json}}</textarea>
+      </div>
+    </section>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+// kind: 'log' traits are multipliers clipped to [0.25, 4] (sigma = founder spread); 'lin' traits have hard bounds
+const GENES = [
+  { k: 'strength', label: 'Strength', group: 'physical', kind: 'log', sd: 0.15, hint: 'Wins contested gathering and hits harder. Declines with age.' },
+  { k: 'speed', label: 'Speed', group: 'physical', kind: 'log', sd: 0.15, hint: 'Movement multiplier.' },
+  { k: 'metabolism', label: 'Metabolism', group: 'physical', kind: 'log', sd: 0.15, hint: 'Higher means hungry faster.' },
+  { k: 'lifespan', label: 'Lifespan', group: 'physical', kind: 'log', sd: 0.10, hint: 'Scales maximum age.' },
+  { k: 'disease_resistance', label: 'Disease resistance', group: 'physical', kind: 'log', sd: 0.20, hint: 'Scales infection chance and severity down.' },
+  { k: 'insulation', label: 'Insulation', group: 'physical', kind: 'log', sd: 0.15, hint: 'Slows body temperature drift toward ambient.' },
+  { k: 'pain_aversion', label: 'Pain aversion', group: 'temperament', kind: 'log', sd: 0.30, hint: 'Reward weight on health loss. Trauma can shift it during a life.' },
+  { k: 'social_reward', label: 'Social reward', group: 'temperament', kind: 'log', sd: 0.30, hint: 'Reward weight on social contact.' },
+  { k: 'novelty', label: 'Novelty', group: 'temperament', kind: 'log', sd: 0.30, hint: 'Reward weight on visiting new cells.' },
+  { k: 'patience', label: 'Patience', group: 'temperament', kind: 'lin', lo: 0.95, hi: 0.999, step: 0.001, hint: 'Discount factor gamma. Closer to 1 plans further ahead.' },
+  { k: 'lr_scale', label: 'Learning rate scale', group: 'plasticity', kind: 'log', sd: 0.30, hint: 'Multiplies the optimizer learning rate.' },
+  { k: 'critical_period', label: 'Critical period', group: 'plasticity', kind: 'lin', lo: 2000, hi: 20000, step: 100, hint: 'Ticks over which the learning rate decays.' },
+  { k: 'social_learning', label: 'Social learning', group: 'plasticity', kind: 'lin', lo: 0, hi: 1, step: 0.01, hint: 'Imitation loss weight.' },
+  { k: 'temperament_drift', label: 'Temperament drift', group: 'plasticity', kind: 'lin', lo: 0, hi: 1, step: 0.01, hint: 'How far experience shifts the temperament phenotype.' },
+];
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+function gauss() { return Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random()); }
+function neutral() { const g = {}; for (const d of GENES) g[d.k] = d.kind === 'log' ? 1 : (d.lo + d.hi) / 2; return g; }
+function founder() { const g = {}; for (const d of GENES) g[d.k] = d.kind === 'log' ? clamp(Math.exp(d.sd * gauss()), 0.25, 4) : d.lo + Math.random() * (d.hi - d.lo); return g; }
+function fmt(d, v) { return d.kind === 'log' ? '×' + v.toFixed(2) : (d.hi > 100 ? Math.round(v) + ' ticks' : v.toFixed(d.step < 0.01 ? 3 : 2)); }
+const BUILD_LIST = ['lean', 'lanky', 'average', 'athletic', 'stocky', 'barrel', 'pear', 'stout', 'heavy', 'child'];
+const pick = (a) => a[Math.floor(Math.random() * a.length)];
+const rap = () => [Math.random(), Math.random(), Math.random(), Math.random(), Math.random()];
+const phyS = (sex, ap) => sex + ',' + (ap[3] == null ? 0.5 : ap[3]).toFixed(2) + ',' + (ap[4] == null ? 0.5 : ap[4]).toFixed(2);
+const short = (g, x) => ({ strength: g.strength, speed: g.speed, metabolism: g.metabolism, insulation: g.insulation, build: x ? x.build : 'average', phy: x ? phyS(x.sex, x.ap) : 'M,0.50,0.50', lk: x && x.ov ? JSON.stringify(x.ov) : '', scale: x && x.h ? x.h : 1 });
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { g: founder(), ap: rap(), build: pick(BUILD_LIST.filter((b) => b !== 'child')), sex: pick(['M', 'F']), ov: {}, h: 1, expr: 'neutral', A: null, B: null, child: null, mut: 0.05, roster: [] };
+  }
+  renderVals() {
+    const s = this.state, g = s.g;
+    const rows = (group) => GENES.filter((d) => d.group === group).map((d) => ({
+      id: 'gene-' + d.k, label: d.label, hint: d.hint, display: fmt(d, g[d.k]),
+      min: d.kind === 'log' ? -2 : d.lo, max: d.kind === 'log' ? 2 : d.hi, step: d.kind === 'log' ? 0.01 : d.step,
+      slider: d.kind === 'log' ? Math.log2(g[d.k]) : g[d.k],
+      set: (e) => { const v = Number(e.target.value); this.setState({ g: { ...s.g, [d.k]: d.kind === 'log' ? clamp(Math.pow(2, v), 0.25, 4) : v } }); },
+    }));
+    const chip = (on) => 'font: inherit; font-size: 12px; line-height: 16px; padding: 4px 10px; border-radius: 4px; cursor: pointer; border: 1px solid ' + (on ? '#d4c63c' : 'var(--border)') + '; background: ' + (on ? '#d4c63c' : 'var(--surface-raised)') + '; color: ' + (on ? '#2a1d15' : 'inherit');
+    const geneCount = (x) => x ? Object.keys(x.g).length : 0;
+    const yrs = (n) => (n / 2000).toFixed(1) + ' yrs';
+    const days = (n) => (n / 50).toFixed(0) + ' days';
+    const A = s.A, B = s.B, C = s.child;
+    const ready = !!(A && B);
+    return {
+      physical: rows('physical'), temperament: rows('temperament'), plasticity: rows('plasticity'),
+      cur: short(g, { ap: s.ap, build: s.build, sex: s.sex, ov: s.ov, h: s.h }), expr: s.expr, hVal: s.h, hDisp: s.h.toFixed(2) + 'x', setH: (e) => this.setState({ h: Number(e.target.value) }), ap0: s.ap[0], ap1: s.ap[1], ap2: s.ap[2],
+      appearance: ['Skin', 'Hair', 'Clothing', 'Definition', 'Curves'].map((label, i) => ({ id: 'ap-' + i, label, display: s.ap[i].toFixed(2), slider: s.ap[i],
+        set: (e) => { const ap = s.ap.slice(); ap[i] = Number(e.target.value); this.setState({ ap }); } })),
+      derived: [
+        { label: 'Hunger per tick', value: (0.004 * g.metabolism).toFixed(4) },
+        { label: 'Body temperature drift rate', value: (0.03 / g.insulation).toFixed(3) + ' per tick' },
+        { label: 'Maximum age', value: yrs(2000000 * g.lifespan) + ' (' + days(2000000 * g.lifespan) + ')' },
+        { label: 'Strength declines from', value: yrs(0.6 * 2000000 * g.lifespan) },
+        { label: 'Planning horizon (1 / (1 - gamma))', value: Math.round(1 / (1 - g.patience)) + ' ticks' },
+        { label: 'Learning rate multiplier', value: '×' + g.lr_scale.toFixed(2) },
+      ],
+      buildOpts: BUILD_LIST.map((v) => ({ v, pick: () => this.setState({ build: v }), style: chip(v === s.build) })), sexOpts: [['M', '\u2642 Male'], ['F', '\u2640 Female']].map(([v, t]) => ({ v, t, pick: () => this.setState({ sex: v }), style: chip(v === s.sex) })),
+      looks: (() => {
+        const AA = window.AgonArt, L0 = AA.look(s.ap[0], s.ap[1], s.ap[2]), ov = s.ov, setO = (k, v) => () => this.setState({ ov: v == null ? Object.fromEntries(Object.entries(ov).filter(([q]) => q !== k)) : { ...ov, [k]: v } });
+        const names = (label, k, list) => ({ label, opts: [{ t: 'auto', pick: setO(k, null), style: chip(ov[k] === undefined) }].concat(list.map((t, i) => ({ t, pick: setO(k, i), style: chip(ov[k] === i) }))) });
+        const sw = (label, k, list) => ({ label, opts: [{ t: 'auto', pick: setO(k, null), style: chip(ov[k] === undefined) }].concat(list.map((c) => ({ t: '', pick: setO(k, c), style: 'width: 22px; height: 22px; padding: 0; border-radius: 4px; cursor: pointer; background: ' + c + '; border: 2px solid ' + (ov[k] === c ? '#d4c63c' : 'var(--border)') }))) });
+        return [
+          { label: 'Expression', opts: ['neutral', 'happy', 'tired', 'hungry', 'thirsty', 'scared', 'angry', 'hurt', 'sick', 'cold', 'sleep'].map((t) => ({ t, pick: () => this.setState({ expr: t }), style: chip(s.expr === t) })) },
+          names('Hair style', 'hairStyle', AA.HAIRNAMES), sw('Hair colour', 'hair', AA.HAIR), sw('Skin tone', 'skin', AA.SKIN), sw('Clothing colour', 'cloth', AA.CLOTH),
+          names('Outfit', 'outfit', AA.OUTFITNAMES), { label: 'Beard', opts: [{ t: 'auto', pick: () => this.setState({ ov: Object.fromEntries(Object.entries(ov).filter(([q]) => q !== 'beard' && q !== 'hirsute')) }), style: chip(ov.beard === undefined) }].concat(AA.BEARDNAMES.map((t, i) => ({ t, pick: () => this.setState({ ov: { ...ov, beard: i, hirsute: true } }), style: chip(ov.beard === i) }))) }, names('Headwear', 'acc', AA.ACCNAMES),
+        ];
+      })(),
+      hasA: !!A, noA: !A, hasB: !!B, noB: !B,
+      pa: A ? short(A.g, A) : short(neutral()), paAp0: A ? A.ap[0] : 0, paAp1: A ? A.ap[1] : 0, paAp2: A ? A.ap[2] : 0,
+      pb: B ? short(B.g, B) : short(neutral()), pbAp0: B ? B.ap[0] : 0, pbAp1: B ? B.ap[1] : 0, pbAp2: B ? B.ap[2] : 0,
+      setA: () => this.setState({ A: { g: { ...s.g }, ap: s.ap.slice(), build: s.build, sex: s.sex, ov: { ...s.ov }, h: s.h } }),
+      setB: () => this.setState({ B: { g: { ...s.g }, ap: s.ap.slice(), build: s.build, sex: s.sex, ov: { ...s.ov }, h: s.h } }),
+      mut: s.mut, mutText: s.mut.toFixed(2), setMut: (e) => this.setState({ mut: Number(e.target.value) }),
+      breedOpacity: ready ? 1 : 0.5,
+      breedHint: ready ? 'Ready. Each press makes a new child.' : 'Set both parents first.',
+      breed: () => {
+        if (!ready) return;
+        const g2 = {}, from = {};
+        for (const d of GENES) {
+          const fromA = Math.random() < 0.5; from[d.k] = fromA ? 'A' : 'B';
+          let v = (fromA ? A.g : B.g)[d.k];
+          v = d.kind === 'log' ? clamp(v * Math.exp(s.mut * gauss()), 0.25, 4) : clamp(v + s.mut * (d.hi - d.lo) * gauss(), d.lo, d.hi);
+          g2[d.k] = v;
+        }
+        const ap = [0, 1, 2, 3, 4].map((i) => clamp((Math.random() < 0.5 ? A : B).ap[i] + s.mut * gauss() * 0.5, 0, 0.999)), par = Math.random() < 0.5 ? A : B;
+        this.setState({ child: { g: g2, ap, from, sex: Math.random() < 0.5 ? 'M' : 'F', build: par.build, ov: {}, h: clamp((A.h + B.h) / 2 + 0.06 * gauss(), 0.75, 1.35) } });
+      },
+      hasChild: !!C,
+      ch: C ? short(C.g, C) : short(neutral()), chAp0: C ? C.ap[0] : 0, chAp1: C ? C.ap[1] : 0, chAp2: C ? C.ap[2] : 0,
+      childChips: C ? GENES.map((d) => ({ text: d.label + ' ' + C.from[d.k], style: 'padding: 2px 8px; border-radius: 2px; font-size: 12px; line-height: 16px; background: ' + (C.from[d.k] === 'A' ? 'var(--fill-blue)' : 'var(--fill-green)') + '; color: var(--ink)' })) : [],
+      loadChild: () => { if (C) this.setState({ g: { ...C.g }, ap: C.ap.slice(), build: C.build, sex: C.sex, ov: {}, h: C.h }); },
+      rosterCount: s.roster.length, rosterEmpty: s.roster.length === 0,
+      saveCurrent: () => { if (s.roster.length < 8) this.setState({ roster: s.roster.concat({ g: { ...s.g }, ap: s.ap.slice(), build: s.build, sex: s.sex, ov: { ...s.ov }, h: s.h }) }); },
+      roster: s.roster.map((r, i) => ({ label: 'Load founder ' + (i + 1), g: short(r.g, r), a0: r.ap[0], a1: r.ap[1], a2: r.ap[2], load: () => this.setState({ g: { ...r.g }, ap: r.ap.slice(), build: r.build, sex: r.sex, ov: { ...(r.ov || {}) }, h: r.h || 1 }) })),
+      rollFounder: () => this.setState({ g: founder(), ap: rap(), build: pick(BUILD_LIST.filter((b) => b !== 'child')), sex: pick(['M', 'F']), ov: {}, h: clamp(1 + 0.08 * gauss(), 0.8, 1.3) }),
+      resetAll: () => this.setState({ g: neutral(), ap: [0.5, 0.5, 0.5, 0.5, 0.5], build: 'average', sex: 'M', ov: {}, h: 1 }),
+      json: JSON.stringify({ genotype: Object.fromEntries(GENES.map((d) => [d.k, Number(g[d.k].toFixed(4))])), appearance: s.ap.map((v) => Number(v.toFixed(3))), build: s.build, sex: s.sex, height: Number(s.h.toFixed(2)), overrides: s.ov }, null, 1),
+    };
+  }
+}
+</script>
+</body>
+</html>

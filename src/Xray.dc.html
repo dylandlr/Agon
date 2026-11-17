@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>X-ray view</title>
+<script src="./support.js"></script>
+<script src="./art.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>body{margin:0}</style>
+</helmet>
+<svg viewBox="{{vb}}" width="{{w}}" height="{{h}}" role="img" aria-label="{{label}}" style="display: block; overflow: visible">
+  <sc-if value="{{panel}}" hint-placeholder-val="{{ false }}">
+    <rect x="{{px}}" y="{{py}}" width="{{pw}}" height="{{ph}}" rx="3" fill="#10262c"></rect>
+    <path d="{{grid}}" stroke="#1d4650" stroke-width="0.4" fill="none"></path>
+    <rect x="{{px}}" y="{{py}}" width="{{pw}}" height="{{ph}}" rx="3" fill="none" stroke="#1c110b" stroke-width="1.2"></rect>
+  </sc-if>
+  <g transform="{{tf}}">
+  <ellipse cx="{{shx}}" cy="{{shy}}" rx="{{shrx}}" ry="{{shry}}" fill="#000000" opacity="0.3"></ellipse>
+  <sc-for list="{{items}}" as="i" hint-placeholder-count="30">
+    <path d="{{i.d}}" fill="{{i.fill}}" stroke="{{i.stroke}}" stroke-width="{{i.sw}}" stroke-linecap="round" stroke-linejoin="round" opacity="{{i.op}}" transform="{{i.tf}}"></path>
+  </sc-for>
+  <sc-if value="{{fly1}}" hint-placeholder-val="{{ false }}"><circle cx="19" cy="14" r="0.9" fill="#d8d0c0" stroke="#1c110b" stroke-width="0.4" style="animation: ag-fly 0.9s ease-in-out infinite"></circle></sc-if>
+  <sc-if value="{{fly2}}" hint-placeholder-val="{{ false }}"><circle cx="30" cy="30" r="0.9" fill="#d8d0c0" stroke="#1c110b" stroke-width="0.4" style="animation: ag-fly 0.7s ease-in-out -0.3s infinite"></circle></sc-if>
+  </g>
+</svg>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"phy":{"editor":"string","default":""},"muscle":{"editor":"float","default":1},"stamina":{"editor":"float","default":1},"frame":{"editor":"float","default":1},"fat":{"editor":"float","default":1},"subject":{"editor":"enum","default":"pawn","options":["pawn","small","large","pred"]},"strength":{"editor":"float","default":1},"build":{"editor":"enum","default":"average","options":["lean","lanky","average","athletic","stocky","barrel","pear","stout","heavy","child"]},"scale":{"editor":"float","default":1},"decay":{"editor":"float","default":0},"grow":{"editor":"float","default":-1},"old":{"editor":"float","default":0},"held":{"editor":"enum","default":"none","options":["none","berries","tool","waterskin"]},"injured":{"editor":"boolean","default":false},"infected":{"editor":"boolean","default":false},"cold":{"editor":"boolean","default":false},"panel":{"editor":"boolean","default":false},"size":{"editor":"int","default":96},"$preview":{"width":96,"height":96}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const A = window.AgonArt, p = this.props, sub = p.subject || 'pawn';
+    const INK = '#1c110b', BONE = '#efe6d0', SIL = p.cold ? '#2c4f6e' : '#26434a', HEART = '#d8564a', LUNG = '#e9a0a0', STOM = '#e8b06a', BRAIN = '#f0a8b8';
+    const items = [];
+    let zone = 'foot';
+    const P = (d, fill, stroke, sw, extra) => items.push({ d, fill: fill || 'none', stroke: stroke || 'none', sw: sw || 0, op: 1, tf: 'rotate(0)', z: zone, ...(extra || {}) });
+    const E = (cx, cy, rx, ry) => 'M' + (cx - rx) + ' ' + cy + ' a' + rx + ' ' + ry + ' 0 1 0 ' + (2 * rx) + ' 0 a' + rx + ' ' + ry + ' 0 1 0 ' + (-2 * rx) + ' 0Z';
+    const sil = (d, sw) => P(d, dc ? A.mix(SIL, '#3a3a22', Math.min(1, dc.D * 1.1)) : SIL, INK, sw || 2, { op: fleshOp });
+    // bones get an ink outline underneath so they read at 48px
+    const bone = (d, w) => { P(d, 'none', INK, w + 1.4); P(d, 'none', BONE, w); };
+    const blob = (d, fill, sw) => P(d, dc ? A.mix(fill, '#6a7a4a', Math.min(1, dc.D * 1.4)) : fill, INK, sw || 0.9, { op: organOp });
+    const HEARTP = 'M0 2.6 C-3.4 0.2 -2.4 -2.9 -0.6 -2.8 C0 -2.8 0 -2.2 0 -2.2 C0 -2.2 0.4 -2.8 1 -2.8 C2.8 -2.9 3.4 0.2 0 2.6Z';
+    const heart = (x, y, s) => P(HEARTP, dc ? A.mix(HEART, '#6a4a3a', Math.min(1, dc.D * 1.4)) : HEART, INK, 0.9 / s, { op: organOp, tf: 'translate(' + x + ' ' + y + ') scale(' + s + ')' });
+    const sock = (x, y, rx, ry) => P(E(x, y, rx, ry), INK);
+    const dm = A.pawnDims(p.strength ?? 1, p.build, p.scale, { muscle: p.muscle, stamina: p.stamina, frame: p.frame, fat: p.fat, phy: p.phy }, { grow: p.grow == null ? -1 : p.grow, old: p.old || 0 }), dc = (p.decay || 0) > 0 && sub === 'pawn' ? A.decayOf(p.decay) : null;
+    const organOp = dc ? dc.organOp : 1, fleshOp = dc ? dc.fleshOp : 1;
+    let vb = '0 0 48 48', shx = 24, shy = 43, shrx = 13, shry = 3.8, pw = 48, ph = 48, px = 0, py = 0;
+    if (sub === 'pawn') {
+      const bw = dm.bw * (1 + (dc ? dc.bloat : 0)), bh = dm.bh * (1 + (dc ? dc.bloat * 0.7 : 0)), BKx = A.bodyKit(bw, bh, dm.fit, dm.fat, 'S', '#888888', dm), hx = 24 + BKx.wa + 1.5, hl = 24 - BKx.wa - 1.5;
+      // silhouette: exactly the map pawn's shapes
+      const LS = A.legStance('S', BKx.wa);
+      LS.x.forEach((lx) => { sil('M' + (lx - LS.hw).toFixed(2) + ' 35 L' + (lx - LS.hw).toFixed(2) + ' 42 L' + (lx + LS.hw).toFixed(2) + ' 42 L' + (lx + LS.hw).toFixed(2) + ' 35Z', 1.8); });
+      LS.x.forEach((lx) => sil(E(lx, 42.4, LS.rx + 0.4, 2.3), 1.6));
+      zone = 'body';
+      A.armKit('S', bw, bh, dm.fit, SIL, SIL, SIL, dm).front.forEach((q) => items.push({ ...q, z: 'body', tf: 'rotate(0)', op: fleshOp }));
+      sil(BKx.d, 2);
+      zone = 'head';
+      sil(E(14.4, 20.65, 1.8, 2.43), 1.2); sil(E(33.6, 20.65, 1.8, 2.43), 1.2);
+      sil(E(24, 19.5, 9.6, 9.6), 2);
+      zone = 'body';
+      // organs
+      const lx = Math.min(5.4, bw * 0.45), lr = Math.min(3.2, bw * 0.26);
+      // lower organs sit under the lungs: liver, kidneys, intestines
+      blob(E(20.4, 36.3, 3.2, 1.5), '#a8584a'); blob(E(Math.max(14.8, 24 - bw * 0.7), 37, 0.95, 1.5), '#b86a5a'); blob(E(Math.min(33.2, 24 + bw * 0.7), 37, 0.95, 1.5), '#b86a5a');
+      P('M20.6 38 q1.2 -1.2 2.4 0 t2.4 0 t2.4 0', 'none', INK, 1.9, { op: organOp }); P('M20.6 38 q1.2 -1.2 2.4 0 t2.4 0 t2.4 0', 'none', '#e8a0a8', 1, { op: organOp });
+      blob(E(24 - lx, 31.2, lr, 4.2), LUNG); blob(E(24 + lx, 31.2, lr, 4.2), LUNG);
+      blob(E(26.6, 36.7, 2.3, 1.2), STOM);
+      heart(24.4, 32.6, 1.1);
+      // skeleton and skull come from the shared art (the brain cap is soft tissue and fades first)
+      A.skeleton('S', bw, bh, dm).forEach((q) => items.push({ ...q, sk: true, op: q.g === 'organ' ? organOp : 1 }));
+      zone = 'head';
+      blob(E(21.2, 18.9, 1.15, 1.35), '#e8dcc4'); blob(E(26.8, 18.9, 1.15, 1.35), '#e8dcc4');
+      zone = 'body';
+      // condition tells
+      if (p.infected) { P(E(24, 34.2, bw * 0.72, 5), '#7fbf3c', 'none', 0, { op: 0.34 }); P(E(21, 35, 0.9, 0.9), '#7fbf3c', INK, 0.5); P(E(27.6, 32.4, 0.7, 0.7), '#7fbf3c', INK, 0.5); }
+      if (p.injured) { P('M' + (24 + bw * 0.58) + ' 29.9 l1.1 0.9 l-1 0.9 l1.2 0.9', 'none', '#c2503c', 1); P('M' + (24 + bw * 0.55) + ' 29.3 l1 1 l-1 0.8', 'none', INK, 0.4, { op: 0 }); }
+      // held item sits in the right hand
+      if (p.held === 'berries') { [[-1.6, -2.4], [1.4, -2.1], [-0.1, -4.6]].forEach(([dx, dy]) => P(E(hx + dx, 33 + dy, 1.7, 1.7), '#c2503c', INK, 0.9)); P('M' + hx + ' ' + (33 - 6.6) + ' q1.6 -0.4 2 0.8 q-1.4 0.6 -2 -0.8Z', '#7fbf8e', INK, 0.6); }
+      if (p.held === 'tool') { bone('M' + (hx - 0.2) + ' 36.6 L' + (hx + 0.6) + ' 25.4', 1.7); P('M' + (hx - 2.4) + ' 25.6 L' + (hx + 3.8) + ' 24.2 L' + (hx + 4) + ' 27.6 L' + (hx - 1.8) + ' 28.6Z', '#aeb6bd', INK, 1); }
+      if (p.held === 'waterskin') { P(E(hx, 29.6, 2.9, 3.7), '#8a5a34', INK, 1); P(E(hx, 29.8, 1.2, 1.2), '#7cacdf', INK, 0.6); P('M' + (hx - 0.9) + ' 26.2 h1.8 v-1.6 h-1.8Z', '#aeb6bd', INK, 0.7); }
+    } else {
+      vb = '0 0 64 64'; pw = 64; ph = 64; shx = 30; shy = 56; shrx = 22; shry = 3.4;
+      const K = {
+        small: {
+          sil: [E(28, 41, 15, 11.5), E(44, 33, 8.4, 8.4), E(20, 43, 8, 8), E(11, 41, 4.6, 4.6), E(38, 53, 5.5, 2.8), E(19, 53, 7, 2.8)],
+          ears: [[38, 19, 3.2, 9, -12], [44.5, 19, 3.2, 9, 8]],
+          lungs: [30, 39, 4, 5], heart: [34, 43, 0.8], stom: [24, 44, 3.2, 2],
+          spine: 'M40 36 Q28 32 14 40', ribs: [[22, 38], [26, 37], [30, 36]], rl: 10,
+          legs: ['M35 46 L38 53', 'M20 41 L21 48 L19 53'], tail: [11, 41],
+          skull: [44, 33, 5.4, 4.8], sk: [46, 32], nose: [50.5, 35], crack: [27, 34],
+        },
+        large: {
+          sil: [E(29, 38, 21, 14), E(51, 41, 10, 8.5), E(59, 45, 4.6, 3.8), 'M9 36 q-6 -1 -5 -7', E(16, 50, 4, 5), E(44, 50, 4, 5), E(24, 50, 4, 5), E(51, 50, 4, 5)],
+          ears: [], lungs: [34, 36, 5, 6], heart: [38, 41, 1], stom: [22, 42, 4.2, 2.6],
+          spine: 'M12 31 Q28 27 46 35', ribs: [[18, 31], [23, 30], [28, 31], [33, 32]], rl: 12,
+          legs: ['M16 45 L16 54', 'M24 46 L24 54', 'M44 46 L44 54', 'M51 45 L51 54'], tail: [8, 31],
+          skull: [51, 40, 7, 5.4], sk: [52, 38.6], nose: [59, 45], crack: [28, 32], tusk: true,
+        },
+        pred: {
+          sil: [E(28, 38, 19, 9), E(49, 32, 8.5, 7), E(57, 35, 6, 3.6), 'M11 37 Q3 38 3 48', E(18, 50, 3.4, 5.4), E(24, 50, 3.4, 5.4), E(42, 50, 3.4, 5.4), E(47, 50, 3.4, 5.4), 'M48 27 L52 18 L57 28Z', 'M42 28 L45 17 L51 27Z'],
+          ears: [], lungs: [35, 36, 4.2, 4.6], heart: [39, 40, 0.9], stom: [24, 41, 3.6, 2],
+          spine: 'M10 37 Q26 31 45 31', ribs: [[20, 33], [24, 32.4], [28, 32], [32, 31.8]], rl: 9,
+          legs: ['M18 42 L18 54', 'M24 42 L24 54', 'M42 42 L43 54', 'M47 42 L47 54'], tail: [3, 48],
+          skull: [49, 32, 5.6, 4.8], sk: [51, 31], nose: [60, 34], crack: [27, 32], snout: true,
+        },
+      }[sub] || null;
+      const k = K;
+      k.sil.forEach((s, i) => sil(s, 1.8));
+      (k.ears || []).forEach((q) => sil(E(q[0], q[1], q[2], q[3]), 1.6));
+      // ears are rotated ellipses: re-stamp with transform
+      items.splice(items.length - (k.ears || []).length, (k.ears || []).length);
+      (k.ears || []).forEach((q) => P(E(q[0], q[1], q[2], q[3]), SIL, INK, 1.6, { tf: 'rotate(' + q[4] + ' ' + q[0] + ' ' + q[1] + ')' }));
+      blob(E(k.lungs[0], k.lungs[1], k.lungs[2], k.lungs[3]), LUNG);
+      blob(E(k.stom[0], k.stom[1], k.stom[2], k.stom[3]), STOM);
+      heart(k.heart[0], k.heart[1], k.heart[2]);
+      bone(k.spine, 1.8);
+      k.ribs.forEach((r) => bone('M' + r[0] + ' ' + r[1] + ' q2 ' + (k.rl * 0.5) + ' -1 ' + k.rl, 1.1));
+      k.legs.forEach((l) => bone(l, 1.8));
+      P(E(k.tail[0], k.tail[1], 1.4, 1.4), BONE, INK, 0.8);
+      P(E(k.skull[0], k.skull[1], k.skull[2], k.skull[3]), BONE, INK, 1);
+      if (k.snout) P(E(57, 35, 4.6, 2.2), BONE, INK, 0.9);
+      sock(k.sk[0], k.sk[1], 1.6, 1.8);
+      P(E(k.nose[0], k.nose[1], 1, 0.9), INK);
+      if (k.tusk) P('M56 46.6 q3 1.2 3.4 -3', 'none', BONE, 1.4);
+      if (p.infected) P(E(k.lungs[0] - 2, k.lungs[1] + 3, 11, 5), '#7fbf3c', 'none', 0, { op: 0.32 });
+      if (p.injured) P('M' + k.crack[0] + ' ' + k.crack[1] + ' l1.4 1.2 l-1.2 1 l1.5 1.2', 'none', '#c2503c', 1.2);
+    }
+    const panel = !!p.panel, S = p.size ?? 96;
+    let grid = '';
+    for (let g = 8; g < pw; g += 8) grid += 'M' + g + ' 0 V' + ph + ' M0 ' + g + ' H' + pw + ' ';
+    return {
+      tf: sub === 'pawn' ? A.scaleTf(dm.scale) : 'translate(0 0)', fly1: !!dc && dc.flies >= 1, fly2: !!dc && dc.flies >= 2,
+      items: sub === 'pawn' ? items.map((q) => q.sk ? q : { ...q, tf: (q.z === 'foot' ? 'translate(0 1.4)' : q.z === 'head' ? 'translate(0 ' + (-4.6 - dm.lg - A.NECK).toFixed(2) + ') translate(24 29.5) scale(' + (0.9 * dm.hd).toFixed(3) + ') translate(-24 -29.5)' : 'translate(0 ' + (-4.6 - dm.lg).toFixed(2) + ')') + (q.tf && q.tf !== 'rotate(0)' ? ' ' + q.tf : '') }) : items, vb, w: S, h: S, panel, px, py, pw, ph, grid, shx, shy, shrx, shry,
+      label: 'X-ray of ' + (sub === 'pawn' ? 'agent' : sub === 'small' ? 'small prey' : sub === 'large' ? 'large prey' : 'predator') + (p.held && p.held !== 'none' ? ', holding ' + p.held : ''),
+    };
+  }
+}
+</script>
+</body>
+</html>

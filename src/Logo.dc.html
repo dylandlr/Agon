@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Agon logo</title>
+<script src="./support.js"></script>
+<script src="./art.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>body{margin:0}</style>
+</helmet>
+<svg viewBox="0 0 360 214" width="{{w}}" height="{{h}}" role="img" aria-label="Agon" style="display: block; overflow: visible">
+  <sc-for list="{{items}}" as="i" hint-placeholder-count="80">
+    <path d="{{i.d}}" fill="{{i.fill}}" fill-rule="{{i.fr}}" stroke="{{i.stroke}}" stroke-width="{{i.sw}}" stroke-linecap="round" stroke-linejoin="round" opacity="{{i.op}}" transform="{{i.tf}}"></path>
+  </sc-for>
+</svg>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"size":{"editor":"int","default":360},"$preview":{"width":360,"height":214}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const p = this.props, S = p.size ?? 360;
+    const INK = '#1c110b', items = [];
+    const P = (d, fill, stroke, sw, extra) => items.push({ d, fill: fill || 'none', stroke: stroke || 'none', sw: sw || 0, op: 1, tf: 'rotate(0)', fr: 'nonzero', ...(extra || {}) });
+    const E = (cx, cy, rx, ry) => 'M' + (cx - rx) + ' ' + cy + ' a' + rx + ' ' + ry + ' 0 1 0 ' + (2 * rx) + ' 0 a' + rx + ' ' + ry + ' 0 1 0 ' + (-2 * rx) + ' 0Z';
+    const cap = (cx, cy, r, y0) => { const h = Math.sqrt(r * r - (y0 - cy) ** 2); return 'M' + (cx - h).toFixed(1) + ' ' + y0 + ' A' + r + ' ' + r + ' 0 0 0 ' + (cx + h).toFixed(1) + ' ' + y0 + 'Z'; };
+    const CX = 180, CY = 80, R = 60;
+
+    // ---- wordmark first, so the medallion lies on top of it
+    P(E(182, 204, 150, 6), '#000000', 'none', 0, { op: 0.32 });
+    const polar = (cx, cy, r, deg) => [cx + r * Math.cos(deg * Math.PI / 180), cy + r * Math.sin(deg * Math.PI / 180)];
+    const f = (v) => v.toFixed(1);
+    const g1 = polar(144, 159, 35, -40), g3 = polar(144, 159, 35, 40), q3 = polar(144, 159, 19, 40), q1 = polar(144, 159, 19, -40);
+    const letters = [
+      { d: 'M21 194 L47 124 H69 L95 194 H77 L72 179 H44 L39 194Z M49 165 H67 L58 140Z', fr: 'evenodd' },
+      { d: 'M' + f(g1[0]) + ' ' + f(g1[1]) + ' A35 35 0 1 0 ' + f(g3[0]) + ' ' + f(g3[1]) + ' L' + f(q3[0]) + ' ' + f(q3[1]) + ' A19 19 0 1 1 ' + f(q1[0]) + ' ' + f(q1[1]) + 'Z' },
+      { d: 'M153 154 H179 V178 H165 V168 H153Z' },
+      { d: 'M193 159 a35 35 0 1 0 70 0 a35 35 0 1 0 -70 0Z M211 159 a17 23 0 1 0 34 0 a17 23 0 1 0 -34 0Z', fr: 'evenodd' },
+      { d: 'M277 194 V124 H297 L319 162 V124 H339 V194 H319 L297 156 V194Z' },
+    ];
+    letters.forEach((l) => P(l.d, INK, INK, 9, { fr: l.fr || 'nonzero' }));
+    letters.forEach((l) => P(l.d, '#9a8a24', INK, 0, { fr: l.fr || 'nonzero' }));
+    letters.forEach((l) => P(l.d, '#d4c63c', 'none', 0, { fr: l.fr || 'nonzero', tf: 'translate(-2.2 -2.4)' }));
+    // thin highlight on the upper-left of each stem
+    P('M52 126 H64', 'none', '#f0e27a', 2.2); P('M281 128 V150', 'none', '#f0e27a', 2.2);
+    P('M199 142 a30 30 0 0 1 14 -14', 'none', '#f0e27a', 2.2); P('M115 142 a30 30 0 0 1 14 -14', 'none', '#f0e27a', 2.2);
+
+    // ---- wings (behind the medallion, in front of the letters): long primaries over a shorter covert row
+    for (const side of [1, -1]) {
+      const px = CX + side * (R - 6), py = CY - 6;
+      const fea = (ang, len, wd, c1, c2, c3) => {
+        const a = side === 1 ? ang : 180 - ang, tf = 'rotate(' + a + ' ' + px + ' ' + py + ')';
+        const w = wd * 0.5, pt = () => 'M' + px + ' ' + (py - w) + ' C' + (px + len * 0.5) + ' ' + (py - w * 1.35) + ' ' + (px + len * 0.93) + ' ' + (py - w * 0.95) + ' ' + (px + len) + ' ' + py + ' C' + (px + len * 0.93) + ' ' + (py + w * 0.95) + ' ' + (px + len * 0.5) + ' ' + (py + w * 1.35) + ' ' + px + ' ' + (py + w) + 'Z';
+        P(pt(), INK, INK, 3.2, { tf });
+        P(pt(), c2, 'none', 0, { tf });
+        P(pt(), c1, 'none', 0, { tf: tf + ' translate(' + px + ' ' + (py - 1.6) + ') scale(1 0.5) translate(' + (-px) + ' ' + (-py) + ')' });
+      };
+      [[-74, 52], [-55, 60], [-36, 64], [-17, 63], [2, 58], [21, 50]].forEach(([a, l]) => fea(a, l, 13, '#f0a870', '#c4603e'));
+      [[-62, 30], [-43, 36], [-24, 38], [-5, 36], [14, 30]].forEach(([a, l]) => fea(a, l, 11, '#d4764a', '#a8472f'));
+    }
+    // ---- medallion: palmette rim, ink disc, Greek key ring, dawn sky, ground
+    for (let i = 0; i < 24; i++) P('M-4.6 0 Q-6 -7 0 -9.6 Q6 -7 4.6 0Z', '#e8c63c', INK, 1.5, { tf: 'translate(' + CX + ' ' + CY + ') rotate(' + (i * 15) + ') translate(0 -' + (R - 1) + ')' });
+    P(E(CX, CY, R, R), INK, INK, 2);
+    P(E(CX, CY, R - 2.6, R - 2.6), '#8a5a34');
+    P(E(CX, CY, R - 14, R - 14), INK);
+    for (let i = 0; i < 18; i++) P('M-5 3.2 V-3.2 H5 V1 H0.8 V-0.6', 'none', '#f0d98a', 1.4, { tf: 'translate(' + CX + ' ' + CY + ') rotate(' + (i * 20 + 10) + ') translate(0 -' + (R - 8.4) + ')' });
+    const SR = R - 16;
+    P(E(CX, CY, SR, SR), '#234a73');
+    P(E(CX - 2.4, CY - 3, SR - 2.4, SR - 3), '#2f5f93');
+    [[-22, -26], [-8, -33], [20, -28], [30, -14], [-30, -10]].forEach(([x, y]) => P(E(CX + x, CY + y, 1.1, 1.1), '#f0e27a'));
+    P(cap(CX, CY, SR, CY + 5), '#e0956a');
+    P(cap(CX, CY, SR, CY + 12), '#f0b070');
+    P(cap(CX, CY, SR, CY + 20), '#6a4a2c');
+    P('M' + (CX - 36) + ' ' + (CY + 20) + ' H' + (CX + 36), 'none', INK, 1.6);
+    P(cap(CX, CY, SR, CY + 20), '#000000', 'none', 0, { op: 0 });
+    // two round map pawns face off
+    const pawn = (x, dir, cloth, shade) => {
+      const y = CY + 12;
+      P(E(x, y + 11, 10, 2.8), '#000000', 'none', 0, { op: 0.32 });
+      P(E(x - 4, y + 9, 3, 2), '#2a1d15', INK, 1.2); P(E(x + 4, y + 9, 3, 2), '#2a1d15', INK, 1.2);
+      P(E(x - 10, y - 2, 2.5, 2.5), '#c49a78', INK, 1.2); P(E(x + 10, y - 2, 2.5, 2.5), '#c49a78', INK, 1.2);
+      P(E(x, y, 9, 6.8), shade, INK, 1.6); P(E(x - 1.1, y - 1.2, 6.8, 4.6), cloth);
+      P(E(x, y - 11, 7.8, 7.8), '#c49a78', INK, 1.6); P(E(x - 0.7, y - 11.7, 6.6, 6.6), '#e0b894');
+      P('M' + (x - 7.8) + ' ' + (y - 11) + ' A7.8 7.8 0 0 1 ' + (x + 7.8) + ' ' + (y - 11) + ' L' + (x + 6) + ' ' + (y - 14.2) + ' Q' + x + ' ' + (y - 17.4) + ' ' + (x - 6) + ' ' + (y - 14.2) + 'Z', '#3a2a20', INK, 1.4);
+      P(E(x + dir * 2 - 2.4, y - 10.4, 1, 1.4), INK); P(E(x + dir * 2 + 2.4, y - 10.4, 1, 1.4), INK);
+    };
+    pawn(CX - 21, 1, '#7a3f35', '#5a2d27'); pawn(CX + 21, -1, '#2f5f93', '#234a73');
+    // sun ornament crowning the medallion
+    for (let i = 0; i < 12; i++) P('M-3.2 0 L0 -8 L3.2 0Z', '#e8c63c', INK, 1.4, { tf: 'translate(' + CX + ' 17) rotate(' + (i * 30) + ') translate(0 -8)' });
+    P(E(CX, 17, 8.6, 8.6), '#e8c63c', INK, 2); P(E(CX - 1.6, 15.4, 5.6, 5.6), '#f4dc78');
+    return { items, w: S, h: Math.round(S * 214 / 360) };
+  }
+}
+</script>
+</body>
+</html>
