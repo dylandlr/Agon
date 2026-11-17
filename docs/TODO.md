@@ -269,3 +269,66 @@ Not done, carried forward:
 - Unity: emergent tech and staged building next; worldgen there already sites the
   camp on flat ground and does not stamp it bare.
 - Larder never fills; the thirst loop is still untraced.
+
+## Round 25 — RimWorld-faithful UI (layout A)
+
+Dyl picked layout A from the three mockups: inspector bottom-left, minimap
+bottom-right, alerts down the right edge. This round moves the real HUD to match it.
+
+Verified (measured against the live build at 1440x900):
+- **The minimap is a real one, not a second one.** Before building anything I found
+  the existing minimap at template line ~229 after a key collision gave it away
+  (`miniDots` returned 74 markers, not the 16 mine would have, and a 2.5px dot width
+  I had not written). My duplicate was deleted whole. What is new on it is
+  `miniViewBox` — a white rectangle showing which part of the world the camera is
+  on — and `miniGo`, click-to-look-there, both on the panel that was already there.
+  Measured: box at `left: 45.65%; top: 3.85%; width: 47.44%; height: 96.15%` on seed
+  7, and a click moved `panX` from -1367.42 to -1574.20.
+- **The minimap is up by default.** It was `Map: { hide: true }` in `_pp`, which is
+  why bottom-right was empty in the first attempt. Not an `sc-if`: the `</sc-if>`
+  sitting above the panel belongs to the Agon menu button, which cost me a detour.
+- **The clock and the speed controls moved into the minimap panel**, as in the mock:
+  day/night bar, `Year 1 - Summer 9  23C`, weather and wind, the days-to-next-season
+  bar, then play / 1x / 2x / 4x and the mute button. The panel widened 132 -> 188px
+  (`mW` 114 -> 170). The speed row was *moved*, not copied: the dock keeps only its
+  summary line and the rewind scrubber.
+- **Alerts moved from the left column to the right edge** (`right: 16px; top: 64px`,
+  right-aligned). The resource readout stays top-left, which is where RimWorld puts
+  it. Checked with 2 and 3 alerts across four worlds: none overflow.
+- **The inspector moved from a right-hand aside to bottom-left**
+  (`left: 16px; bottom: 56px; width: 360px; max-height: 520px`), measured at
+  y 324-844, clear of the taskbar at y 850 and of the minimap. It had to move: the
+  alerts now occupy the right edge it used to sit on.
+- **Bottom-left is now a single slot.** Inspector, Tools and Log hide each other, in
+  both the click handler and the keyboard handler — the old code only paired
+  Tools<->Log, and the string appears twice in the file, which is worth remembering.
+- The tab row moved up 30px (`top: calc(100% - 46px)`) so it stops overlapping the
+  dock strip, which it did in the first attempt.
+- Sweeps clean: `tests/final3.py` 15-18 alive at tick 1500 on temperate / desert /
+  tundra / sea, no page errors; `tests/mute.py` still toggles masterGain
+  0.603 -> 0.003 -> 0.597 from the button's new home.
+
+Rough:
+- The dock's bounding box reads as off-screen in the geometry check (866-992 against
+  a 900px viewport). That is its own `translateY(calc(100% - 34px))` park, by design,
+  not a regression — noted so the next sweep does not chase it.
+- The season bar and its "1 days to autumn" label are tight against each other at
+  188px wide. Legible, not pretty.
+
+Found, not fixed — Dyl's call, because it is balance and not UI:
+- **Colonists are born 437 years old.** `age` is in ticks and advances correctly
+  (873883 -> 874783 over 900 ticks), and the inspector's "% of lifespan" is right.
+  The scale is what is wrong: `LIFE = 2000000` ticks against `YEAR = 2000` is a
+  1000-year lifespan, and the adult draw is `(0.1 + r*0.4) * LIFE`, i.e. 100-500
+  years. A human-scale `LIFE` would be about 150000. Changing it moves aging, death,
+  fertility and the `trained` ramp, so it is not something to slip into a UI round.
+
+Not done, carried forward:
+- Layout A's colonist bar is drawn top-left in the mock; the real one is top-centre.
+  Left as is — RimWorld centres its colonist bar, so the mock was the less faithful
+  of the two.
+- The clearing apron is still fairly wide; seed 13's east edge still reads smooth.
+- **Rock and mountain textures.** Diagnosis stands; awaiting confirmation.
+- Unity: emergent tech and staged building next, then migration and ruins.
+- Unity `JobGiver` re-offers unreachable targets every tick.
+- Interior walls still push shadow sprites; larder never fills; thirst loop untraced.

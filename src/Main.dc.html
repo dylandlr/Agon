@@ -176,11 +176,11 @@ body.agon-paused *{animation-play-state:paused !important}
         <div style="display: flex; flex-direction: column; gap: 1px; padding: 5px 9px; background: rgba(34,24,18,0.82); border: 1px solid #1c110b; border-radius: 4px; font-size: 12px; line-height: 17px; color: #e9dcc8">
           <sc-for list="{{hud.res}}" as="q" hint-placeholder-count="3"><div><span style="{{q.dot}}"></span>{{q.text}}</div></sc-for>
         </div>
-        <div style="display: flex; flex-direction: column; gap: 4px; align-items: flex-start">
-          <sc-for list="{{hud.alerts}}" as="q" hint-placeholder-count="2"><div onClick="{{q.click}}" style="{{q.style}}">{{q.text}}</div></sc-for>
-        </div>
       </div>
-      <div style="position: absolute; right: 16px; top: calc(100% - 16px); height: 0; display: flex; flex-direction: column; justify-content: flex-end; gap: 0; align-items: flex-end; overflow: visible">
+      <div style="position: absolute; right: 16px; top: 64px; display: flex; flex-direction: column; gap: 4px; align-items: flex-end; max-width: 320px">
+        <sc-for list="{{hud.alerts}}" as="q" hint-placeholder-count="2"><div onClick="{{q.click}}" style="{{q.style}}; pointer-events: auto">{{q.text}}</div></sc-for>
+      </div>
+      <div style="position: absolute; left: 50%; transform: translateX(-50%); top: calc(100% - 46px); height: 0; display: flex; flex-direction: column; justify-content: flex-end; gap: 0; align-items: center; overflow: visible">
         <sc-if value="{{hud.open}}" hint-placeholder-val="{{ false }}"><div style="pointer-events: auto; flex-shrink: 0; width: 330px; max-height: 460px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #9a8a76 rgba(0,0,0,0.25); box-sizing: border-box; padding: 8px 12px 10px; background: rgba(48,35,27,0.96); border: 1px solid #1c110b; border-radius: 4px 4px 0 4px; color: #e9dcc8">
           <div style="font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #ffd23f; margin-bottom: 4px">{{hud.title}} <span style="color: #9a8a76; font-weight: 600">{{hud.goalsDone}}</span></div>
           <sc-if value="{{hud.empty}}" hint-placeholder-val="{{ false }}"><div style="font-size: 12px; color: #9a8a76">Nothing yet.</div></sc-if>
@@ -199,11 +199,6 @@ body.agon-paused *{animation-play-state:paused !important}
       </div>
     </div>
     <div style="display: flex; gap: 6px">
-      <button onClick="{{togglePlay}}" style="{{playStyle}}">{{playLabel}}</button>
-      <button onClick="{{setSpeed1}}" aria-pressed="{{s1}}" style="{{sp1Style}}">1x</button>
-      <button onClick="{{setSpeed2}}" aria-pressed="{{s2}}" style="{{sp2Style}}">2x</button>
-      <button onClick="{{setSpeed4}}" aria-pressed="{{s4}}" style="{{sp4Style}}">4x</button>
-      <button onClick="{{toggleMute}}" aria-pressed="{{muted}}" title="{{muteTitle}}" style="{{muteStyle}}">{{muteLabel}}</button>
       <sc-if value="{{war.show}}" hint-placeholder-val="{{ false }}"><button onClick="{{war.prevEv}}" style="{{sp1Style}}">&lt; Event</button><button onClick="{{war.nextEv}}" style="{{sp1Style}}">Event &gt;</button><button onClick="{{war.live}}" style="{{sp1Style}}">Latest</button></sc-if>
     </div>
   </div></div>
@@ -222,10 +217,11 @@ body.agon-paused *{animation-play-state:paused !important}
   </sc-if>
 
   <!-- top: minimap with day and night indicator -->
-  <div data-panel="Map" style="position: absolute; left: 276px; top: 8px; width: 132px; box-sizing: border-box; padding: 8px; border-radius: 8px; background: rgba(48,35,27,0.92); border: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px">
+  <div data-panel="Map" style="position: absolute; right: 16px; bottom: 16px; width: 188px; box-sizing: border-box; padding: 8px; border-radius: 8px; background: rgba(48,35,27,0.92); border: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px">
     <div data-pbar="Map" style="display: flex; align-items: center; gap: 6px; flex: 0 0 auto; height: 16px; margin: -4px -4px 0; padding: 0 4px; cursor: grab; touch-action: none; user-select: none; font-size: 10px; line-height: 16px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #a89885"><span style="opacity: 0.6">⋮⋮</span><span style="flex: 1">Map</span><button data-pmin="1" aria-label="Minimise" style="width: 18px; height: 16px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: #a89885; font-size: 14px; line-height: 14px; cursor: pointer">–</button></div>
-    <div style="{{miniStyle}}">
+    <div onClick="{{miniGo}}" title="Click to look there" style="{{miniStyle}}; cursor: crosshair">
       <div style="{{miniTint}}"></div>
+      <div style="{{miniViewBox}}"></div>
       <sc-for list="{{miniDots}}" as="d" hint-placeholder-count="20"><div style="{{d.style}}"></div></sc-for>
     </div>
     <div style="position: relative; height: 10px; border: 1px solid #1c110b; border-radius: 2px; display: flex; overflow: visible">
@@ -233,6 +229,16 @@ body.agon-paused *{animation-play-state:paused !important}
       <div style="{{dnMarker}}"></div>
     </div>
     <div style="display: flex; justify-content: space-between; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; line-height: 14px"><span>{{dnLabel}}</span><span style="color: var(--ink-muted)">{{hour}}</span></div>
+    <div style="display: flex; justify-content: space-between; gap: 8px; font-size: 12px; line-height: 16px; font-weight: 600"><span>{{calText}}</span><span style="color: var(--ink-muted)">{{temp}}</span></div>
+    <div style="display: flex; justify-content: space-between; gap: 8px; font-size: 11px; line-height: 14px; color: var(--ink-muted)"><span>{{weather}}</span><span>{{windTxt}}</span></div>
+    <div style="display: flex; align-items: center; gap: 6px; font-size: 11px; line-height: 14px; color: var(--ink-muted)"><div style="flex: 1; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.1); overflow: hidden"><div style="{{calBar}}"></div></div><span>{{calLeft}}</span></div>
+    <div style="display: flex; gap: 3px">
+      <button onClick="{{togglePlay}}" style="{{playStyle}}; flex: 1; padding: 0 4px; min-width: 0">{{playLabel}}</button>
+      <button onClick="{{setSpeed1}}" aria-pressed="{{s1}}" style="{{sp1Style}}; padding: 0 6px; min-width: 0">1x</button>
+      <button onClick="{{setSpeed2}}" aria-pressed="{{s2}}" style="{{sp2Style}}; padding: 0 6px; min-width: 0">2x</button>
+      <button onClick="{{setSpeed4}}" aria-pressed="{{s4}}" style="{{sp4Style}}; padding: 0 6px; min-width: 0">4x</button>
+    </div>
+    <button onClick="{{toggleMute}}" aria-pressed="{{muted}}" title="{{muteTitle}}" style="{{muteStyle}}; width: 100%">{{muteLabel}}</button>
   </div>
 
   <!-- left: view tools -->
@@ -341,11 +347,6 @@ body.agon-paused *{animation-play-state:paused !important}
 
   <!-- top right: time -->
   <div style="position: absolute; right: 16px; top: 16px; display: flex; gap: 8px; align-items: center">
-    <div style="padding: 6px 14px; border-radius: 8px; background: rgba(48,35,27,0.92); border: 1px solid var(--border); display: flex; flex-direction: column; gap: 2px">
-      <div style="font-size: 13px; line-height: 18px; font-weight: 600; display: flex; gap: 14px"><span>{{calText}}, {{hour}}</span><span>{{temp}}</span><span>{{weather}}</span><span>{{windTxt}}</span></div>
-      <div style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; line-height: 14px; color: var(--ink-muted)">{{lightText}}</div>
-      <div style="display: flex; align-items: center; gap: 8px; font-size: 11px; line-height: 14px; color: var(--ink-muted)"><div style="flex: 1; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.1); overflow: hidden"><div style="{{calBar}}"></div></div><span>{{calLeft}}</span></div>
-    </div>
     <a href="Character.dc.html" style="min-height: 44px; box-sizing: border-box; display: inline-flex; align-items: center; padding: 0 16px; border-radius: 8px; border: 1px solid var(--border-strong); background: var(--fill-blue); color: var(--ink); text-decoration: none; font-size: 13px; font-weight: 600">Generator</a>
   </div>
 
@@ -537,7 +538,7 @@ body.agon-paused *{animation-play-state:paused !important}
   </sc-if>
 
   <!-- right: inspector -->
-  <aside data-panel="Inspector" style="position: absolute; right: 16px; top: 76px; width: 330px; max-height: 824px; overflow-y: auto; box-sizing: border-box; padding: 16px; border-radius: 8px; background: rgba(48,35,27,0.94); border: 1px solid var(--border); display: flex; flex-direction: column; gap: 14px">
+  <aside data-panel="Inspector" style="position: absolute; left: 16px; bottom: 56px; width: 360px; max-height: 520px; overflow-y: auto; box-sizing: border-box; padding: 16px; border-radius: 8px; background: rgba(48,35,27,0.94); border: 1px solid var(--border); display: flex; flex-direction: column; gap: 14px">
     <div data-pbar="Inspector" style="display: flex; align-items: center; gap: 6px; flex: 0 0 auto; height: 16px; margin: -4px -4px 0; padding: 0 4px; cursor: grab; touch-action: none; user-select: none; font-size: 10px; line-height: 16px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #a89885"><span style="opacity: 0.6">⋮⋮</span><span style="flex: 1">Inspector</span><button data-pmin="1" aria-label="Minimise" style="width: 18px; height: 16px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: #a89885; font-size: 14px; line-height: 14px; cursor: pointer">–</button></div>
     <div style="display: flex; gap: 14px; align-items: center">
       <div style="{{viewStyle}}" onMouseLeave="{{viewLeave}}">
@@ -4538,13 +4539,13 @@ class Component extends DCLogic {
     const ss = this.setState.bind(this);
     this.setState = (o, ...r) => { const out = ss(o, ...r); if (o && typeof o === 'object' && 'playing' in o) this._freeze(!o.playing); return out; };
     this._keys = new Set();
-    this._pp = this._pp || { Tools: { hide: true }, Inspector: { hide: true }, Log: { hide: true }, Map: { hide: true } }; try { const sv = JSON.parse(localStorage.getItem('agon.ui') || 'null'); if (sv) for (const k in sv) this._pp[k] = { ...(this._pp[k] || {}), hide: !!sv[k] }; } catch (e) { }
+    this._pp = this._pp || { Tools: { hide: true }, Inspector: { hide: true }, Log: { hide: true }, Map: { hide: false } }; try { const sv = JSON.parse(localStorage.getItem('agon.ui') || 'null'); if (sv) for (const k in sv) this._pp[k] = { ...(this._pp[k] || {}), hide: !!sv[k] }; } catch (e) { }
     const panelOf = (n) => n && n.closest ? n.closest('[data-panel]') : null;
     const applyPP = () => { const sl = this.state && this.state.sel; if (sl !== this._lastSel) { if (sl != null && sl >= 0 && this._lastSel !== undefined) this._pp.Inspector = { ...(this._pp.Inspector || {}), hide: false }; this._lastSel = sl; } document.querySelectorAll('[data-tb]').forEach((b) => { const st = this._pp[b.getAttribute('data-tb')]; b.classList.toggle('on', !(st && st.hide)); }); document.querySelectorAll('[data-panel]').forEach((el) => { const s = this._pp[el.getAttribute('data-panel')]; if (!s) return; el.classList.toggle('agmin', !!s.min); el.classList.toggle('aghide', !!s.hide); const mb = el.querySelector('[data-pmin]'); if (mb) { const tx = s.min ? '+' : '\u2013'; if (mb.textContent !== tx) mb.textContent = tx; } if (s.x !== undefined) { const st = el.style, set = (k, v) => { if (st[k] !== v) st[k] = v; }; set('right', 'auto'); set('bottom', 'auto'); set('marginLeft', '0px'); set('transform', 'none'); set('left', s.x + 'px'); set('top', s.y + 'px'); } }) };
     this._pd = (e) => { const bar = e.target.closest && e.target.closest('[data-pbar]'); if (!bar || e.target.closest('[data-pmin]')) return; const el = panelOf(bar); if (!el) return; const r = el.getBoundingClientRect(), sc = el.offsetWidth ? r.width / el.offsetWidth : 1; this._drag = { el, sc: sc || 1, mx: e.clientX, my: e.clientY, l: el.offsetLeft, t: el.offsetTop, n: el.getAttribute('data-panel') }; e.preventDefault(); };
     this._pm = (e) => { const d = this._drag; if (!d) return; const par = d.el.offsetParent, mw = par ? par.clientWidth : 1e5, mh = par ? par.clientHeight : 1e5; const x = Math.max(0, Math.min(mw - 60, d.l + (e.clientX - d.mx) / d.sc)), y = Math.max(0, Math.min(mh - 24, d.t + (e.clientY - d.my) / d.sc)); this._pp[d.n] = { ...(this._pp[d.n] || {}), x, y }; applyPP(); };
     this._pu = () => { this._drag = null; };
-    this._pc = (e) => { const tb = e.target.closest && e.target.closest('[data-tb]'); if (tb) { const n = tb.getAttribute('data-tb'); this._pp[n] = { ...(this._pp[n] || {}), hide: !(this._pp[n] && this._pp[n].hide) }; if (!this._pp[n].hide) { const ex = n === 'Tools' ? 'Log' : n === 'Log' ? 'Tools' : null; if (ex) this._pp[ex] = { ...(this._pp[ex] || {}), hide: true }; } try { const o = {}; for (const k of ['Tools', 'Inspector', 'Log', 'Map']) o[k] = !!(this._pp[k] && this._pp[k].hide); localStorage.setItem('agon.ui', JSON.stringify(o)); } catch (x) { } applyPP(); return; } const b = e.target.closest && e.target.closest('[data-pmin]'); if (!b) return; const el = panelOf(b); if (!el) return; const n = el.getAttribute('data-panel'); const s = this._pp[n] = { ...(this._pp[n] || {}) }; s.min = !s.min; applyPP(); };
+    this._pc = (e) => { const tb = e.target.closest && e.target.closest('[data-tb]'); if (tb) { const n = tb.getAttribute('data-tb'); this._pp[n] = { ...(this._pp[n] || {}), hide: !(this._pp[n] && this._pp[n].hide) }; if (!this._pp[n].hide) { for (const ex of ['Tools', 'Log', 'Inspector']) if (ex !== n) this._pp[ex] = { ...(this._pp[ex] || {}), hide: true }; } try { const o = {}; for (const k of ['Tools', 'Inspector', 'Log', 'Map']) o[k] = !!(this._pp[k] && this._pp[k].hide); localStorage.setItem('agon.ui', JSON.stringify(o)); } catch (x) { } applyPP(); return; } const b = e.target.closest && e.target.closest('[data-pmin]'); if (!b) return; const el = panelOf(b); if (!el) return; const n = el.getAttribute('data-panel'); const s = this._pp[n] = { ...(this._pp[n] || {}) }; s.min = !s.min; applyPP(); };
     document.addEventListener('pointerdown', this._pd); window.addEventListener('pointermove', this._pm); window.addEventListener('pointerup', this._pu); document.addEventListener('click', this._pc);
     this._pmo = new MutationObserver(() => applyPP()); this._pmo.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['style'] });
     this._tipOff = A.attachTips(() => { const st = this.state, a = st.agents && st.agents[st.sel], pre = st.disc !== 'emergent'; return { sel: a || null, tick: st.tick, known: pre ? A.TECH.map((t) => t.key) : ((st.store || {}).techs || []) }; });
@@ -4558,7 +4559,7 @@ class Component extends DCLogic {
       const loop = (now) => { fr.push([now, now - last]); last = now; while (fr.length && now - fr[0][0] > 5000) fr.shift(); if (now - t0 > 400) { t0 = now; const n = fr.length, span = n > 1 ? fr[n - 1][0] - fr[0][0] : 1, mx = fr.reduce((m, q) => Math.max(m, q[1]), 0), slow = fr.filter((q) => q[1] > 50).length; el.textContent = 'fps ' + (n > 1 ? (1000 * (n - 1) / span).toFixed(0) : '-') + '  worst ' + mx.toFixed(0) + ' ms  slow(>50ms) ' + slow + '\n' + Math.round(window.devicePixelRatio * 100) + '% dpr  ' + innerWidth + 'x' + innerHeight + '  tick ' + this.state.tick; } this._fpsRaf = requestAnimationFrame(loop); };
       this._fpsRaf = requestAnimationFrame(loop);
     };
-    this._kd = (e) => { if (this.state.rebind) { if (['shift', 'control', 'alt', 'meta'].includes(e.key.toLowerCase())) return; e.preventDefault(); e.stopPropagation(); if (e.key !== 'Escape') this.setKey(this.state.rebind, e.key.toLowerCase()); this.setState({ rebind: '' }); return; } if (typing(e) || e.ctrlKey || e.metaKey || e.altKey) return; const k = e.key.toLowerCase(), KB = this.keymap(); if (e.shiftKey && k === 'f') { this._fpsToggle(); return; } if (e.key === 'Escape' && this.state.menuOpen) { if (this.state.menuScreen !== 'main') this.setState({ menuScreen: 'main' }); else if (this.state.tick > 0) this.setState({ menuOpen: false }); return; } if (e.key === 'Escape' && !(this.state.msel && this.state.msel.length)) { this.setState({ menuOpen: true, menuScreen: 'main' }); return; } if (e.key === 'Escape' && this.state.msel && this.state.msel.length) { this.setState({ msel: [] }); return; } if (k === KB.pause) { e.preventDefault(); if (!e.repeat) { if (document.activeElement && document.activeElement.blur && document.activeElement.tagName === 'BUTTON') document.activeElement.blur(); this.setState({ playing: !this.state.playing }); } return; } const PNL = { [KB.inspector]: 'Inspector', [KB.tools]: 'Tools', [KB.log]: 'Log', [KB.map]: 'Map' }; if (PNL[k]) { const n = PNL[k]; this._pp[n] = { ...(this._pp[n] || {}), hide: !(this._pp[n] && this._pp[n].hide) }; if (!this._pp[n].hide) { const ex = n === 'Tools' ? 'Log' : n === 'Log' ? 'Tools' : null; if (ex) this._pp[ex] = { ...(this._pp[ex] || {}), hide: true }; } applyPP(); return; } if ([KB.up, KB.down, KB.left, KB.right, KB.zoomOut, KB.zoomIn].includes(k)) { this._keys.add(k); e.preventDefault(); } };
+    this._kd = (e) => { if (this.state.rebind) { if (['shift', 'control', 'alt', 'meta'].includes(e.key.toLowerCase())) return; e.preventDefault(); e.stopPropagation(); if (e.key !== 'Escape') this.setKey(this.state.rebind, e.key.toLowerCase()); this.setState({ rebind: '' }); return; } if (typing(e) || e.ctrlKey || e.metaKey || e.altKey) return; const k = e.key.toLowerCase(), KB = this.keymap(); if (e.shiftKey && k === 'f') { this._fpsToggle(); return; } if (e.key === 'Escape' && this.state.menuOpen) { if (this.state.menuScreen !== 'main') this.setState({ menuScreen: 'main' }); else if (this.state.tick > 0) this.setState({ menuOpen: false }); return; } if (e.key === 'Escape' && !(this.state.msel && this.state.msel.length)) { this.setState({ menuOpen: true, menuScreen: 'main' }); return; } if (e.key === 'Escape' && this.state.msel && this.state.msel.length) { this.setState({ msel: [] }); return; } if (k === KB.pause) { e.preventDefault(); if (!e.repeat) { if (document.activeElement && document.activeElement.blur && document.activeElement.tagName === 'BUTTON') document.activeElement.blur(); this.setState({ playing: !this.state.playing }); } return; } const PNL = { [KB.inspector]: 'Inspector', [KB.tools]: 'Tools', [KB.log]: 'Log', [KB.map]: 'Map' }; if (PNL[k]) { const n = PNL[k]; this._pp[n] = { ...(this._pp[n] || {}), hide: !(this._pp[n] && this._pp[n].hide) }; if (!this._pp[n].hide) { for (const ex of ['Tools', 'Log', 'Inspector']) if (ex !== n) this._pp[ex] = { ...(this._pp[ex] || {}), hide: true }; } applyPP(); return; } if ([KB.up, KB.down, KB.left, KB.right, KB.zoomOut, KB.zoomIn].includes(k)) { this._keys.add(k); e.preventDefault(); } };
     this._ku = (e) => { if (e.key === ' ' && !typing(e)) e.preventDefault(); this._keys.delete(e.key.toLowerCase()); };
     this._kb = () => this._keys.clear();
     window.addEventListener('keydown', this._kd); window.addEventListener('keyup', this._ku); window.addEventListener('blur', this._kb);
@@ -5953,6 +5954,21 @@ class Component extends DCLogic {
     const shiftTick = animals.some((q, i) => s.animals[i] && (s.animals[i].u ?? i) !== (q.u ?? i)) ? tick : (s.shiftTick || -1);
     this.setState({ tick, eco: EC, story, agents, animals, bushes, carc, plots, store, fires, tents: (s.tents || []).filter((q) => q.t > tick), burnt: [...burnt], strike, rel, log: log.slice(-5), history, hEnd: tick, keys, shiftTick, jump: false, cdisc: cdiscOut, crub: crubOut });
   }
+  // Move the camera so a point on the minimap ends up in the middle of the view.
+  miniGoTo(fx01, fy01) {
+    const g = this._geo;
+    if (!g) return;
+
+    const k = g.fit * g.zk;
+    const px = g.WPX * fx01 * k - VP.w / 2;
+    const py = g.HPX * fy01 * k - VP.h / 2;
+
+    this.setState({
+      panX: clampAx(-px - g.fx, VP.w, g.fx, g.WPX * k),
+      panY: clampAx(-py - g.fy, VP.h, g.fy, g.HPX * k),
+    });
+  }
+
   renderVals() {
     if (!this._rz) { this._rz = () => { clearTimeout(this._rzt); this._rzt = setTimeout(() => { vpCalc(); this.setState({ vpk: VP.w + 'x' + VP.h + 'x' + VP.u.toFixed(3) }); }, 60); }; window.addEventListener('resize', this._rz); }
     vpCalc();
@@ -6044,7 +6060,7 @@ class Component extends DCLogic {
     const tphM = s.tick % 50, sNightM = Math.max(0, -Math.sin(2 * Math.PI * tphM / 50));
     const mdot = (x, y, c, n, ring) => ({ style: 'position: absolute; left: ' + ((x + 0.5) / W * 100).toFixed(2) + '%; top: ' + ((y + 0.5) / H * 100).toFixed(2) + '%; width: ' + n + 'px; height: ' + n + 'px; margin: ' + (-n / 2) + 'px 0 0 ' + (-n / 2) + 'px; border-radius: 50%; background: ' + c + (ring ? '; box-shadow: 0 0 0 1.5px #ede9e1' : '') });
     const miniDots = [].concat((s.fires || []).map((q) => mdot(q.x, q.y, '#ff8a3c', 4)), s.animals.filter((p) => !p.dead).map((p) => mdot(p.x, p.y, AK[p.k].role === 'pred' ? '#e0504a' : '#d8d0c0', 2.5)), this.E.RIVALS.map((v) => mdot(v.x, v.y, v.col, 7)), s.agents.filter((a) => a.alive).map((a, i) => mdot(a.x, a.y, a.fac ? RIVAL_COL[(a.fac - 1) % RIVAL_COL.length] : '#ffd23f', s.agents[s.sel] === a ? 5 : 3, s.agents[s.sel] === a)));
-    const miniAspect = W / H, mW = 114, mH = Math.round(mW / miniAspect);
+    const miniAspect = W / H, mW = 170, mH = Math.round(mW / miniAspect);
     const dnSegs = [['8%', '#e0956a'], ['34%', '#e8c63c'], ['8%', '#c2503c'], ['50%', '#1c2a50']].map(([w, c]) => ({ style: 'width: ' + w + '; background: ' + c }));
     const dnMarker = 'position: absolute; top: -3px; left: ' + (tphM / 50 * 100).toFixed(1) + '%; width: 4px; height: 14px; margin-left: -2px; background: #ede9e1; border: 1px solid #1c110b; border-radius: 1px';
     const dnLabel = tphM < 4 ? 'Dawn' : tphM < 21 ? 'Day' : tphM < 25 ? 'Dusk' : 'Night';
@@ -6676,6 +6692,14 @@ class Component extends DCLogic {
       setHexG: () => this.setState({ hexTab: 'genes' }), setHexX: () => this.setState({ hexTab: 'helix' }), setHexN: () => this.setState({ hexTab: 'needs' }), setLive: () => this.setState({ thMode: 'live' }), setHist: () => this.setState({ thMode: 'hist' }), setBar: () => this.setState({ thChart: 'bar' }), setPie: () => this.setState({ thChart: 'pie' }),
       genSliders, viewParts, partInfo, partChips, viewTag, xrayBox, viewStyle, viewBtn, viewLeave: () => { if (this.state.part) this.setState({ part: null }); }, sizes, sizeNote: W + ' x ' + H + ' tiles', formNote, formVal: s.form ?? 1.7, setForm: (e) => this.setWorld(null, Number(e.target.value)),
       miniStyle: 'position: relative; width: ' + mW + 'px; height: ' + mH + 'px; border: 1px solid #1c110b; border-radius: 2px; background-image: ' + MINI_URI + '; background-size: 100% 100%; overflow: hidden',
+      // the slice of the world on screen, drawn over the minimap. Derived from the
+      // same transform the world itself is drawn with, so it cannot drift out of step.
+      miniViewBox: (() => { const k = fit * zk, pc = (v, d) => (Math.max(0, Math.min(1, v / d)) * 100).toFixed(2) + '%';
+        return 'position: absolute; left: ' + pc(-(fx + zpx) / k, WPX) + '; top: ' + pc(-(fy + zpy) / k, HPX)
+          + '; width: ' + pc(VP.w / k, WPX) + '; height: ' + pc(VP.h / k, HPX)
+          + '; border: 1px solid rgba(255,255,255,0.85); box-sizing: border-box; pointer-events: none'; })(),
+      miniGo: (e) => { const r = e.currentTarget.getBoundingClientRect();
+        this.miniGoTo((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height); },
       miniTint: 'position: absolute; left: 0; top: 0; right: 0; bottom: 0; background: #141c3c; opacity: ' + (sNightM * 0.55).toFixed(2),
       miniDots, dnSegs, dnMarker, dnLabel,
       burnLayer: LAY + 'z-index: 3; pointer-events: none', caveStyle: LAY + 'pointer-events: none; z-index: ' + (s.layerCave ? HPX + 120 : 59) + '; background-image: ' + caveUri(cseen, litMap) + '; background-repeat: no-repeat', veilStyle: s.layerCave ? LAY + 'pointer-events: none; z-index: ' + (HPX + 100) + '; background-image: ' + this.E.veilUri(cseen) + '; background-repeat: no-repeat' : 'display: none', layerOpen: !!s.layerCave, layerBtn: tbtn(!!s.layerCave), layerTog: () => this.setState({ layerCave: !this.state.layerCave }),
