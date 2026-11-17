@@ -1286,6 +1286,29 @@ const inCamp = (x, y) => {
   const dx = lx - 15, dy = ly - 8, S = CAMPSH, g = Math.atan2(dy * S.rx / S.ry, dx), w = 1 + S.a[0] * Math.sin(2 * g + S.ph[0]) + S.a[1] * Math.sin(3 * g + S.ph[1]) + S.a[2] * Math.sin(5 * g + S.ph[2]);
   return Math.pow(Math.pow(Math.abs(dx) / S.rx, S.p) + Math.pow(Math.abs(dy) / S.ry, S.p), 1 / S.p) <= w;
 };
+// Distance from the nearest thing the colony actually builds. The camp clearing was
+// the whole inCamp blob, so the tree-line traced its outline exactly and the camp
+// read as a cookie-cutter hole punched in the forest. Only ground near a structure
+// has to be clear; the rest of the blob can keep its trees, and the edge is jittered
+// so it stops following a smooth curve. CAMPPTS is the list CAMPBOX is built from
+// and already includes the annex, so ground that gets built on later is clear from
+// the start rather than growing a tree somebody has to build through.
+const CAMPPTS = [].concat(CAMP.F, CAMP.W, CAMP.annex ? CAMP.annex.W : [], CAMP.table, CAMP.crates, CAMP.stools, CAMP.shelves, CAMP.bench, CAMP.barrels, CAMP.rug, [CAMP.hearth]).filter((q) => q && q.length === 2);
+let CAMPDIST = null;
+const campDist = (x, y) => {
+  if (!CAMPDIST) {
+    CAMPDIST = new Map();
+    for (let yy = 0; yy < H; yy++) for (let xx = 0; xx < W; xx++) {
+      if (!inCamp(xx, yy)) continue;
+      const ax = xx - OX, ay = yy - OY;
+      let best = 1e9;
+      for (const [px, py] of CAMPPTS) { const d = Math.hypot(ax - px, ay - py); if (d < best) best = d; }
+      CAMPDIST.set(xx + ',' + yy, best);
+    }
+  }
+  return CAMPDIST.has(x + ',' + y) ? CAMPDIST.get(x + ',' + y) : 1e9;
+};
+const CAMPCLR = 2.6;   // tiles of clear ground kept around anything built
 const CAMPC = [15 + OX, 8 + OY];
 // lakes: one west of camp, one south, more as the world grows
 const LK = Math.pow(FORM, 0.8), LE = 1 + 0.22 * (FORM - 1), LB = Math.min(LK, 1.2) * Math.max(0.55, Math.min(1.4, B.lake));
@@ -1534,7 +1557,7 @@ for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
   // anywhere else of the same fertility; only forest is kept out, since trees would
   // block building. Stamping the whole footprint as soil left a dirt scar that
   // regrew at about four tiles a year and so never closed.
-  if (inCamp(x, y)) t = b > GTH ? 1 : 0;
+  if (inCamp(x, y)) { const cdist = campDist(x, y) + (hh(x, y, 8801) - 0.5) * 2.4; t = cdist > CAMPCLR && b > FTH ? 2 : b > GTH ? 1 : 0; }
   if (!inCamp(x, y)) { if (isLake(x, y)) t = 4; else if (SEAM && e < 0.5 && nearSea(x, y, 2)) t = 10; else if (e >= 0.86) t = 5; else if (e >= 0.36) { const fe = FERTN(x, y), thr = 0.34 + 1.15 * (e - 0.36) - ((window.AGON_P || {}).hiGrass ?? 0), green = !B.lava && B.snow < 0.9 && B.bush >= 8; t = green && e < 0.8 && fe > thr + 0.28 && B.forest > 0.4 && FTH < 99 ? 2 : green && e < 0.84 && fe > thr ? 1 : 3; } else if (b > FTH) t = 2; else if (b > GTH) t = 1; }
   TER.push(t);
 }

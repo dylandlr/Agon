@@ -216,3 +216,56 @@ Not done, carried forward:
 - Unity: `JobGiver` re-offers an unreachable target every tick; a cooldown would fix it.
 - Interior walls still push shadow sprites (`wsh`) the same as exterior ones.
 - Larder never fills in the HTML build; the thirst loop is still untraced.
+
+
+## Round 24 — the camp stops being a cookie-cutter hole in the map (2026-11-17)
+
+Dyl: "it inserts itself on top of a local cell and it carved out parts of the
+existing map and environment." Confirmed as the camp.
+
+Verified:
+- **Cause found.** `if (inCamp(x, y)) t = b > GTH ? 1 : 0;` forbade forest across the
+  entire camp blob, and trees render on forest terrain — so the tree-line traced the
+  camp's superellipse outline exactly. Screenshot at seed 13 jungle, tick 120, shows
+  a smooth rounded clearing with a wide empty apron on every side.
+- **Fix.** The clearing now follows what the colony actually builds: a distance field
+  from `CAMPPTS` (the same point list `CAMPBOX` is built from, annex included), with
+  clear ground kept only within `CAMPCLR` = 2.6 tiles of a structure, and the edge
+  jittered by +/-1.2 tiles so it stops following a curve. Before/after at identical
+  seed, tick, lighting and camera: trees now encroach from three sides and the edge
+  is ragged.
+- Invariant holds across six biomes: `buildTilesOnForest` is 0 everywhere, so nothing
+  the colony builds ever lands on a tree. Forest inside camp is 0/4/15/3/0/0 for
+  temperate3 / temperate5 / taiga9 / jungle13 / tundra7 / desert11 — trees where the
+  biome has them, none where it does not.
+- Survival unharmed: 11/10/7/12/11/9 alive at tick 2500 across those six; the
+  four-config sweep is clean at 15-17 alive, no page errors.
+
+A failed attempt first, recorded because the measurement is the useful part:
+- I assumed the carve was the **elevation** stamp (`if (inCamp) e = CAMPE`) and built
+  a feathered depth field to ease it out. Three things were wrong and each was caught
+  by measuring rather than by looking:
+  1. The first depth function returned 1 for all 192 camp tiles, because `CAMPBOX` is
+     15x10 and the whole superellipse falls inside it (`tilesOnlyInBlob: 0`). The
+     feather never ran.
+  2. Rebuilt on distance-to-structure, it still returned 1 for 150 of 192, because
+     the floors cover nearly the whole box. There is no yard inside the camp to
+     feather across.
+  3. Extending the feather outward past `inCamp` did run — and made things worse:
+     against a matched baseline, earth moved went 39.9 -> 42.7, tiles touched 353 ->
+     595, and the rim metric was **identical to four decimal places in all five
+     worlds**, meaning the discontinuity I was chasing was never the camp's. Reverted
+     the whole elevation line of work.
+- Lesson for the next one of these: the complaint was visual, and one screenshot of
+  the right place would have pointed at the terrain rule in a minute. I measured
+  elevation for an hour first.
+
+Not done, carried forward:
+- The clearing is less cookie-cutter but its apron is still fairly wide, and the east
+  edge still reads smooth on seed 13. Worth another pass if Dyl wants it tighter.
+- **RimWorld-inspired UI overhaul.** Still wants reference shots.
+- **Rock and mountain textures.** Diagnosis stands (texture emits but is too faint);
+  awaiting confirmation the mass in the screenshot is what he meant.
+- Unity: emergent tech and staged building next; worldgen there already sites the
+  camp on flat ground and does not stamp it bare.
+- Larder never fills; the thirst loop is still untraced.
