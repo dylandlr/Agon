@@ -420,3 +420,51 @@ Carried forward: camp clearing apron width; Unity emergent tech, staged building
 and ruins; Unity `JobGiver` cooldown on unreachable targets; interior walls pushing shadow
 sprites; larder never fills; thirst loop untraced; colonists still born 437 years old
 (`LIFE = 2000000` against `YEAR = 2000`, r25).
+
+## Round 27 — the default start has no house
+
+Verified:
+- **The default scenario is now a band with nothing built.** `SCENARIOS.community` — twelve
+  settlers in a walled house with a hearth, a bench and a stocked table — was the fallback in
+  five places, and it also handed over the `shelter` tech at tick 0 (`SC.house === 'full' ?
+  ['shelter'] : []`). A new `band` scenario is the default: same twelve people, no walls, no
+  shelter tech. `community` is still there and still selectable.
+- **"No house" was deleting the blueprint, not just leaving it unbuilt.** This is the real
+  find. `gen(r, house)` skips its entire room-construction block when `house === 'none'`, so
+  `CAMP.W`, `CAMP.F`, `CAMP.D` and `CAMP.beds` all came out empty. `applyCamp` rebuilds the
+  live `WALLS`/`FLOORS`/`BEDS` from those arrays every tick, so a band that discovered shelter
+  would turn `room0` on and still have nowhere to put it — `WALLS.size` sat at exactly 15 from
+  tick 1 to tick 12000, and those 15 were the rival camp's, which is what made it look static.
+  The bug was already live for the `loner` and `nomads` scenarios; making no-house the default
+  is what surfaced it. The blueprint is now always generated in full, and `CAMPON` alone — which
+  `applyCamp` derives from discovered techs each tick — decides what is standing.
+  Measured on seed 3: tick 1, twelve colonists, `campon: []`, `shelterT: null`; tick 1001, only
+  `fire` on; shelter discovered at tick 1504; by tick 3001 `room0/room1/room2` are on and walls
+  have gone 15 -> 65, floors 10 -> 80. The house is built rather than given.
+  (I first patched `legacy()` at 1210-1214 and measured no change — that is the fallback
+  generator, only reached when `gen` fails 400 times. The live one is `gen` at 1217.)
+- **The store key-stripping from r26 is explained.** Line 4616 rebuilds the store every tick as
+  an explicit field whitelist: `{ shelterT, water, wallMat, norms, mats, food, items, known,
+  techs, insight, bad, spoiled, lots, lk, know, forced, rec, plots0, cult }`. Anything outside
+  that list is dropped on the first tick, which is exactly why `start0` disappeared while
+  `forced`, declared in the same object literal, survived; the whitelist's key order matches the
+  runtime store's order exactly. **Adding a field to the store literal does nothing unless it is
+  also added at 4616.** Worth knowing before anything else goes in there.
+- `tests/final3.py` on the new default: 13-18 alive at tick 1500 across temperate, desert,
+  tundra and sea, no page errors.
+
+Rough / not yet settled:
+- **Survival on the unbuilt start may be too harsh.** Seed 3 fell to 2 colonists alive at tick
+  6000 before recovering to 6 by 12000. A shelterless start should be harder than a walled one,
+  but that is close to a wipe. A band-versus-community sweep across four seeds and biomes at
+  ticks 2k/6k/12k was still running when this was written; the numbers go in the next entry, and
+  the band's starting food (6) is the dial if it needs one.
+- `larder never fills` turns out to be about `store.food`, not a larder — the word only appears
+  in scenario blurbs. `storeCapN` is at least 16, so the cap is not the blocker; the deposit
+  sites are 5714 (carcass) and 5724 (berries, needs `a.inv.berries >= 3`) against consumption at
+  5645. Not traced to a cause yet.
+
+Carried forward: camp clearing apron width; Unity emergent tech, staged building, migration and
+ruins; Unity `JobGiver` cooldown on unreachable targets; interior walls pushing shadow sprites;
+thirst loop untraced; colonists born 437 years old (`LIFE = 2000000` against `YEAR = 2000`,
+r25); jungle maps too rock-poor for caves; caves still one level rather than descending.

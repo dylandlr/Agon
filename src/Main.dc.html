@@ -815,6 +815,7 @@ const RIVAL_NAMES = ['Redhollow', 'Ashford', 'Stonecrow', 'Marrow Bend', 'Gallow
 // planet: a small global map. elevation and moisture are layered value noise, temperature falls with latitude and altitude; each cell is classified into a biome
 // starting scenarios: who is there, whether there is a house, how crowded the valley is, and the local danger. Chosen through the generator params (gp.scn), so each one builds its own world
 const SCENARIOS = {
+  band: { label: 'New band', blurb: 'Twelve arrivals under open sky. A fire, a little food, and nothing built: they have to work out shelter for themselves.', n: 12, house: 'none', food: 6, rivals: 1, near: 1 },
   community: { label: 'Built community', blurb: 'Twelve settlers in a walled house with a hearth, a bench and a stocked table.', n: 12, house: 'full', food: 6, rivals: 1, near: 1 },
   loner: { label: 'Loner', blurb: 'One survivor under open sky: a campfire, an empty larder and no walls.', n: 1, house: 'none', food: 2, rivals: 0, near: 1 },
   homestead: { label: 'Homestead ruin', blurb: 'Four settlers in a half-fallen house. Gaps in the walls, few beds, a thin larder.', n: 4, house: 'ruin', food: 3, rivals: 1, near: 1 },
@@ -1185,7 +1186,7 @@ const gearIns = (a) => ((a.gear && a.gear.clothing ? a.gear.clothing.ins : 0) + 
 const GEN_DEFAULT = { entropy: 0.35, cohesion: 0.85, relief: 1, peak: 1.6, diversity: 0.5, water: 1, sea: 0, warmth: 0, wet: 0 };
 function ENGINE(W, H, FORM, BIOMEK, SEED, NRIV, GPIN) {
 const GP = Object.assign({}, GEN_DEFAULT, GPIN || {}), EN = GP.entropy, CO = GP.cohesion, EW = 0.4 + 1.2 * EN;
-const SC = Object.assign({}, SCENARIOS[GP.scn] || SCENARIOS.community, (window.AGON_P && window.AGON_P.n) ? { n: window.AGON_P.n } : {}, (window.AGON_P && window.AGON_P.food !== undefined) ? { food: window.AGON_P.food } : {}), HOUSE = SC.house;
+const SC = Object.assign({}, SCENARIOS[GP.scn] || SCENARIOS.band, (window.AGON_P && window.AGON_P.n) ? { n: window.AGON_P.n } : {}, (window.AGON_P && window.AGON_P.food !== undefined) ? { food: window.AGON_P.food } : {}), HOUSE = SC.house;
 FORM = Math.max(0.5, Math.min(3.2, FORM || 1.7));
 const BIOME0 = BIOMES[BIOMEK] || BIOMES.temperate, BIOME = Object.assign({}, BIOME0, { mount: BIOME0.mount * GP.relief, lake: BIOME0.lake * GP.water, riv: BIOME0.riv * GP.water, t: BIOME0.t + GP.warmth, forest: BIOME0.forest + GP.wet * 0.7, grass: BIOME0.grass + GP.wet * 0.5 }), B = BIOME; const MAC = GP.mac || null; if (MAC) { B.mount *= MAC.relief; B.riv = MAC.river ? Math.max(B.riv, 0.8 + 0.5 * MAC.river) : B.riv * 0.2; } SEED = SEED | 0; NRIV = NRIV === undefined ? 1 : NRIV; const SP = (SEED % 997) * 0.77;
 // ground colours from the region's climate (the same function the map layers use), so the local ground is red laterite, ochre, savanna straw, grey cold soil or ash where the region is
@@ -1206,11 +1207,11 @@ const OX = SITE[0], OY = SITE[1];
 const rs = mulberry(11 + W * 7 + H + SEED * 131);
 const CAMP = (() => {
   const legacy = () => {
-    const P = { W: [], F: [], D: HOUSE === 'none' ? [] : [[15, 8], [12, 11], [21, 8]], beds: [], table: [[17, 6], [18, 6]], crates: [[20, 6], [20, 7]], hearth: [18, 8], stools: [[17, 7], [18, 7]], shelves: [[16, 6], [19, 6]], bench: [[11, 8], [12, 8]], barrels: [[19, 10]], rug: [[16, 8], [17, 8]], windows: [[11, 5], [19, 5], [18, 11]] };
+    const P = { W: [], F: [], D: [[15, 8], [12, 11], [21, 8]], beds: [], table: [[17, 6], [18, 6]], crates: [[20, 6], [20, 7]], hearth: [18, 8], stools: [[17, 7], [18, 7]], shelves: [[16, 6], [19, 6]], bench: [[11, 8], [12, 8]], barrels: [[19, 10]], rug: [[16, 8], [17, 8]], windows: [[11, 5], [19, 5], [18, 11]] };
     const dk = new Set(P.D.map(([x, y]) => x + ',' + y));
-    for (const [x0, x1] of HOUSE === 'none' ? [] : [[9, 15], [15, 21]]) for (let y = 5; y <= 11; y++) for (let x = x0; x <= x1; x++) { const edge = x === x0 || x === x1 || y === 5 || y === 11; if (edge && !dk.has(x + ',' + y)) P.W.push([x, y]); else P.F.push([x, y]); }
-    for (const x of HOUSE === 'none' ? [] : [10, 12, 14, 16, 18, 20]) { if (x < 15) P.beds.push([x, 6], [x, 9]); else if (x >= 16) P.beds.push([x, 9]); }
-    P.rooms = HOUSE === 'none' ? [] : [[9, 15], [15, 21]]; P.annex = null;
+    for (const [x0, x1] of [[9, 15], [15, 21]]) for (let y = 5; y <= 11; y++) for (let x = x0; x <= x1; x++) { const edge = x === x0 || x === x1 || y === 5 || y === 11; if (edge && !dk.has(x + ',' + y)) P.W.push([x, y]); else P.F.push([x, y]); }
+    for (const x of [10, 12, 14, 16, 18, 20]) { if (x < 15) P.beds.push([x, 6], [x, 9]); else if (x >= 16) P.beds.push([x, 9]); }
+    P.rooms = [[9, 15], [15, 21]]; P.annex = null;
     return P;
   };
   const gen = (r, house) => {
@@ -1281,7 +1282,12 @@ const CAMP = (() => {
     return P;
   };
   const rg = mulberry(SEED * 977 + W * 13 + H * 7 + 4242);
-  for (let t = 0; t < 400; t++) { const p = gen(rg, HOUSE); if (p) return p; }
+  // The blueprint is always drawn in full. What a scenario decides is how much of it is already
+  // standing, and that is carried by the store's techs, which applyCamp reads every tick: a band
+  // that starts with no shelter shows none of it until they discover shelter and raise it themselves.
+  // Generating no geometry at all, as this used to, left them with nowhere to build and a camp that
+  // could never appear however much they learned.
+  for (let t = 0; t < 400; t++) { const p = gen(rg, HOUSE === 'none' ? 'full' : HOUSE); if (p) return p; }
   return legacy();
 })();
 // the cleared ground around the camp is an irregular blob (seeded size, squareness and lobes) that always contains the house and its furniture, inside the old 17 x 11 rectangle
@@ -4035,12 +4041,12 @@ class Component extends DCLogic {
   // ---- main menu (RimWorld-style flow): main -> scenario -> difficulty -> world -> colonists -> begin; plus load, save and options
   optGet(k, d) { try { const o = JSON.parse(localStorage.getItem('agon.opts') || '{}'); return o[k] === undefined ? d : o[k]; } catch (e) { return d; } }
   optSet(k, v) { try { const o = JSON.parse(localStorage.getItem('agon.opts') || '{}'); o[k] = v; localStorage.setItem('agon.opts', JSON.stringify(o)); } catch (e) { } }
-  menuCfg() { const c = this.state.mcfg; if (c) return c; const S = SCENARIOS.community; return { scn: 'community', diff: 'normal', biome: '', size: this.state.size || 'medium', n: S.n, food: S.food, rivals: S.rivals, seed: '1', tech: 'bare', roster: [], gp: {}, opts: { spring: true, forage: true, riparian: true, cloth: false, farm: false, solid: false }, forestSlow: 0.4, speed: 1, sel: 0 }; }
+  menuCfg() { const c = this.state.mcfg; if (c) return c; const S = SCENARIOS.band; return { scn: 'band', diff: 'normal', biome: '', size: this.state.size || 'medium', n: S.n, food: S.food, rivals: S.rivals, seed: '1', tech: 'bare', roster: [], gp: {}, opts: { spring: true, forage: true, riparian: true, cloth: false, farm: false, solid: false }, forestSlow: 0.4, speed: 1, sel: 0 }; }
   menuSet(patch) { const c = Object.assign({}, this.menuCfg(), patch); this.setState({ mcfg: c }); }
   menuGo(screen) { this.setState({ menuScreen: screen, menuOpen: true }); }
   menuNew() { const c = Object.assign({}, this.menuCfg(), { seed: String(1 + Math.floor(Math.random() * 9998)), roster: [], sel: 0 }); this.setState({ mcfg: c, menuScreen: 'scenario', menuOpen: true }); }
   menuDiffPatch(c, dk, scn) {
-    const D = MENU_DIFF[dk] || MENU_DIFF.normal, S = SCENARIOS[scn || c.scn] || SCENARIOS.community, gp = Object.assign({}, c.gp || {});
+    const D = MENU_DIFF[dk] || MENU_DIFF.normal, S = SCENARIOS[scn || c.scn] || SCENARIOS.band, gp = Object.assign({}, c.gp || {});
     gp.warmth = D.warmth; gp.wet = D.wet; if (!D.warmth) delete gp.warmth; if (!D.wet) delete gp.wet;
     return { diff: dk, food: Math.max(0, S.food + D.food), rivals: Math.max(0, Math.min(3, S.rivals + D.rivals)), tech: D.tech, gp, forestSlow: D.forestSlow, opts: Object.assign({}, c.opts || {}, { cloth: D.cloth }) };
   }
@@ -4064,7 +4070,7 @@ class Component extends DCLogic {
     return "url('data:image/svg+xml;utf8," + encodeURIComponent(svg).replace(/'/g, '%27') + "')";
   }
   menuStart() {
-    const c = this.menuCfg(), S = SCENARIOS[c.scn] || SCENARIOS.community, TECH = { bare: [], fire: ['firecraft'], shelter: ['firecraft', 'shelter'], camp: ['firecraft', 'shelter', 'bedding', 'storage', 'carpentry'] };
+    const c = this.menuCfg(), S = SCENARIOS[c.scn] || SCENARIOS.band, TECH = { bare: [], fire: ['firecraft'], shelter: ['firecraft', 'shelter'], camp: ['firecraft', 'shelter', 'bedding', 'storage', 'carpentry'] };
     const o = c.opts || {}, R = this.menuRoster(c), P = window.AGON_P = Object.assign(window.AGON_P || {}, { n: c.n, food: c.food, startTechs: TECH[c.tech] || [], fullCamp: c.tech === 'full', roster: R.slice(0, c.n), noSpring: !o.spring, noStarterForage: !o.forage, noRiparian: !o.riparian, startCloth: !!o.cloth, freeFarm: !!o.farm, solidForest: !!o.solid, forestSlow: c.forestSlow });
     const ps = Math.max(1, parseInt(c.seed, 10) || 1), want = c.biome || S.biome || 'temperate';
     this.setState({ menuOpen: false, menuScreen: 'main', site: null, mcfg: null }); this.setWorld(c.size, undefined, undefined, ps * 7 + 1, c.rivals, Object.assign({}, c.gp || {}, { scn: c.scn }), { ps, want });
@@ -4305,7 +4311,7 @@ class Component extends DCLogic {
     // main
     v.mainBtns = [has && { label: 'Resume', primary: true, go: () => this.setState({ menuOpen: false }) }, { label: 'New colony', primary: !has, go: () => this.menuNew() }, { label: 'Load game', go: () => this.menuGo('load') }, has && { label: 'Save game', go: () => this.menuGo('save') }, { label: 'Glossary', go: () => this.menuGo('glossary') }, { label: 'Settings', go: () => this.menuGo('settings') }].filter(Boolean).map((b) => Object.assign(b, { style: 'width: 280px; min-height: 44px; border-radius: 4px; border: 1px solid ' + (b.primary ? '#ffd23f' : 'var(--border-strong)') + '; background: ' + (b.primary ? 'rgba(255,210,63,0.16)' : 'rgba(0,0,0,0.35)') + '; color: ' + (b.primary ? '#ffd23f' : 'var(--ink)') + '; font-size: 15px; font-weight: 700; letter-spacing: 0.06em; cursor: pointer' }));
     // scenario
-    const S0 = SCENARIOS[c.scn] || SCENARIOS.community;
+    const S0 = SCENARIOS[c.scn] || SCENARIOS.band;
     v.scns = Object.keys(SCENARIOS).map((k) => { const S = SCENARIOS[k], on = c.scn === k; return { label: S.label, blurb: S.blurb, meta: S.n + ' colonists · ' + S.rivals + ' rival camp' + (S.rivals === 1 ? '' : 's') + (S.biome ? ' · ' + BIOMES[S.biome].label : ''), style: 'text-align: left; padding: 10px 12px; border-radius: 5px; border: 1px solid ' + (on ? '#ffd23f' : 'var(--border-strong)') + '; background: ' + (on ? 'rgba(255,210,63,0.12)' : 'rgba(0,0,0,0.25)') + '; color: var(--ink); cursor: pointer; display: flex; flex-direction: column; gap: 3px', pick: () => set(Object.assign({ scn: k, n: S.n, roster: [], sel: 0, biome: S.biome || c.biome }, this.menuDiffPatch(Object.assign({}, c, { scn: k }), c.diff, k))) }; });
     v.scnTitle = S0.label; v.scnBlurb = S0.blurb; v.scnFacts = [['Colonists', S0.n], ['Starting food', S0.food], ['Rival camps', S0.rivals], ['Shelter', { full: 'Walled house', ruin: 'Ruined house', none: 'Open sky' }[S0.house] || S0.house], ['Biome', S0.biome ? BIOMES[S0.biome].label : 'Your choice']].map(([k, val]) => ({ k, val: String(val) }));
     // difficulty
