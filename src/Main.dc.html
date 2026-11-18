@@ -4612,13 +4612,13 @@ class Component extends DCLogic {
     const cdisc = new Set(s.cdisc || []), cdN = cdisc.size;
     // the colony's signs: what it has agreed a mark means. Seeded with the signs a body can make on its own.
     const lex = Object.assign({}, s.lex || Object.fromEntries(A.lexSeed().map((g) => [g, 0]))); let lexHit = false;
-    const agents = s.agents.map((a) => ({ ...a, inv: { ...a.inv }, mats: { ...(a.mats || {}) }, gear: { ...(a.gear || {}) }, work: { hunt: 0, gather: 0, craft: 0, haul: 0, ...(a.work || {}) }, mind: (a.mind || []).slice(), pers: a.pers || [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5], th: a.th || [0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125], thS: (a.thS || [0, 0, 0, 0, 0, 0, 0, 0]).slice(), thN: a.thN || 0, wn: (a.wn || []).map((w) => ({ ...w })), mis: { ...(a.mis || {}) }, know: { ...(a.know || {}) }, xp: { ...(a.xp || {}) }, rgU: a.rgU ? { ...a.rgU } : undefined, bel: Object.fromEntries(Object.entries(a.bel || {}).map(([k, b]) => [k, { ...b }])) }));
+    const agents = s.agents.map((a) => ({ ...a, inv: { ...a.inv }, mats: { ...(a.mats || {}) }, gear: { ...(a.gear || {}) }, work: { hunt: 0, gather: 0, craft: 0, haul: 0, cold: 0, stormed: 0, sheltered: 0, sawwall: 0, ...(a.work || {}) }, mind: (a.mind || []).slice(), pers: a.pers || [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5], th: a.th || [0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125], thS: (a.thS || [0, 0, 0, 0, 0, 0, 0, 0]).slice(), thN: a.thN || 0, wn: (a.wn || []).map((w) => ({ ...w })), mis: { ...(a.mis || {}) }, know: { ...(a.know || {}) }, xp: { ...(a.xp || {}) }, rgU: a.rgU ? { ...a.rgU } : undefined, bel: Object.fromEntries(Object.entries(a.bel || {}).map(([k, b]) => [k, { ...b }])) }));
     const store = { shelterT: (s.store || {}).shelterT ?? null, water: (s.store || {}).water || 0, wallMat: (s.store || {}).wallMat || null, norms: (s.store || {}).norms || {}, mats: { ...((s.store || {}).mats || {}) }, food: (s.store || {}).food || 0, items: ((s.store || {}).items || []).slice(), known: ((s.store || {}).known || []).slice(), techs: ((s.store || {}).techs || []).slice(), insight: (s.store || {}).insight || 0, bad: (s.store || {}).bad || 0, spoiled: (s.store || {}).spoiled || 0, lots: ((s.store || {}).lots || []).map((l) => l.slice()), lk: (s.store || {}).lk || 'berry', know: { ...((s.store || {}).know || {}) }, forced: ((s.store || {}).forced || []).slice(), rec: { ...((s.store || {}).rec || {}) }, plots0: (s.store || {}).plots0, cult: (s.store || {}).cult };
     const lorePend = [];
     // emergent knowledge: a technology exists only while the colonists who are alive still know enough to satisfy its pattern
     if (s.disc === 'emergent' && (tick % 4 === 0 || !(s.store || {}).know)) {
-      const live = agents.filter((q) => q.alive && !q.fac), uni = {}, ev = { hunt: 0, gather: 0, craft: 0, fish: 0, spearfish: 0 };
-      for (const q of live) { Object.assign(uni, q.know); ev.hunt += q.work.hunt || 0; ev.gather += q.work.gather || 0; ev.craft += q.work.craft || 0; ev.fish += q.work.fish || 0; ev.spearfish += q.work.spearfish || 0; }
+      const live = agents.filter((q) => q.alive && !q.fac), uni = {}, ev = { hunt: 0, gather: 0, craft: 0, fish: 0, spearfish: 0, cold: 0, stormed: 0, sheltered: 0, sawwall: 0 };
+      for (const q of live) { Object.assign(uni, q.know); ev.hunt += q.work.hunt || 0; ev.gather += q.work.gather || 0; ev.craft += q.work.craft || 0; ev.fish += q.work.fish || 0; ev.spearfish += q.work.spearfish || 0; ev.cold += q.work.cold || 0; ev.stormed += q.work.stormed || 0; ev.sheltered += q.work.sheltered || 0; ev.sawwall += q.work.sawwall || 0; }
       if (tick % 25 === 0) for (const k of Object.keys(store.rec)) if (r() < ((window.AGON_P || {}).recDecay ?? 0.003)) delete store.rec[k];
       if (store.techs.includes('markmaking')) for (const k of Object.keys(store.rec)) if (!uni[k]) uni[k] = store.rec[k];
       // what has been built stays built: once the colony has had fire, a house, beds, shelves or a bench, that practice is kept alive by the thing itself (the hearth keeps burning, the walls stand), so these five never drop out of the known list when their carriers die
@@ -5414,6 +5414,19 @@ class Component extends DCLogic {
     };
     for (const a of agents) {
       if (!a.alive) continue;
+      // The four experiential routes to shelter. A person works out that walls are worth having by
+      // being cold, by sitting out weather in the open, by sheltering under rock, or by seeing that
+      // somebody else has solved it. Each is a tick count carried on the colonist, so it is lost
+      // when they die, exactly like the craft signatures they learn at the bench.
+      if (!a.fac) {
+        const tHere = terAt(a.x, a.y), underRoof = FLOORS.has(key(a.x, a.y));
+        if (a.temp < -0.5 && !underRoof) a.work.cold = (a.work.cold || 0) + 1;
+        if (wet && !underRoof && tHere !== 6 && tHere !== 7) a.work.stormed = (a.work.stormed || 0) + 1;
+        if (tHere === 6 || tHere === 7) a.work.sheltered = (a.work.sheltered || 0) + 1;
+        // somebody else's wall, which is the whole point: standing next to your own house teaches
+        // you nothing you did not already know, so the colony's own camp tiles do not count
+        else if (tick % 4 === 0) { let saw = false; for (let j = -3; j <= 3 && !saw; j++) for (let i = -3; i <= 3; i++) { const xx = a.x + i, yy = a.y + j; if (WALLS.has(key(xx, yy)) && !inCamp(xx, yy)) { saw = true; break; } } if (saw) a.work.sawwall = (a.work.sawwall || 0) + 1; }
+      }
       if (a.gear.clothing) { const c = a.gear.clothing, nd = +(c.dur - ((window.AGON_P || {}).clothWear ?? 0.004)).toFixed(4); if (nd <= 0) { a.gear.clothing = null; log.push({ t: tick, text: a.id + "'s " + c.label.toLowerCase() + ' wears out', kind: 'warn' }); } else a.gear.clothing = { ...c, dur: nd }; }
       a.age += 1; if (a.build === 'child' && a.adultBuild && a.age >= 3 * YEAR / Math.max(0.5, a.g.growth || 1)) { a.build = a.adultBuild; a.height = Math.round(168 * a.sz * (0.96 + 0.04 * a.g.strength) * (0.9 + 0.1 * a.g.frame)); log.push({ t: tick, text: a.id + ' grows up', kind: 'info' }); } a.trained = (a.trained || 0) + 1; a.bubT = Math.max(0, a.bubT - 1); if (!a.bubT) a.bub = '';
       const slK = a.act === 'sleep' ? ((window.AGON_P || {}).slpMet ?? 1) : 1; a.sat -= 0.004 * ((window.AGON_P || {}).hung ?? 1) * slK * a.g.metabolism * 1.2 * A.traitFx(a, 'satK') / Math.sqrt(A.gv(a.g, 'fatStore')); a.hyd -= 0.006 * slK * 1.2 * A.traitFx(a, 'hydK') / A.gv(a.g, 'hydration'); a.ene -= 0.002 * 2.5 * ((window.AGON_P || {}).tire || 3) / (A.gv(a.g, 'stamina') * Math.sqrt(A.gv(a.g, 'lungs')));

@@ -1584,7 +1584,13 @@
   // technology = a pattern over discovered combinations (verb, user tag, target tag) with a minimum number met, plus its prerequisites
   var LORE = {
     firecraft:  { min: 1, p: [['burn', 'flame', 'wood'], ['burn', 'flame', 'fiber'], ['burn', 'flame', 'plant']] },
-    shelter:    { min: 2, p: [['craft', 'wood', 'wood'], ['craft', 'stone', 'wood'], ['craft', 'wood', 'stone'], ['craft', 'wood', 'fiber'], ['craft', 'wood', 'hide'], ['hit', 'wood', 'hard'], ['craft', 'wood', 'bone']] },
+    // Shelter was reachable one way only: craft wood against something, twice. That made every
+    // colony arrive at it from the workbench, and a band that spent a winter shivering in a cave
+    // learned nothing from it. The four 'ev' lines below are the other ways a person works out
+    // that walls are worth having -- being cold, sitting out a storm, taking refuge in a rock
+    // overhang, and seeing someone else's house. They are counted per colonist and carried in
+    // a.work, so like every other kind of evidence here they die with the people who hold them.
+    shelter:    { min: 2, p: [['craft', 'wood', 'wood'], ['craft', 'stone', 'wood'], ['craft', 'wood', 'stone'], ['craft', 'wood', 'fiber'], ['craft', 'wood', 'hide'], ['hit', 'wood', 'hard'], ['craft', 'wood', 'bone'], ['ev', 'cold', 2000], ['ev', 'stormed', 1800], ['ev', 'sheltered', 25], ['ev', 'sawwall', 60]] },
     bedding:    { min: 2, p: [['cut', 'sharp', 'fiber'], ['cut', 'sharp', 'hide'], ['craft', 'bone', 'fiber'], ['craft', 'bone', 'hide'], ['craft', 'stone', 'hide'], ['craft', 'stone', 'fiber'], ['craft', 'wood', 'hide']] },
     storage:    { min: 2, p: [['craft', 'wood', 'fiber'], ['craft', 'bone', 'hide'], ['craft', 'shell', 'fiber'], ['craft', 'shell', 'hide'], ['craft', 'wood', 'shell'], ['craft', 'wood', 'wood'], ['craft', 'wood', 'hide']] },
     carpentry:  { min: 2, p: [['cut', 'sharp', 'wood'], ['craft', 'wood', 'wood'], ['hit', 'wood', 'wood'], ['hit', 'hard', 'wood'], ['craft', 'stone', 'wood'], ['craft', 'sharp', 'wood']] },

@@ -480,3 +480,72 @@ Carried forward: camp clearing apron width; Unity emergent tech, staged building
 ruins; Unity `JobGiver` cooldown on unreachable targets; interior walls pushing shadow sprites;
 thirst loop untraced; colonists born 437 years old (`LIFE = 2000000` against `YEAR = 2000`,
 r25); jungle maps too rock-poor for caves; caves still one level rather than descending.
+
+## Round 28 — shelter can be discovered by living, not only by crafting
+
+This round answers the first half of Dyl's ask. The second half — placing rooms when they are
+earned rather than reading extents fixed at worldgen — is scoped below and deliberately not
+started, because it cannot be half-done without leaving the camp system broken.
+
+Verified:
+- **`LORE.shelter` had seven patterns and all seven were crafting.** `['craft','wood','wood']`
+  and friends, `min: 2`. So every colony in every biome arrived at shelter from the workbench,
+  and a band that spent a winter shivering in the open learned nothing from it. Four experiential
+  patterns are added beside them:
+
+      ['ev', 'cold', 2000]       being genuinely cold (a.temp < -0.5) and not under a roof
+      ['ev', 'stormed', 1800]    rain or storm, out in it, and not under rock either
+      ['ev', 'sheltered', 25]    standing inside a cave (terrain 6 or 7)
+      ['ev', 'sawwall', 60]      within 3 tiles of a wall that is not the colony's own
+
+  Each is a tick counter on `a.work`, so it is carried by the colonist and lost when they die —
+  the same rule the craft signatures already follow. `sawwall` uses `!inCamp(x, y)` so that
+  standing next to your own house teaches nothing, which is the whole point of that route.
+- **The tundra outlier is gone and the spread is now biome-shaped.** Time to `shelterT` on the
+  band start, measured over 4000 ticks:
+
+      before:  temperate 2564 / 2412,  desert 308,   tundra 8820
+      after:   tundra 192,  desert 520,  temperate 912 / 1684,  jungle 960
+
+  Tundra now learns shelter fastest, which is what being cold all the time should teach you.
+  Nothing has a page error; 6-11 colonists alive at tick 4000 across five worlds.
+- Evidence accrues differently per biome, which was the point: `sheltered` fires in tundra (53)
+  and jungle (84) and nowhere else; `sawwall` in temperate seed 11 (52) and tundra (20) and
+  nowhere else; `cold` and `stormed` accrue everywhere.
+- `tests/final3.py` 9-17 alive at tick 1500 across four worlds, no page errors.
+  `tests/mute.py` unchanged.
+
+Honest about what I could not establish:
+- **I cannot say which route actually triggered any given discovery.** `ev` is summed over
+  *living* colonists only, so a reading taken at tick 4000 does not describe the colony that
+  existed at tick 192 — the people whose cold ticks or cave ticks tipped it may be dead by then.
+  An early run of this showed exactly that trap: temperate reported `sheltered: 0, sawwall: 0`
+  at tick 4000 while its `shelterT` had clearly moved when those two thresholds changed. To
+  attribute a route properly, `loreHave` would have to log which patterns were satisfied at the
+  moment the tech was derived. Worth doing before tuning these numbers further.
+- Three tuning passes were needed and the first two were wrong in opposite directions: thresholds
+  of 240/90/60/40 put shelter at tick 64 everywhere (the counters are colony-wide sums over a
+  dozen people, so they reach hundreds within a few hundred ticks), and 2000/1800/120/500 left
+  the cave and rival-wall routes dead at zero. The numbers committed are the third pass.
+
+Scoped, not started — incremental floorplan (r29 if Dyl wants it):
+- `applyCamp` iterates `CAMPW0`, `CAMPF0` and `CAMPK`, all built at worldgen. They are `const`
+  bindings holding Sets, so their contents can be extended at runtime. `ROOMX`/`NROOM` have only
+  3 and 7 readers and `state.rooms` is unused, so the slots are free.
+- Design: `growRoom(committed, seed)` chooses the next room's extent at the moment it is earned,
+  scored on buildability (no water, rock or cliff), flatness from `elevAt`, compactness against
+  the rooms already standing, and the leeward side via `windAt`; it then adds its tiles to
+  `CAMPW0`/`CAMPF0`/`CAMPK` and registers the extent. `state.rooms` persists the extents and
+  `campGrp`/`applyCamp` read those instead of `ROOMX`. Room 0 stays from worldgen because it
+  carries the hearth and all the furniture placement.
+- **The hard part is rehydration.** The engine is rebuilt on load and on area change, so the
+  runtime tiles must be reconstructed from `state.rooms` deterministically every time it comes
+  up, or a reload or a migration loses rooms silently — and `campSig`'s early-return would hide
+  it. That is the piece that needs a round to itself.
+
+Carried forward: the scenario-independent population collapse (~12-15 down to about 5 by tick
+6000, measured r27 — still the biggest open problem); `store.food` never accumulating; camp
+clearing apron width; Unity emergent tech, staged building, migration and ruins; Unity
+`JobGiver` cooldown; interior walls pushing shadow sprites; thirst loop untraced; colonists
+born 437 years old (`LIFE = 2000000` against `YEAR = 2000`); jungle maps too rock-poor for
+caves; caves still one level rather than descending.
