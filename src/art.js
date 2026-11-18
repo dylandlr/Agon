@@ -824,7 +824,43 @@
     idea:    { syms: ['idea'], text: 'Has an idea', prio: 10 }
   };
   function glyphPaths(name) { return (GLYPH[name] || GLYPH.question).map(function (g) { return { d: g[0], f: g[1] || 'none', s: g[2] || '#1c110b', w: g[3] === undefined ? 1.6 : g[3] }; }); }
-  function msgSyms(key) { var m = MSG[key]; return m ? m.syms.map(function (n) { return { name: n, paths: glyphPaths(n) }; }) : []; }
+  /* ---------- the colony's sign vocabulary ----------
+     A sign is not given: it is coined, by two people who both needed it at the same moment and
+     were standing together. Only the signs you can make against your own body are there from the
+     start -- an empty belly, a dry mouth, a closed eye, a wound, fright. Everything else has to be
+     agreed on before anyone can mean it, and until it is, the hearer sees only that something was
+     meant: a question.
+
+     ARROW is the first piece of grammar rather than another noun. Before it is coined a speaker can
+     only name one thing ("cold"); after it, two things can be set in relation ("cold -> fire"),
+     which is the whole of what makes a sentence rather than a cry. So compound messages stay
+     truncated to their first sign until the colony has coined the arrow. */
+  var LEX_SEED = ['hungry', 'thirsty', 'sleep', 'hurt', 'scared'];
+  var GLYPH_GLOSS = {
+    hungry: 'empty belly', thirsty: 'dry mouth', sleep: 'closed eye', hurt: 'wound', scared: 'fright',
+    arrow: 'leads to', eat: 'eating', drink: 'drinking', fire: 'fire', cold: 'cold', hot: 'heat',
+    home: 'the camp', flee: 'run', sick: 'sickness', skull: 'death', hunt: 'the hunt', craft: 'making',
+    gather: 'gathering', love: 'kinship', angry: 'anger', idea: 'a thought', question: 'unknown'
+  };
+  function msgSymNames(key) { var m = MSG[key]; return m ? m.syms.slice() : []; }
+  function msgText(key) { var m = MSG[key]; return m ? m.text : ''; }
+  function lexSeed() { return LEX_SEED.slice(); }
+  function glyphGloss(n) { return GLYPH_GLOSS[n] || n; }
+  // every sign a message would need if the colony could say all of it, so the coining loop knows what is wanted
+  function msgWants(key) { return msgSymNames(key); }
+  function msgSyms(key, lex) {
+    var m = MSG[key]; if (!m) return [];
+    var names = m.syms;
+    if (lex) {
+      // without the arrow there is no grammar, so only the first sign survives
+      if (names.length > 1 && !lex.arrow) names = names.slice(0, 1);
+      names = names.map(function (n) { return lex[n] ? n : 'question'; });
+      // a bubble of nothing but questions says only that something was meant
+      var allQ = names.every(function (n) { return n === 'question'; });
+      if (allQ) names = ['question'];
+    }
+    return names.map(function (n) { return { name: n, paths: glyphPaths(n) }; });
+  }
 
   /* ---------- mind: 8 personality traits (octagon) and 8 thought categories (bar or pie) ---------- */
   var PERS = ['Bravery', 'Sociability', 'Curiosity', 'Patience', 'Aggression', 'Diligence', 'Empathy', 'Greed'];
@@ -2528,7 +2564,7 @@
     MOTION: MOTION, CMX: CMX, cmAnim: cmAnim, anim: anim, ANIMALS: ANIMALS, ANIMAL_VARS: ANIMAL_VARS, VAR_OF: VAR_OF, animalPal: animalPal,
     RIG: RIG, NECK: NECK, TICK_MS: TICK_MS, armJoints: armJoints, shade: shade, tint: tint, mix: mix, lg: lg, pick: pick, look: look, founderAlleles: founderAlleles, applyDis: applyDis, founderDis: founderDis, breed2: breed2, linChild: linChild, inbreeding: inbreeding, skinOf: skinOf, disRows: disRows, disAffected: disAffected, DISORDERS: DISORDERS, coatLum: coatLum, visibility: visibility, founderGe: founderGe, breedGe: breedGe, geStr: geStr, parseGe: parseGe, phenotype: phenotype, geRows: geRows, founderCoat: founderCoat, breedCoat: breedCoat, coatKey: coatKey, coatPheno: coatPheno, coatPal: coatPal, clamp: clamp, hairKit: hairKit, detailKit: detailKit, beardKit: beardKit, outfitKit: outfitKit, HAIRNAMES: HAIRNAMES, OUTFITNAMES: OUTFITNAMES, BEARDNAMES: BEARDNAMES, ACCNAMES: ACCNAMES, TRIM: TRIM,
     BUILDS: BUILDS, BUILD_ORDER: BUILD_ORDER, pawnDims: pawnDims, physique: physique, solid: solid, bodyKit: bodyKit, armKit: armKit, scaleTf: scaleTf, DECAY_TICKS: DECAY_TICKS, DAY_TICKS: DAY_TICKS, PERISH: PERISH, PRESERVE: PRESERVE, spoilRate: spoilRate, spoilRisk: spoilRisk, lotsStep: lotsStep, DECAY_STAGES: DECAY_STAGES, decayOf: decayOf, rotItems: rotItems, skeleton: skeleton, LIGHT: LIGHT, lightModel: lightModel,
-    GLYPH: GLYPH, MSG: MSG, glyphPaths: glyphPaths, msgSyms: msgSyms, PERS: PERS, THOUGHTS: THOUGHTS,
+    GLYPH: GLYPH, MSG: MSG, glyphPaths: glyphPaths, msgSyms: msgSyms, msgSymNames: msgSymNames, msgText: msgText, msgWants: msgWants, lexSeed: lexSeed, glyphGloss: glyphGloss, PERS: PERS, THOUGHTS: THOUGHTS,
     wornParts: wornParts, legStance: legStance, wornKey: wornKey, MATS: MATS, MAT_ORDER: MAT_ORDER, TPL: TPL, QUALITY: QUALITY, EFFECTS: EFFECTS, qualityOf: qualityOf, craftStats: craftStats, pickMats: pickMats, itemShapes: itemShapes,
     NEEDCOL: NEEDCOL, NAMES: NAMES, genName: genName, genHouse: genHouse, ARCH: ARCH, TRAITS: TRAITS, traitFx: traitFx, archetypesOf: archetypesOf, strengthsFlaws: strengthsFlaws, SCHEM: SCHEM, discoverable: discoverable, discoverChance: discoverChance, MACHINES: MACHINES, LLM_GOALS: LLM_GOALS, llmSystem: llmSystem, parseDecision: parseDecision, mockDecide: mockDecide, MUTATIONS: MUTATIONS, MUT_BY: MUT_BY, applyMutation: applyMutation, rollMutations: rollMutations, breed: breed, mutationLines: mutationLines, GENES: GENES, GENE_GROUPS: GENE_GROUPS, gv: gv,
     THINGS: THINGS, VERBS: VERBS, COMP: COMP, interact: interact, evalNode: evalNode, affordances: affordances, matrix: matrix, TECH: TECH, PRIM: PRIM, MOVES: MOVES, STYLES: STYLES, moveOK: moveOK, styleOf: styleOf, pickMove: pickMove, moveStats: moveStats, techOf: techOf, schemOf: schemOf, machinesOf: machinesOf, techAvail: techAvail, nextTech: nextTech, techFx: techFx, lore: { cls: expClass, LORE: LORE, MAT2T: MAT2T, cands: expCands, pick: expPick, odds: expOdds, derive: loreDerive, have: loreHave, front: loreFront, teach: loreTeach, label: sigLabel, info: sigInfo, yields: sigYields, hit: patHit }, mind: MIND, thoughtLine: thoughtLine, geneDetail: geneDetail, thoughtIcons: thoughtIcons, glyphNames: function () { return Object.keys(GLYPH); }

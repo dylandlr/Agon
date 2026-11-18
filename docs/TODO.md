@@ -332,3 +332,91 @@ Not done, carried forward:
 - Unity: emergent tech and staged building next, then migration and ruins.
 - Unity `JobGiver` re-offers unreachable targets every tick.
 - Interior walls still push shadow sprites; larder never fills; thirst loop untraced.
+
+## Round 26 — rivals, caves, animals, and the beginnings of a language
+
+Six asks in one message. Five are done, one question is answered below, and one thing I
+found along the way is left for Dyl to decide.
+
+Verified:
+- **Rivals no longer start with tools the colony has to earn.** `RTECH` was a hardcoded
+  `['shaping','binding','hafting','footwork']`, substituted for the colony's real tech list
+  wherever a rival fought or crafted (`techs: a.fac ? RTECH : techs`). It is now the same
+  starting set the colony gets — `['firecraft']` by default — and rivals still do not
+  research, so that is where they stay. Confirmed in the build and at runtime.
+- **The brick look on rock and cave walls is gone.** The cause was two
+  `repeating-linear-gradient`s on every rock tile: horizontal lines every 9-10px over the
+  whole tile and vertical ticks every 6-7px on the south face. Regular spacing in both axes
+  on an unvarying grid is mortar coursing, which is exactly what it read as. Replaced with
+  bedding planes that only appear on sedimentary and metamorphic rock, at an offset and
+  spacing drawn per tile so neighbours never line up, and irregular fracture marks on
+  igneous and granite. Checked at 3.2x zoom against a cliff face.
+- **Caves lead somewhere now.** Measured before: 2-6 caves per map, largest 27 tiles, max
+  depth 8-12. The passages were dying early — walker life was `max(6, target * 0.55)` — and
+  the rock budget was 30% of host tiles. Now `max(16, target * 0.85)`, budget 50%, and a
+  larger target. After: seed 3's largest cave went 15 -> 52 tiles and max depth 9 -> 17;
+  seed 21 went to 26 deep and 140 cave tiles. Jungle is the exception and barely moved
+  (31 tiles, depth 6) because that map has almost no host rock to dig into.
+- **Animals are at true relative size.** The game already had `REAL`, a table of real
+  head-and-body lengths in metres, but only 54 of 103 species were in it — every one of the
+  49 missing was aquatic — and the conversion had two faults: a hard 11px floor that
+  flattened everything under half a metre (a 0.12m vole and a 0.5m hawk both landed at
+  ~14px), and raw division by the sprite-span table, which let a short-spanning sprite
+  out-draw a longer animal (pika, 0.2m, drew at 19px; hawk, 0.5m, at 15px). Added the 49
+  missing lengths and replaced the floor with `px = 40.5 * metres^0.55`, with the span
+  divisor clamped to [0.75, 0.95]. All 103 species now have a real length, and across every
+  pair of species one of which is more than 30% longer than the other, exactly one still
+  draws smaller — muskox 80px against bison 79px, a one-pixel tie.
+- **Signs can be read as words.** Every message already carried a `text` beside its glyphs;
+  nothing surfaced it. There is now a Signs/Words button beside the sound button, and in
+  Words mode the bubble reads "Tired, wants a bed" instead of three pictures.
+- **The colony coins its own signs, and grammar is one of them.** This is the new system.
+  The lexicon starts at five signs and five only — the ones a body can make on itself:
+  empty belly, dry mouth, closed eye, wound, fright. Every other glyph is uncoined, and an
+  uncoined glyph shows as a question mark, so you see that something was meant without
+  knowing what. A sign is coined when two colonists are standing together, one of them
+  means something the colony has no sign for, and the roll goes their way; wit and memory
+  make it likelier. `arrow` is deliberately in that pool, because it is not a noun — it is
+  the relation that lets two signs be put in order. Until it is coined, every compound
+  message truncates to its first sign, so colonists can say "cold" but not "cold -> fire".
+  Measured on seed 3: 5 signs at tick 0, 10 by tick 401 (arrow among them), 13 by 1601,
+  and a plateau there — the colony coins signs for what it actually lives through, and
+  never coins ones for experiences it has not had. Each coining writes a line to the log.
+- **Damage numbers and stamina in the world.** `harm` now records what it took off, and the
+  number rises off the victim and fades over six ticks; anything under one point is not
+  drawn, so no more "-0". A stamina bar sits under each health bar, blue down to yellow
+  under 50% and red under 25%. Energy was already a numbered row in the inspector.
+- Sweeps clean throughout: `tests/final3.py` 11-19 alive at tick 1500 across four worlds,
+  no page errors; `tests/mute.py` unchanged; the layout-A geometry check still passes.
+
+The question Dyl asked — **why the UI is not RimWorld level yet** — is answered in the
+reply, not here, but the two measurable parts are: the HUD is a set of panels that each
+solve their own problem rather than one information hierarchy, and almost nothing is
+clickable as a *thing* (the map, the bars and the resource rows are read-only; RimWorld's
+are all entry points).
+
+Found along the way, not fixed:
+- **`setWorld` takes positional arguments** — `setWorld(size, form, biome, seed, nRivals, gp,
+  cell)` — and an object argument hits `if (!SIZES[kk]) return;` and silently does nothing.
+  My first cave measurement passed an object and got identical numbers for every seed and
+  biome, which is what gave it away. Any future sweep must use the positional form; the
+  silent return makes a wrong call look like a working one.
+- **Something strips keys from the store.** I added `start0` to the store literal, confirmed
+  it in source and in the build, and it never appeared in `state.store` at runtime — while
+  `forced`, declared in the same object literal, did. The live store's key order
+  (`...insight, bad, spoiled, lots, lk, know, forced...`) does not match the literal's
+  either, so the state store is not the object that literal builds. I worked around it by
+  computing the rival tech list from globals instead, and I have not explained it. Worth
+  understanding before anything else is added to the store.
+- **Caves still dead-end rather than descending.** This round made the passages much longer,
+  but a cave is still one level: `CDEPTH` is distance from the mouth, not a floor below.
+  Real "deeper" would be linked levels with their own maps. That is a feature, not a tune.
+- Jungle maps have too little host rock for caves to grow; worth a biome-specific floor.
+- Rivals get a flat insulation of 6 from their floors where the colony gets its wall
+  material's value (wattle is 8). That is a rival *disadvantage*, not a head start, so I
+  left it; say if you want it levelled too.
+
+Carried forward: camp clearing apron width; Unity emergent tech, staged building, migration
+and ruins; Unity `JobGiver` cooldown on unreachable targets; interior walls pushing shadow
+sprites; larder never fills; thirst loop untraced; colonists still born 437 years old
+(`LIFE = 2000000` against `YEAR = 2000`, r25).
