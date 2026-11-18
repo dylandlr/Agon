@@ -453,12 +453,24 @@ Verified:
 - `tests/final3.py` on the new default: 13-18 alive at tick 1500 across temperate, desert,
   tundra and sea, no page errors.
 
-Rough / not yet settled:
-- **Survival on the unbuilt start may be too harsh.** Seed 3 fell to 2 colonists alive at tick
-  6000 before recovering to 6 by 12000. A shelterless start should be harder than a walled one,
-  but that is close to a wipe. A band-versus-community sweep across four seeds and biomes at
-  ticks 2k/6k/12k was still running when this was written; the numbers go in the next entry, and
-  the band's starting food (6) is the dial if it needs one.
+Measured after the fact, and it corrected me:
+- **The unbuilt start is not the cause of the population collapse.** I flagged seed 3 falling to
+  2 alive at tick 6000 and assumed the shelterless start did it. The band-versus-community sweep
+  says otherwise. Alive at tick 12000 across four seeds and biomes:
+
+      band       3 temperate 4   11 temperate 3   5 desert 5   7 tundra 6     mean 4.5
+      community  3 temperate 9   11 temperate 7   5 desert 0   7 tundra 5     mean 5.25
+
+  Band is marginally worse, and the only total extinction in the set is *community* on desert
+  seed 5. Both scenarios fall from 12-15 at tick 2000 to about 5 by tick 6000. So there is a
+  **pre-existing survival collapse that has nothing to do with the house**, and it is a larger
+  problem than the scenario default. Do not tune the band's starting food to chase it; the
+  walled start with a stocked table collapses the same way.
+- **Shelter arrives far too late in tundra.** Time to `shelterT` for the band: desert 308,
+  temperate 2412 and 2564, **tundra 8820** — still unwalled at tick 6000, in the coldest biome
+  there is. Community reaches it in 716 there, so this is about discovery order under cold
+  pressure, not about the blueprint. Worth fixing before the collapse above, since freezing
+  without walls probably feeds it.
 - `larder never fills` turns out to be about `store.food`, not a larder — the word only appears
   in scenario blurbs. `storeCapN` is at least 16, so the cap is not the blocker; the deposit
   sites are 5714 (carcass) and 5724 (berries, needs `a.inv.berries >= 3`) against consumption at
