@@ -1,0 +1,22 @@
+root = true
+
+[{bridge,tools,workspace}/**]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+
+[bridge/*.py]
+indent_style = space
+indent_size = 4
+
+[unity-game/Assets/Agon/**/*.cs]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+
+[{docs/migration,asset-library}/**]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="gear.armor.helm">
+<path d="M9 30 C9 12 17 6 24 6 C31 6 39 12 39 30 L33 34 L15 34Z" fill="#efe6d0" stroke="#1c110b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M13 30 C13 22 17 18 24 18 C31 18 35 22 35 30 L24 34Z" fill="#7a5a3a" stroke="#1c110b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M13 34 L35 34" fill="none" stroke="#1c110b" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M13 34 L35 34" fill="none" stroke="#b98a5a" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

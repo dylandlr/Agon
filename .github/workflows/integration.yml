@@ -1,0 +1,48 @@
+name: Unified game integration checks
+
+on:
+  pull_request:
+  push:
+    branches: ['codex/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repository:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm run verify
+      - run: npm run check:repository
+      - run: npm run assets:check
+      - run: npm test
+
+  bridge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      JAX_PLATFORMS: cpu
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: research/requirements-ci.txt
+      - run: python -m pip install -r research/requirements-ci.txt
+      - run: python -m pytest bridge -q
+
+# Unity Editor/packaged Windows tests remain local until a licensed runner is
+# configured. Private trained policies are never fetched by this workflow.

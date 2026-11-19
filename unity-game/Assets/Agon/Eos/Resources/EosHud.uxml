@@ -1,0 +1,26 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+  <ui:VisualElement name="hud">
+    <ui:VisualElement class="toolbar">
+      <ui:Label text="AGON / EOS" class="title" />
+      <ui:Button name="play" text="Run" />
+      <ui:Button name="step" text="Step" />
+      <ui:Button name="speed" text="1 tick" />
+      <ui:Button name="save" text="Save" />
+      <ui:Button name="load" text="Load" />
+      <ui:Label name="clock" text="Starting simulation…" />
+    </ui:VisualElement>
+    <ui:Label name="provenance" class="provenance" />
+    <ui:VisualElement class="inspector">
+      <ui:Label text="COLONISTS" class="title" />
+      <ui:ScrollView name="agents" class="agents" />
+      <ui:Label name="details" class="details" text="Select an agent to inspect their state." />
+    </ui:VisualElement>
+    <ui:VisualElement class="camera">
+      <ui:Button name="left" text="←" /><ui:Button name="right" text="→" />
+      <ui:Button name="up" text="↑" /><ui:Button name="down" text="↓" />
+      <ui:Button name="zoom-in" text="+" /><ui:Button name="zoom-out" text="−" />
+      <ui:Button name="home" text="Map" />
+    </ui:VisualElement>
+    <ui:Label name="status" class="status" />
+  </ui:VisualElement>
+</ui:UXML>

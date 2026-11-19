@@ -1,0 +1,491 @@
+{
+  "schemaVersion": 1,
+  "updated": "2026-11-19",
+  "target": "One Agon Unity game preserving learned behavior, research mechanics, original visuals, Overseer and Director modes",
+  "decisionDocument": "docs/migration/PLAN.md",
+  "tasks": [
+    {
+      "id": "B00",
+      "title": "Preserve both source versions",
+      "milestone": "M0",
+      "status": "verified",
+      "dependsOn": [],
+      "features": [
+        "F25"
+      ],
+      "gate": "G00",
+      "evidence": [
+        "workspace/sources.json",
+        "workspace/verify.cjs"
+      ]
+    },
+    {
+      "id": "B01",
+      "title": "Baseline Unity and bridge integration",
+      "milestone": "M0",
+      "status": "verified",
+      "dependsOn": [
+        "B00"
+      ],
+      "features": [
+        "F01",
+        "F21"
+      ],
+      "gate": "G01",
+      "evidence": [
+        "docs/UNIFIED-GAME.md"
+      ]
+    },
+    {
+      "id": "B02",
+      "title": "Recover compatible historical trained inference",
+      "milestone": "M0",
+      "status": "verified",
+      "dependsOn": [
+        "B01"
+      ],
+      "features": [
+        "F25"
+      ],
+      "gate": "G04",
+      "evidence": [
+        "bridge/verify_trained_run.py",
+        "docs/UNIFIED-GAME.md"
+      ]
+    },
+    {
+      "id": "R00",
+      "title": "Repository guardrails and asset reproducibility",
+      "milestone": "M0",
+      "status": "verified",
+      "dependsOn": [
+        "B00"
+      ],
+      "features": [
+        "F26"
+      ],
+      "gate": "G00",
+      "evidence": [
+        "tools/repository/check.cjs",
+        ".github/workflows/integration.yml",
+        "docs/migration/VALIDATION.md"
+      ]
+    },
+    {
+      "id": "C01",
+      "title": "Specify Overseer and Director capability contracts",
+      "milestone": "M1",
+      "status": "planned",
+      "dependsOn": [
+        "B01"
+      ],
+      "features": [
+        "F17",
+        "F18"
+      ],
+      "gate": "G05",
+      "evidence": []
+    },
+    {
+      "id": "C02",
+      "title": "Protocol v2, units, stable identities and events",
+      "milestone": "M1",
+      "status": "planned",
+      "dependsOn": [
+        "C01"
+      ],
+      "features": [
+        "F02",
+        "F11",
+        "F12",
+        "F21"
+      ],
+      "gate": "G01",
+      "evidence": []
+    },
+    {
+      "id": "C03",
+      "title": "Create versioned writable canonical simulation package",
+      "milestone": "M1",
+      "status": "planned",
+      "dependsOn": [
+        "B02",
+        "C02"
+      ],
+      "features": [
+        "F01",
+        "F25"
+      ],
+      "gate": "G01",
+      "evidence": []
+    },
+    {
+      "id": "A01",
+      "title": "Inventory original HTML art and export static glyphs/equipment",
+      "milestone": "M2",
+      "status": "verified",
+      "dependsOn": [
+        "B00"
+      ],
+      "features": [
+        "F08",
+        "F13"
+      ],
+      "gate": "G02",
+      "evidence": [
+        "asset-library/catalog.json",
+        "tools/assets/export-agon.cjs"
+      ]
+    },
+    {
+      "id": "A02",
+      "title": "Recover layered pawns, portraits and animals",
+      "milestone": "M2",
+      "status": "planned",
+      "dependsOn": [
+        "A01"
+      ],
+      "features": [
+        "F04",
+        "F06",
+        "F08"
+      ],
+      "gate": "G02",
+      "evidence": []
+    },
+    {
+      "id": "A03",
+      "title": "Recover terrain, flora, walls, doors and weather art",
+      "milestone": "M2",
+      "status": "planned",
+      "dependsOn": [
+        "A01"
+      ],
+      "features": [
+        "F03",
+        "F04",
+        "F15"
+      ],
+      "gate": "G02",
+      "evidence": []
+    },
+    {
+      "id": "A04",
+      "title": "Unity import presets, catalogs, atlases and fidelity fixtures",
+      "milestone": "M2",
+      "status": "planned",
+      "dependsOn": [
+        "A02",
+        "A03"
+      ],
+      "features": [
+        "F08",
+        "F13",
+        "F15"
+      ],
+      "gate": "G02",
+      "evidence": []
+    },
+    {
+      "id": "V01",
+      "title": "Separate contracts, transport, rendering and application modules",
+      "milestone": "M3",
+      "status": "planned",
+      "dependsOn": [
+        "C02",
+        "R00"
+      ],
+      "features": [
+        "F01",
+        "F19"
+      ],
+      "gate": "G03",
+      "evidence": []
+    },
+    {
+      "id": "V02",
+      "title": "Restore Agon layout A, input, camera, selection and audio",
+      "milestone": "M3",
+      "status": "planned",
+      "dependsOn": [
+        "V01",
+        "A04"
+      ],
+      "features": [
+        "F19",
+        "F20"
+      ],
+      "gate": "G03",
+      "evidence": []
+    },
+    {
+      "id": "V03",
+      "title": "Render authoritative fauna, ecology, bodies and resources",
+      "milestone": "M3",
+      "status": "planned",
+      "dependsOn": [
+        "V01",
+        "A04"
+      ],
+      "features": [
+        "F03",
+        "F04",
+        "F06"
+      ],
+      "gate": "G03",
+      "evidence": []
+    },
+    {
+      "id": "L01",
+      "title": "Integrate continuous learning, sleep, memory and world model",
+      "milestone": "M4",
+      "status": "planned",
+      "dependsOn": [
+        "C03"
+      ],
+      "features": [
+        "F09",
+        "F10"
+      ],
+      "gate": "G04",
+      "evidence": []
+    },
+    {
+      "id": "L02",
+      "title": "Integrate lineage policy inheritance and life identity",
+      "milestone": "M4",
+      "status": "planned",
+      "dependsOn": [
+        "L01"
+      ],
+      "features": [
+        "F07",
+        "F11"
+      ],
+      "gate": "G04",
+      "evidence": []
+    },
+    {
+      "id": "L03",
+      "title": "Save and restore the complete learning runner",
+      "milestone": "M4",
+      "status": "planned",
+      "dependsOn": [
+        "L02"
+      ],
+      "features": [
+        "F21"
+      ],
+      "gate": "G06",
+      "evidence": []
+    },
+    {
+      "id": "P01",
+      "title": "Server-side capabilities, atomic commands and intervention ledger",
+      "milestone": "M5",
+      "status": "planned",
+      "dependsOn": [
+        "C01",
+        "C03",
+        "L03"
+      ],
+      "features": [
+        "F17",
+        "F18"
+      ],
+      "gate": "G05",
+      "evidence": []
+    },
+    {
+      "id": "P02",
+      "title": "Overseer and Director controls with branching/replay",
+      "milestone": "M5",
+      "status": "planned",
+      "dependsOn": [
+        "P01",
+        "V02"
+      ],
+      "features": [
+        "F17",
+        "F18"
+      ],
+      "gate": "G05",
+      "evidence": []
+    },
+    {
+      "id": "S01",
+      "title": "Expose Eos survival/resource systems and validate conservation",
+      "milestone": "M6",
+      "status": "planned",
+      "dependsOn": [
+        "C03",
+        "V03"
+      ],
+      "features": [
+        "F04",
+        "F05",
+        "F13"
+      ],
+      "gate": "G07",
+      "evidence": []
+    },
+    {
+      "id": "S02",
+      "title": "Add physical construction, storage, shelter and policy interfaces",
+      "milestone": "M6",
+      "status": "planned",
+      "dependsOn": [
+        "S01",
+        "P01"
+      ],
+      "features": [
+        "F15",
+        "F16"
+      ],
+      "gate": "G07",
+      "evidence": []
+    },
+    {
+      "id": "S03",
+      "title": "Connect technology progression to event-derived evidence",
+      "milestone": "M6",
+      "status": "planned",
+      "dependsOn": [
+        "S02"
+      ],
+      "features": [
+        "F14"
+      ],
+      "gate": "G07",
+      "evidence": []
+    },
+    {
+      "id": "L04",
+      "title": "Train/evaluate policies for changed runtime semantics",
+      "milestone": "M6",
+      "status": "planned",
+      "dependsOn": [
+        "L03",
+        "S03"
+      ],
+      "features": [
+        "F01",
+        "F25"
+      ],
+      "gate": "G04",
+      "evidence": []
+    },
+    {
+      "id": "W01",
+      "title": "Persist region registry and dormant-world policy",
+      "milestone": "M7",
+      "status": "planned",
+      "dependsOn": [
+        "L03",
+        "S03"
+      ],
+      "features": [
+        "F03",
+        "F23"
+      ],
+      "gate": "G08",
+      "evidence": []
+    },
+    {
+      "id": "W02",
+      "title": "Transactional migration of people, policies and resources",
+      "milestone": "M7",
+      "status": "planned",
+      "dependsOn": [
+        "W01",
+        "L04"
+      ],
+      "features": [
+        "F22"
+      ],
+      "gate": "G08",
+      "evidence": []
+    },
+    {
+      "id": "W03",
+      "title": "Return visits, ruin decay and migration recovery",
+      "milestone": "M7",
+      "status": "planned",
+      "dependsOn": [
+        "W02"
+      ],
+      "features": [
+        "F23"
+      ],
+      "gate": "G08",
+      "evidence": []
+    },
+    {
+      "id": "Q01",
+      "title": "Research inspectors, event timeline, comparisons and export",
+      "milestone": "M8",
+      "status": "planned",
+      "dependsOn": [
+        "P02",
+        "L04",
+        "S03"
+      ],
+      "features": [
+        "F06",
+        "F07",
+        "F10",
+        "F12",
+        "F24"
+      ],
+      "gate": "G09",
+      "evidence": []
+    },
+    {
+      "id": "D01",
+      "title": "Offline Windows runtime packaging and process recovery",
+      "milestone": "M9",
+      "status": "planned",
+      "dependsOn": [
+        "V02",
+        "L03"
+      ],
+      "features": [
+        "F26"
+      ],
+      "gate": "G10",
+      "evidence": []
+    },
+    {
+      "id": "D02",
+      "title": "Versioned policy pack installation and compatibility UX",
+      "milestone": "M9",
+      "status": "planned",
+      "dependsOn": [
+        "D01",
+        "L04"
+      ],
+      "features": [
+        "F25",
+        "F26"
+      ],
+      "gate": "G10",
+      "evidence": []
+    },
+    {
+      "id": "D03",
+      "title": "Clean-machine release, multi-seed evaluation and soak gates",
+      "milestone": "M9",
+      "status": "planned",
+      "dependsOn": [
+        "W03",
+        "Q01",
+        "D02"
+      ],
+      "features": [
+        "F26"
+      ],
+      "gate": "G10",
+      "evidence": []
+    }
+  ]
+}

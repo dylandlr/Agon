@@ -1,0 +1,23 @@
+.eos-document { position: absolute; top: 0; right: 0; bottom: 0; left: 0; }
+#hud { flex-grow: 1; color: rgb(235, 229, 211); font-size: 15px; }
+.toolbar { flex-direction: row; align-items: center; padding: 12px; background-color: rgba(18, 26, 27, 0.96); }
+.title { -unity-font-style: bold; font-size: 18px; margin-right: 16px; }
+Button { background-color: rgb(48, 65, 62); color: rgb(244, 237, 215); padding: 8px 12px; margin: 3px; border-radius: 4px; min-width: 40px; -unity-text-align: middle-center; }
+Button:hover { background-color: rgb(70, 92, 80); }
+Button:disabled { opacity: 0.4; }
+#clock { margin-left: 12px; }
+.provenance { padding: 8px 16px; background-color: rgba(36, 42, 30, 0.94); color: rgb(225, 202, 140); }
+.inspector { position: absolute; left: 16px; top: 120px; width: 252px; bottom: 90px; padding: 14px; background-color: rgba(18, 26, 27, 0.94); border-radius: 6px; }
+.agents { height: 230px; flex-shrink: 1; }
+.agents .unity-scroll-view__content-and-vertical-scroll-container { flex-direction: row; flex-grow: 1; min-height: 0; }
+.agents .unity-scroll-view__content-viewport { overflow: hidden; flex-grow: 1; }
+.agents .unity-scroll-view__content-container { flex-shrink: 0; }
+.agents Button { flex-shrink: 0; }
+.agents .unity-scroller--vertical { width: 10px; background-color: rgb(35, 45, 42); }
+.agents .unity-scroller--horizontal { display: none; }
+.agents .unity-slider { flex-grow: 1; }
+.agents .unity-base-slider__drag-container { flex-grow: 1; }
+.agents .unity-base-slider__dragger { background-color: rgb(111, 130, 110); min-height: 18px; width: 10px; }
+.details { white-space: normal; margin-top: 16px; }
+.camera { position: absolute; right: 16px; bottom: 55px; flex-direction: row; background-color: rgba(18, 26, 27, 0.94); padding: 6px; }
+.status { position: absolute; bottom: 0; left: 0; right: 0; padding: 12px; background-color: rgba(18, 26, 27, 0.96); white-space: normal; }

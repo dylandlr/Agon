@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="gear.weapon.bow">
+<path d="M16 6 C34 16 34 32 16 42" fill="none" stroke="#1c110b" stroke-width="5.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M16 6 C34 16 34 32 16 42" fill="none" stroke="#8a5a38" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M16 6 L16 42" fill="none" stroke="#1c110b" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M16 6 L16 42" fill="none" stroke="#d9c9a0" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M24.6 21 L26.4 27" fill="none" stroke="#1c110b" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M24.6 21 L26.4 27" fill="none" stroke="#b98a5a" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

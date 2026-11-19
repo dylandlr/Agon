@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="gear.armor.shield">
+<path d="M24 4 C34 4 42 8 42 20 C42 33 33 42 24 45 C15 42 6 33 6 20 C6 8 14 4 24 4Z" fill="#efe6d0" stroke="#1c110b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M24 9 C32 9 37 12 37 20 C37 30 31 37 24 40 C17 37 11 30 11 20 C11 12 16 9 24 9Z" fill="#8a5a38" stroke="#1c110b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M20.6 22 a3.4 3.4 0 1 0 6.8 0 a3.4 3.4 0 1 0 -6.8 0Z" fill="#8a5a38" stroke="#1c110b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

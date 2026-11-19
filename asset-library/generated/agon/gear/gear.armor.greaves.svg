@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="gear.armor.greaves">
+<path d="M10 6 L21 6 L20 40 L10 40Z" fill="#b98a5a" stroke="#1c110b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M27 6 L38 6 L38 40 L28 40Z" fill="#b98a5a" stroke="#1c110b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M10 6 L21 6 L21 12 L10 12Z" fill="#b98a5a" stroke="#1c110b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M27 6 L38 6 L38 12 L27 12Z" fill="#b98a5a" stroke="#1c110b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M10 24 L21 24 M27 24 L38 24" fill="none" stroke="#1c110b" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M10 24 L21 24 M27 24 L38 24" fill="none" stroke="#d9c9a0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-label="glyph.skull">
+<path d="M12 2.6 C6.4 2.6 3.4 6.6 3.4 10.8 C3.4 13.8 5 15.4 7 16.4 V20.4 H17 V16.4 C19 15.4 20.6 13.8 20.6 10.8 C20.6 6.6 17.6 2.6 12 2.6Z" fill="#efe6d0" stroke="#1c110b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M6.199999999999999 11 a2.4 2.4 0 1 0 4.8 0 a2.4 2.4 0 1 0 -4.8 0Z" fill="#1c110b" stroke="none" stroke-width="0" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M13 11 a2.4 2.4 0 1 0 4.8 0 a2.4 2.4 0 1 0 -4.8 0Z" fill="#1c110b" stroke="none" stroke-width="0" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M12 13 l-1.1 2.2 h2.2Z" fill="#1c110b" stroke="none" stroke-width="0" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M9.6 17 v3.2 M12 17 v3.2 M14.4 17 v3.2" fill="none" stroke="#1c110b" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

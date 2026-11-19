@@ -1,0 +1,1710 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "9609399ae12ac1d1d8aba579672157672c4c51a0",
+  "source": {
+    "path": "src/art.js",
+    "sha256": "b8410d5c1d7b57d47b07a2f53c8e9294b39634959171825bc70f3d84437d5df5",
+    "hashNormalization": "UTF-8, LF"
+  },
+  "style": "Existing Agon colony HTML/SVG art; retain its visual identity",
+  "license": "Project source provenance retained; no new third-party license claimed",
+  "inventories": {
+    "expressions": [
+      "angry",
+      "cold",
+      "dead",
+      "happy",
+      "hungry",
+      "hurt",
+      "neutral",
+      "scared",
+      "sick",
+      "sleep",
+      "thirsty",
+      "tired"
+    ],
+    "motions": [
+      "carry",
+      "cheer",
+      "dead",
+      "dead2",
+      "drink",
+      "eat",
+      "forage",
+      "hop",
+      "hurt",
+      "idle",
+      "lumber",
+      "move",
+      "pounce",
+      "prowl",
+      "run",
+      "shiver",
+      "sleep",
+      "slither",
+      "strike",
+      "stumble",
+      "wave",
+      "work"
+    ],
+    "animalFamilies": [
+      "bear",
+      "deer",
+      "fox",
+      "goat",
+      "grouse",
+      "large",
+      "pred",
+      "small",
+      "snake"
+    ],
+    "animalPaletteVariants": [
+      "bear.polarbear",
+      "bear.sand",
+      "bear.snow",
+      "bear.wolverine",
+      "deer.camel",
+      "deer.caribou",
+      "deer.elk",
+      "deer.impala",
+      "deer.marsh",
+      "deer.moose",
+      "deer.sand",
+      "deer.snow",
+      "fox.ash",
+      "fox.badger",
+      "fox.fennec",
+      "fox.lynx",
+      "fox.ocelot",
+      "fox.otter",
+      "fox.sand",
+      "fox.snow",
+      "fox.stoat",
+      "goat.ash",
+      "goat.bighorn",
+      "goat.sand",
+      "goat.snow",
+      "grouse.duck",
+      "grouse.eagle",
+      "grouse.hawk",
+      "grouse.heron",
+      "grouse.macaw",
+      "grouse.marsh",
+      "grouse.ostrich",
+      "grouse.owl",
+      "grouse.ptarmigan",
+      "grouse.quail",
+      "grouse.sand",
+      "grouse.snow",
+      "grouse.turkey",
+      "grouse.vulture",
+      "large.bison",
+      "large.boar",
+      "large.capybara",
+      "large.elephant",
+      "large.marsh",
+      "large.muskox",
+      "large.peccary",
+      "large.sand",
+      "large.snow",
+      "large.tapir",
+      "large.tortoise",
+      "large.wildebeest",
+      "large.yak",
+      "pred.ash",
+      "pred.cheetah",
+      "pred.cougar",
+      "pred.coyote",
+      "pred.hyena",
+      "pred.jaguar",
+      "pred.lion",
+      "pred.marsh",
+      "pred.sand",
+      "pred.snow",
+      "pred.snowleopard",
+      "pred.wolf",
+      "small.ash",
+      "small.beaver",
+      "small.hare",
+      "small.hyrax",
+      "small.jerboa",
+      "small.lemming",
+      "small.marsh",
+      "small.paca",
+      "small.pika",
+      "small.sand",
+      "small.snow",
+      "small.vole",
+      "snake.anaconda",
+      "snake.ash",
+      "snake.crocodile",
+      "snake.komodo",
+      "snake.marsh",
+      "snake.sand"
+    ],
+    "bodyBuilds": [
+      "athletic",
+      "average",
+      "barrel",
+      "child",
+      "heavy",
+      "lanky",
+      "lean",
+      "pear",
+      "stocky",
+      "stout"
+    ],
+    "hairStyles": [
+      "Cropped",
+      "Long",
+      "Topknot",
+      "Bald",
+      "Mohawk",
+      "Bun",
+      "Ponytail",
+      "Curly",
+      "Bob",
+      "Spiky",
+      "Braid",
+      "Buzz"
+    ],
+    "outfits": [
+      "Plain tunic",
+      "Striped",
+      "Sash",
+      "Vest",
+      "Collar",
+      "Hem trim",
+      "Patched",
+      "Cloak",
+      "Dotted"
+    ],
+    "materials": [
+      "bone",
+      "claw",
+      "copper",
+      "fat",
+      "feather",
+      "fiber",
+      "flint",
+      "fur",
+      "gold",
+      "hide",
+      "hoof",
+      "horn",
+      "resin",
+      "scale",
+      "shell",
+      "sinew",
+      "stone",
+      "tusk",
+      "wood"
+    ]
+  },
+  "components": [
+    {
+      "file": "src/Animal.dc.html",
+      "sha256": "679f097a74fcab11887b858449ebde0a79456020df1d94212944526d69441315",
+      "svgRoots": 1,
+      "viewBoxes": [
+        "0 0 64 64"
+      ],
+      "properties": {
+        "kind": {
+          "editor": "enum",
+          "default": "small",
+          "options": [
+            "small",
+            "large",
+            "pred",
+            "deer",
+            "goat",
+            "grouse",
+            "fox",
+            "bear",
+            "snake"
+          ]
+        },
+        "gait": {
+          "editor": "string",
+          "default": ""
+        },
+        "shadow": {
+          "editor": "boolean",
+          "default": true
+        },
+        "state": {
+          "editor": "enum",
+          "default": "calm",
+          "options": [
+            "calm",
+            "alert",
+            "rest",
+            "hurt"
+          ]
+        },
+        "girth": {
+          "editor": "float",
+          "default": 1
+        },
+        "v": {
+          "editor": "enum",
+          "default": "",
+          "options": [
+            "",
+            "snow",
+            "sand",
+            "ash",
+            "marsh"
+          ]
+        },
+        "coat": {
+          "editor": "string",
+          "default": ""
+        },
+        "look": {
+          "editor": "enum",
+          "default": "E",
+          "options": [
+            "E",
+            "S",
+            "N",
+            "SE",
+            "NE"
+          ]
+        },
+        "size": {
+          "editor": "int",
+          "default": 64
+        },
+        "scale": {
+          "editor": "float",
+          "default": 1
+        },
+        "$preview": {
+          "width": 64,
+          "height": 64
+        }
+      },
+      "imports": [],
+      "status": "inventoried-not-converted"
+    },
+    {
+      "file": "src/Character.dc.html",
+      "sha256": "7228da6f9927272a48c537fb81e38b592d6dbe7a13b671af07031924bd5c2617",
+      "svgRoots": 0,
+      "viewBoxes": [],
+      "properties": {
+        "$preview": {
+          "width": 1440,
+          "height": 900
+        }
+      },
+      "imports": [
+        "Portrait",
+        "Portrait",
+        "Portrait",
+        "Portrait",
+        "Portrait"
+      ],
+      "status": "inventoried-not-converted"
+    },
+    {
+      "file": "src/Encyclopedia.dc.html",
+      "sha256": "a8ce16ee09a56805bc2df0143233b11873f9dbe46aff8536ce2976f62bdd0d19",
+      "svgRoots": 1,
+      "viewBoxes": [
+        "0 0 ' + w + ' ' + h + '"
+      ],
+      "properties": {
+        "$preview": {
+          "width": 1440,
+          "height": 12700
+        }
+      },
+      "imports": [
+        "Portrait",
+        "Pawn",
+        "Pawn",
+        "Xray",
+        "Pawn",
+        "Xray",
+        "Animal",
+        "Animal",
+        "Animal"
+      ],
+      "status": "inventoried-not-converted"
+    },
+    {
+      "file": "src/Gear.dc.html",
+      "sha256": "31c40ad7cc909a3e9d9ed528a656b2b40c581c5121177004be0789a7a30d3737",
+      "svgRoots": 1,
+      "viewBoxes": [
+        "0 0 48 48"
+      ],
+      "properties": {
+        "cat": {
+          "editor": "enum",
+          "default": "weapon",
+          "options": [
+            "weapon",
+            "armor",
+            "clothing"
+          ]
+        },
+        "tpl": {
+          "editor": "string",
+          "default": "spear"
+        },
+        "m0": {
+          "editor": "string",
+          "default": "flint"
+        },
+        "m1": {
+          "editor": "string",
+          "default": "wood"
+        },
+        "m2": {
+          "editor": "string",
+          "default": "sinew"
+        },
+        "size": {
+          "editor": "int",
+          "default": 40
+        },
+        "$preview": {
+          "width": 40,
+          "height": 40
+        }
+      },
+      "imports": [],
+      "status": "inventoried-not-converted"
+    },
+    {
+      "file": "src/Helix.dc.html",
+      "sha256": "b4202a056b37fd2330d8cf0f20905059ebe96395da84dcfc2e09cd669ab34999",
+      "svgRoots": 1,
+      "viewBoxes": [
+        "{{vb}}"
+      ],
+      "properties": {
+        "vals": {
+          "editor": "string",
+          "default": ""
+        },
+        "traits": {
+          "editor": "string",
+          "default": ""
+        },
+        "muts": {
+          "editor": "string",
+          "default": ""
+        },
+        "phys": {
+          "editor": "string",
+          "default": ""
+        },
+        "$preview": {
+          "width": 270,
+          "height": 560
+        }
+      },
+      "imports": [],
+      "status": "inventoried-not-converted"
+    },
+    {
+      "file": "src/Hexagraph.dc.html",
+      "sha256": "86cd569062540e568cd00f898c306004554043a38d50488a64181a96930fb1f4",
+      "svgRoots": 1,
+      "viewBoxes": [
+        "0 0 270 214"
+      ],
+      "properties": {
+        "mode": {
+          "editor": "enum",
+          "default": "agent",
+          "options": [
+            "agent",
+            "creature",
+            "needs",
+            "mind"
+          ]
+        },
+        "r0": {
+          "editor": "float",
+          "default": 1
+        },
+        "r1": {
+          "editor": "float",
+          "default": 1
+        },
+        "r2": {
+          "editor": "float",
+          "default": 1
+        },
+        "r3": {
+          "editor": "float",
+          "default": 1
+        },
+        "r4": {
+          "editor": "float",
+          "default": 1
+        },
+        "r5": {
+          "editor": "float",
+          "default": 1
+        },
+        "r6": {
+          "editor": "float",
+          "default": 0.5
+        },
+        "r7": {
+          "editor": "float",
+          "default": 0.5
+        },
+        "size": {
+          "editor": "int",
+          "default": 270
+        },
+        "$preview": {
+          "width": 270,
+          "height": 214
+        }
+      },
+      "imports": [],
+      "status": "inventoried-not-converted"
+    },
+    {
+      "file": "src/Logo.dc.html",
+      "sha256": "c0a72344cd47e9296c391a3a344efd6321fb57565709fecda1c680d61bf05fa8",
+      "svgRoots": 1,
+      "viewBoxes": [
+        "0 0 360 214"
+      ],
+      "properties": {
+        "size": {
+          "editor": "int",
+          "default": 360
+        },
+        "$preview": {
+          "width": 360,
+          "height": 214
+        }
+      },
+      "imports": [],
+      "status": "inventoried-not-converted"
+    },
+    {
+      "file": "src/Main.dc.html",
+      "sha256": "fdae3a994dccd5296845509e060ce4084c31298becd8de0d2010654b3152ca66",
+      "svgRoots": 22,
+      "viewBoxes": [
+        "0 0 24 24",
+        "{{bolt.vb}}",
+        "0 0 ' + PW + ' ' + PH + '",
+        "0 0 ' + w + ' ' + h + '",
+        "0 0 ' + size + ' ' + size + '",
+        "0 0 ' + W + ' ' + H + '",
+        "0 0 ' + PL.PW + ' ' + PL.PH + '",
+        "0 0 96 120",
+        "0 0 300 60"
+      ],
+      "properties": {
+        "$preview": {
+          "width": 1440,
+          "height": 900
+        }
+      },
+      "imports": [
+        "Animal",
+        "Pawn",
+        "Pawn",
+        "Xray",
+        "Xray",
+        "Logo",
+        "Xray",
+        "Hexagraph",
+        "Pawn",
+        "Pawn",
+        "Portrait",
+        "Animal",
+        "Animal",
+        "Portrait",
+        "Xray",
+        "Gear",
+        "Gear",
+        "Hexagraph",
+        "Helix",
+        "Hexagraph",
+        "Hexagraph",
+        "Thoughts",
+        "Thoughts"
+      ],
+      "status": "inventoried-not-converted"
+    },
+    {
+      "file": "src/Pawn.dc.html",
+      "sha256": "d6311c5afcf87431b2bf53f33f10f1c91d1e14ea3e7c6f404fff62528a39bc75",
+      "svgRoots": 1,
+      "viewBoxes": [
+        "0 0 48 48"
+      ],
+      "properties": {
+        "muscle": {
+          "editor": "float",
+          "default": 1
+        },
+        "stamina": {
+          "editor": "float",
+          "default": 1
+        },
+        "frame": {
+          "editor": "float",
+          "default": 1
+        },
+        "fat": {
+          "editor": "float",
+          "default": 1
+        },
+        "strength": {
+          "editor": "float",
+          "default": 1
+        },
+        "build": {
+          "editor": "enum",
+          "default": "average",
+          "options": [
+            "lean",
+            "lanky",
+            "average",
+            "athletic",
+            "stocky",
+            "barrel",
+            "pear",
+            "stout",
+            "heavy",
+            "child"
+          ]
+        },
+        "scale": {
+          "editor": "float",
+          "default": 1
+        },
+        "decay": {
+          "editor": "float",
+          "default": 0
+        },
+        "grow": {
+          "editor": "float",
+          "default": -1
+        },
+        "old": {
+          "editor": "float",
+          "default": 0
+        },
+        "shadow": {
+          "editor": "boolean",
+          "default": true
+        },
+        "ge": {
+          "editor": "string",
+          "default": ""
+        },
+        "sx": {
+          "editor": "string",
+          "default": "M"
+        },
+        "a0": {
+          "editor": "float",
+          "default": 0.5
+        },
+        "a1": {
+          "editor": "float",
+          "default": 0.5
+        },
+        "a2": {
+          "editor": "float",
+          "default": 0.5
+        },
+        "closed": {
+          "editor": "boolean",
+          "default": false
+        },
+        "lk": {
+          "editor": "string",
+          "default": ""
+        },
+        "phy": {
+          "editor": "string",
+          "default": ""
+        },
+        "gait": {
+          "editor": "enum",
+          "default": "",
+          "options": [
+            "",
+            "walk",
+            "run",
+            "carry"
+          ]
+        },
+        "cm": {
+          "editor": "string",
+          "default": ""
+        },
+        "cmN": {
+          "editor": "float",
+          "default": 0
+        },
+        "lx": {
+          "editor": "float",
+          "default": 0
+        },
+        "ly": {
+          "editor": "float",
+          "default": 1
+        },
+        "cmD": {
+          "editor": "float",
+          "default": 540
+        },
+        "lmp": {
+          "editor": "float",
+          "default": 0
+        },
+        "lmpS": {
+          "editor": "float",
+          "default": 1
+        },
+        "gaitMs": {
+          "editor": "float",
+          "default": 600
+        },
+        "look": {
+          "editor": "enum",
+          "default": "S",
+          "options": [
+            "S",
+            "N",
+            "E",
+            "SE",
+            "NE"
+          ]
+        },
+        "expression": {
+          "editor": "enum",
+          "default": "neutral",
+          "options": [
+            "neutral",
+            "happy",
+            "tired",
+            "hungry",
+            "thirsty",
+            "scared",
+            "angry",
+            "hurt",
+            "sick",
+            "cold",
+            "sleep",
+            "dead"
+          ]
+        },
+        "wa": {
+          "editor": "string",
+          "default": ""
+        },
+        "wc": {
+          "editor": "string",
+          "default": ""
+        },
+        "ww": {
+          "editor": "string",
+          "default": ""
+        },
+        "size": {
+          "editor": "int",
+          "default": 48
+        },
+        "$preview": {
+          "width": 96,
+          "height": 96
+        }
+      },
+      "imports": [],
+      "status": "inventoried-not-converted"
+    },
+    {
+      "file": "src/Portrait.dc.html",
+      "sha256": "be76094f71a3ed5f87de63caae61c6ab568170130744127179c1e793b8d7b0e8",
+      "svgRoots": 2,
+      "viewBoxes": [
+        "0 0 160 200",
+        "0 0 48 48"
+      ],
+      "properties": {
+        "phy": {
+          "editor": "string",
+          "default": ""
+        },
+        "muscle": {
+          "editor": "float",
+          "default": 1
+        },
+        "stamina": {
+          "editor": "float",
+          "default": 1
+        },
+        "frame": {
+          "editor": "float",
+          "default": 1
+        },
+        "fat": {
+          "editor": "float",
+          "default": 1
+        },
+        "strength": {
+          "editor": "float",
+          "default": 1
+        },
+        "build": {
+          "editor": "enum",
+          "default": "average",
+          "options": [
+            "lean",
+            "lanky",
+            "average",
+            "athletic",
+            "stocky",
+            "barrel",
+            "pear",
+            "stout",
+            "heavy",
+            "child"
+          ]
+        },
+        "scale": {
+          "editor": "float",
+          "default": 1
+        },
+        "decay": {
+          "editor": "float",
+          "default": 0
+        },
+        "grow": {
+          "editor": "float",
+          "default": -1
+        },
+        "old": {
+          "editor": "float",
+          "default": 0
+        },
+        "shadow": {
+          "editor": "boolean",
+          "default": true
+        },
+        "speed": {
+          "editor": "float",
+          "default": 1
+        },
+        "metabolism": {
+          "editor": "float",
+          "default": 1
+        },
+        "insulation": {
+          "editor": "float",
+          "default": 1
+        },
+        "ge": {
+          "editor": "string",
+          "default": ""
+        },
+        "sx": {
+          "editor": "string",
+          "default": "M"
+        },
+        "a0": {
+          "editor": "float",
+          "default": 0.5
+        },
+        "a1": {
+          "editor": "float",
+          "default": 0.5
+        },
+        "a2": {
+          "editor": "float",
+          "default": 0.5
+        },
+        "hurt": {
+          "editor": "boolean",
+          "default": false
+        },
+        "expression": {
+          "editor": "enum",
+          "default": "neutral",
+          "options": [
+            "neutral",
+            "happy",
+            "tired",
+            "hungry",
+            "thirsty",
+            "scared",
+            "angry",
+            "hurt",
+            "sick",
+            "cold",
+            "sleep",
+            "dead"
+          ]
+        },
+        "wa": {
+          "editor": "string",
+          "default": ""
+        },
+        "wc": {
+          "editor": "string",
+          "default": ""
+        },
+        "ww": {
+          "editor": "string",
+          "default": ""
+        },
+        "lk": {
+          "editor": "string",
+          "default": ""
+        },
+        "scene": {
+          "editor": "string",
+          "default": ""
+        },
+        "size": {
+          "editor": "int",
+          "default": 160
+        },
+        "$preview": {
+          "width": 160,
+          "height": 200
+        }
+      },
+      "imports": [],
+      "status": "inventoried-not-converted"
+    },
+    {
+      "file": "src/Thoughts.dc.html",
+      "sha256": "92eb2f04f11cc790a62446e8aaa766e86bc68904b8e16359e19597f0a3044da8",
+      "svgRoots": 1,
+      "viewBoxes": [
+        "0 0 136 136"
+      ],
+      "properties": {
+        "mode": {
+          "editor": "enum",
+          "default": "bar",
+          "options": [
+            "bar",
+            "pie"
+          ]
+        },
+        "t0": {
+          "editor": "float",
+          "default": 0.3
+        },
+        "t1": {
+          "editor": "float",
+          "default": 0.2
+        },
+        "t2": {
+          "editor": "float",
+          "default": 0.1
+        },
+        "t3": {
+          "editor": "float",
+          "default": 0.1
+        },
+        "t4": {
+          "editor": "float",
+          "default": 0.1
+        },
+        "t5": {
+          "editor": "float",
+          "default": 0.05
+        },
+        "t6": {
+          "editor": "float",
+          "default": 0.1
+        },
+        "t7": {
+          "editor": "float",
+          "default": 0.05
+        },
+        "b0": {
+          "editor": "float",
+          "default": 0
+        },
+        "b1": {
+          "editor": "float",
+          "default": 0
+        },
+        "b2": {
+          "editor": "float",
+          "default": 0
+        },
+        "b3": {
+          "editor": "float",
+          "default": 0
+        },
+        "b4": {
+          "editor": "float",
+          "default": 0
+        },
+        "b5": {
+          "editor": "float",
+          "default": 0
+        },
+        "b6": {
+          "editor": "float",
+          "default": 0
+        },
+        "b7": {
+          "editor": "float",
+          "default": 0
+        },
+        "n0": {
+          "editor": "float",
+          "default": 0
+        },
+        "n1": {
+          "editor": "float",
+          "default": 0
+        },
+        "n2": {
+          "editor": "float",
+          "default": 0
+        },
+        "n3": {
+          "editor": "float",
+          "default": 0
+        },
+        "n4": {
+          "editor": "float",
+          "default": 0
+        },
+        "n5": {
+          "editor": "float",
+          "default": 0
+        },
+        "n6": {
+          "editor": "float",
+          "default": 0
+        },
+        "n7": {
+          "editor": "float",
+          "default": 0
+        },
+        "size": {
+          "editor": "int",
+          "default": 270
+        },
+        "$preview": {
+          "width": 270,
+          "height": 136
+        }
+      },
+      "imports": [],
+      "status": "inventoried-not-converted"
+    },
+    {
+      "file": "src/Workshop.dc.html",
+      "sha256": "ede09b3ed1446794e815c9d314abdbd9b46d93d463a928c9b4eae96ce7a24faf",
+      "svgRoots": 1,
+      "viewBoxes": [
+        "0 0 48 48"
+      ],
+      "properties": {
+        "$preview": {
+          "width": 1200,
+          "height": 1420
+        }
+      },
+      "imports": [],
+      "status": "inventoried-not-converted"
+    },
+    {
+      "file": "src/Xray.dc.html",
+      "sha256": "d07a04e7c8a92fccc5923eb8dbcb7f7d2eb1e49820061126e6e63cad8ba287ad",
+      "svgRoots": 1,
+      "viewBoxes": [
+        "{{vb}}"
+      ],
+      "properties": {
+        "phy": {
+          "editor": "string",
+          "default": ""
+        },
+        "muscle": {
+          "editor": "float",
+          "default": 1
+        },
+        "stamina": {
+          "editor": "float",
+          "default": 1
+        },
+        "frame": {
+          "editor": "float",
+          "default": 1
+        },
+        "fat": {
+          "editor": "float",
+          "default": 1
+        },
+        "subject": {
+          "editor": "enum",
+          "default": "pawn",
+          "options": [
+            "pawn",
+            "small",
+            "large",
+            "pred"
+          ]
+        },
+        "strength": {
+          "editor": "float",
+          "default": 1
+        },
+        "build": {
+          "editor": "enum",
+          "default": "average",
+          "options": [
+            "lean",
+            "lanky",
+            "average",
+            "athletic",
+            "stocky",
+            "barrel",
+            "pear",
+            "stout",
+            "heavy",
+            "child"
+          ]
+        },
+        "scale": {
+          "editor": "float",
+          "default": 1
+        },
+        "decay": {
+          "editor": "float",
+          "default": 0
+        },
+        "grow": {
+          "editor": "float",
+          "default": -1
+        },
+        "old": {
+          "editor": "float",
+          "default": 0
+        },
+        "held": {
+          "editor": "enum",
+          "default": "none",
+          "options": [
+            "none",
+            "berries",
+            "tool",
+            "waterskin"
+          ]
+        },
+        "injured": {
+          "editor": "boolean",
+          "default": false
+        },
+        "infected": {
+          "editor": "boolean",
+          "default": false
+        },
+        "cold": {
+          "editor": "boolean",
+          "default": false
+        },
+        "panel": {
+          "editor": "boolean",
+          "default": false
+        },
+        "size": {
+          "editor": "int",
+          "default": 96
+        },
+        "$preview": {
+          "width": 96,
+          "height": 96
+        }
+      },
+      "imports": [],
+      "status": "inventoried-not-converted"
+    }
+  ],
+  "assets": [
+    {
+      "id": "agon.glyph.angry",
+      "group": "glyphs",
+      "file": "asset-library/generated/agon/glyphs/glyph.angry.svg",
+      "viewBox": "0 0 24 24",
+      "sha256": "1c89c546c39926eb472dd4eb7065c981fb220157d4a87c7c9ea45c62e28bdb00",
+      "provenance": {
+        "source": "src/art.js",
+        "symbol": "AgonArt.GLYPH.angry"
+      },
+      "status": "extracted-svg",
+      "unityImported": false
+    },
+    {
+      "id": "agon.glyph.arrow",
+      "group": "glyphs",
+      "file": "asset-library/generated/agon/glyphs/glyph.arrow.svg",
+      "viewBox": "0 0 24 24",
+      "sha256": "e158d41e3a9d02c3adf5d093398639ae619a1de288754bf14129e9479133e23b",
+      "provenance": {
+        "source": "src/art.js",
+        "symbol": "AgonArt.GLYPH.arrow"
+      },
+      "status": "extracted-svg",
+      "unityImported": false
+    },
+    {
+      "id": "agon.glyph.cold",
+      "group": "glyphs",
+      "file": "asset-library/generated/agon/glyphs/glyph.cold.svg",
+      "viewBox": "0 0 24 24",
+      "sha256": "274071c5a5b4a1d2d123ef89b85e62c0e1bd6434ad6a82f9de508cc7516f2f39",
+      "provenance": {
+        "source": "src/art.js",
+        "symbol": "AgonArt.GLYPH.cold"
+      },
+      "status": "extracted-svg",
+      "unityImported": false
+    },
+    {
+      "id": "agon.glyph.craft",
+      "group": "glyphs",
+      "file": "asset-library/generated/agon/glyphs/glyph.craft.svg",
+      "viewBox": "0 0 24 24",
+      "sha256": "3c9474eaf8d37ac9c5aa61772b9427551b7c4213f4b453cb9d0936d92ea60669",
+      "provenance": {
+        "source": "src/art.js",
+        "symbol": "AgonArt.GLYPH.craft"
+      },
+      "status": "extracted-svg",
+      "unityImported": false
+    },
+    {
+      "id": "agon.glyph.drink",
+      "group": "glyphs",
+      "file": "asset-library/generated/agon/glyphs/glyph.drink.svg",
+      "viewBox": "0 0 24 24",
+      "sha256": "ac1372daa3061c3d475ff5c608e088bbefe2245722b59bde801427f0e14ee723",
+      "provenance": {
+        "source": "src/art.js",
+        "symbol": "AgonArt.GLYPH.drink"
+      },
+      "status": "extracted-svg",
+      "unityImported": false
+    },
+    {
+      "id": "agon.glyph.eat",
+      "group": "glyphs",
+      "file": "asset-library/generated/agon/glyphs/glyph.eat.svg",
+      "viewBox": "0 0 24 24",
+      "sha256": "f27b27626a51cc24575e12dd74dfa6b5633c47d319abc506f0bb7265fa1f6834",
+      "provenance": {
+        "source": "src/art.js",
+        "symbol": "AgonArt.GLYPH.eat"
+      },
+      "status": "extracted-svg",
+      "unityImported": false
+    },
+    {
+      "id": "agon.glyph.fire",
+      "group": "glyphs",
+      "file": "asset-library/generated/agon/glyphs/glyph.fire.svg",
+      "viewBox": "0 0 24 24",
+      "sha256": "1fb0519fa82994084bb00188d5f319af43c251090c1d742f67740ffcf32845da",
+      "provenance": {
+        "source": "src/art.js",
+        "symbol": "AgonArt.GLYPH.fire"
+      },
+      "status": "extracted-svg",
+      "unityImported": false
+    },
+    {
+      "id": "agon.glyph.flee",
+      "group": "glyphs",
+      "file": "asset-library/generated/agon/glyphs/glyph.flee.svg",
+      "viewBox": "0 0 24 24",
+      "sha256": "71595daf5c6bd1624f87578c3696f1fe495e082cbd620e6a7358e9ce1db54196",
+      "provenance": {
+        "source": "src/art.js",
+        "symbol": "AgonArt.GLYPH.flee"
+      },
+      "status": "extracted-svg",
+      "unityImported": false
+    },
+    {
+      "id": "agon.glyph.gather",
+      "group": "glyphs",
+      "file": "asset-library/generated/agon/glyphs/glyph.gather.svg",
+      "viewBox": "0 0 24 24",
+      "sha256": "d688daee871c55c1d90644865762299934a02b66a5f5cafa9520f1335d94c38e",
+      "provenance": {
+        "source": "src/art.js",
+        "symbol": "AgonArt.GLYPH.gather"
+      },
+      "status": "extracted-svg",
+      "unityImported": false
+    },
+    {
+      "id": "agon.glyph.home",
+      "group": "glyphs",
+      "file": "asset-library/generated/agon/glyphs/glyph.home.svg",
+      "viewBox": "0 0 24 24",
+      "sha256": "4ca4f11718563633f6b7386c57971827e1d205399212fda4b6199699bfd86f9f",
+      "provenance": {
+        "source": "src/art.js",
+        "symbol": "AgonArt.GLYPH.home"
+      },
+      "status": "extracted-svg",
+      "unityImported": false
+    },
+    {
+      "id": "agon.glyph.hot",
+      "group": "glyphs",
+      "file": "asset-library/generated/agon/glyphs/glyph.hot.svg",
+      "viewBox": "0 0 24 24",
+      "sha256": "e80286c470658a9a6bc2ddb38a22954392bffda4f614997dd2103e7ebc995e86",
+      "provenance": {
+        "source": "src/art.js",
+        "symbol": "AgonArt.GLYPH.hot"
+      },
+      "status": "extracted-svg",
+      "unityImported": false
+    },
+    {
+      "id": "agon.glyph.hungry",
+      "group": "glyphs",
+      "file": "asset-library/generated/agon/glyphs/glyph.hungry.svg",
+      "viewBox": "0 0 24 24",
+      "sha256": "a6cb207b19d765c38f23a6fa811494d195698aa32f29cd0265521e9339e80b8c",
+      "provenance": {
+        "source": "src/art.js",
+        "symbol": "AgonArt.GLYPH.hungry"
+      },
+      "status": "extracted-svg",
+      "unityImported": false
+    },
+    {
+      "id": "agon.glyph.hunt",
+      "group": "glyphs",
+      "file": "asset-library/generated/agon/glyphs/glyph.hunt.svg",
+      "viewBox": "0 0 24 24",
+      "sha256": "19d63b56306a4a8bdcb813244f55b3689a8aabbd848fb1ae66b5776fbe991c57",
+      "provenance": {
+        "source": "src/art.js",
+        "symbol": "AgonArt.GLYPH.hunt"
+      },
+      "status": "extracted-svg",
+      "unityImported": false
+    },
+    {
+      "id": "agon.glyph.hurt",
+      "group": "glyphs",
+      "file": "asset-library/generated/agon/glyphs/glyph.hurt.svg",
+      "viewBox": "0 0 24 24",
+      "sha256": "a0a12a4612da6002ed813e4525aa4ed78ff6f193614ce2dbbd5e03e70beceb5d",
+      "provenance": {
+        "source": "src/art.js",
+        "symbol": "AgonArt.GLYPH.hurt"
+      },
+      "status": "extracted-svg",
+      "unityImported": false
+    },
+    {
+      "id": "agon.glyph.idea",
+      "group": "glyphs",
+      "file": "asset-library/generated/agon/glyphs/glyph.idea.svg",
+      "viewBox": "0 0 24 24",
+      "sha256": "e6f2f7facde86881781bb1facb521e7fbeda2628689aed50ecb8b7d400a0bcd0",
+      "provenance": {
+        "source": "src/art.js",
+        "symbol": "AgonArt.GLYPH.idea"
+      },
+      "status": "extracted-svg",
+      "unityImported": false
+    },
+    {
+      "id": "agon.glyph.love",
+      "group": "glyphs",
+      "file": "asset-library/generated/agon/glyphs/glyph.love.svg",
+      "viewBox": "0 0 24 24",
+      "sha256": "c04989aa7af18b74a3f68cd560ed98242a6c5ac4fb3e3943f7fe29245ca632f5",
+      "provenance": {
+        "source": "src/art.js",
+        "symbol": "AgonArt.GLYPH.love"
+      },
+      "status": "extracted-svg",
+      "unityImported": false
+    },
+    {
+      "id": "agon.glyph.question",
+      "group": "glyphs",
+      "file": "asset-library/generated/agon/glyphs/glyph.question.svg",
+      "viewBox": "0 0 24 24",
+      "sha256": "492dcac5e07ed56f8af1e37acf45ca803aff7d6c614c42fb7d25a56abf3ef49a",
+      "provenance": {
+        "source": "src/art.js",
+        "symbol": "AgonArt.GLYPH.question"
+      },
+      "status": "extracted-svg",
+      "unityImported": false
+    },
+    {
+      "id": "agon.glyph.scared",
+      "group": "glyphs",
+      "file": "asset-library/generated/agon/glyphs/glyph.scared.svg",
+      "viewBox": "0 0 24 24",
+      "sha256": "182455c3d057c45e6776580e1bfe534034a924961b38c63cdbdc3652abb37af2",
+      "provenance": {
+        "source": "src/art.js",
+        "symbol": "AgonArt.GLYPH.scared"
+      },
+      "status": "extracted-svg",
+      "unityImported": false
+    },
+    {
+      "id": "agon.glyph.sick",
+      "group": "glyphs",
+      "file": "asset-library/generated/agon/glyphs/glyph.sick.svg",
+      "viewBox": "0 0 24 24",
+      "sha256": "3167851a6ecb9ff68b8215afc1357945313a5698a002b094d0443036f5b4ff92",
+      "provenance": {
+        "source": "src/art.js",
+        "symbol": "AgonArt.GLYPH.sick"
+      },
+      "status": "extracted-svg",
+      "unityImported": false
+    },
+    {
+      "id": "agon.glyph.skull",
+      "group": "glyphs",
+      "file": "asset-library/generated/agon/glyphs/glyph.skull.svg",
+      "viewBox": "0 0 24 24",
+      "sha256": "a95615b86fb3cfa0f69828ed5523c1a97ca609f11930850d385a0489aca76aff",
+      "provenance": {
+        "source": "src/art.js",
+        "symbol": "AgonArt.GLYPH.skull"
+      },
+      "status": "extracted-svg",
+      "unityImported": false
+    },
+    {
+      "id": "agon.glyph.sleep",
+      "group": "glyphs",
+      "file": "asset-library/generated/agon/glyphs/glyph.sleep.svg",
+      "viewBox": "0 0 24 24",
+      "sha256": "ea8654f863e5853b7bd38fef7d7cb07fac543cb192e88a695fb89de1f721d9db",
+      "provenance": {
+        "source": "src/art.js",
+        "symbol": "AgonArt.GLYPH.sleep"
+      },
+      "status": "extracted-svg",
+      "unityImported": false
+    },
+    {
+      "id": "agon.glyph.thirsty",
+      "group": "glyphs",
+      "file": "asset-library/generated/agon/glyphs/glyph.thirsty.svg",
+      "viewBox": "0 0 24 24",
+      "sha256": "13ad7d5cf508073428dc3c2b5b7f058d6f0dc900d14c59e33f39d16e606a94ef",
+      "provenance": {
+        "source": "src/art.js",
+        "symbol": "AgonArt.GLYPH.thirsty"
+      },
+      "status": "extracted-svg",
+      "unityImported": false
+    },
+    {
+      "id": "agon.glyph.warn",
+      "group": "glyphs",
+      "file": "asset-library/generated/agon/glyphs/glyph.warn.svg",
+      "viewBox": "0 0 24 24",
+      "sha256": "17266fa06fe2a252866af790dc2742f5a687c3c5bc9a4e9af2cdb41818ec2663",
+      "provenance": {
+        "source": "src/art.js",
+        "symbol": "AgonArt.GLYPH.warn"
+      },
+      "status": "extracted-svg",
+      "unityImported": false
+    },
+    {
+      "id": "agon.gear.armor.greaves",
+      "group": "gear",
+      "file": "asset-library/generated/agon/gear/gear.armor.greaves.svg",
+      "viewBox": "0 0 48 48",
+      "sha256": "703733aca4bb8813edf30f6e611a04085c3ee1b4fc0d285b5af4139b0d11e41a",
+      "provenance": {
+        "source": "src/art.js",
+        "component": "src/Gear.dc.html",
+        "symbol": "AgonArt.TPL.armor.greaves",
+        "materials": [
+          "hide",
+          "hide",
+          "sinew"
+        ]
+      },
+      "status": "extracted-svg",
+      "unityImported": false
+    },
+    {
+      "id": "agon.gear.armor.helm",
+      "group": "gear",
+      "file": "asset-library/generated/agon/gear/gear.armor.helm.svg",
+      "viewBox": "0 0 48 48",
+      "sha256": "e05396dd23a5681cea081738fe2b7740cdbfd4fc1c4ef2f81c2b249a2c499db7",
+      "provenance": {
+        "source": "src/art.js",
+        "component": "src/Gear.dc.html",
+        "symbol": "AgonArt.TPL.armor.helm",
+        "materials": [
+          "bone",
+          "fur",
+          "hide"
+        ]
+      },
+      "status": "extracted-svg",
+      "unityImported": false
+    },
+    {
+      "id": "agon.gear.armor.shield",
+      "group": "gear",
+      "file": "asset-library/generated/agon/gear/gear.armor.shield.svg",
+      "viewBox": "0 0 48 48",
+      "sha256": "218536427ee7de8b54b5f33d6093baa2b5efbc300fe73b72bcaa003ed00cf625",
+      "provenance": {
+        "source": "src/art.js",
+        "component": "src/Gear.dc.html",
+        "symbol": "AgonArt.TPL.armor.shield",
+        "materials": [
+          "wood",
+          "bone",
+          "wood"
+        ]
+      },
+      "status": "extracted-svg",
+      "unityImported": false
+    },
+    {
+      "id": "agon.gear.armor.vest",
+      "group": "gear",
+      "file": "asset-library/generated/agon/gear/gear.armor.vest.svg",
+      "viewBox": "0 0 48 48",
+      "sha256": "afe9b829dbe694ac5224fe9c89c6cdd9ee282da105e2b149c3d4aad01b2a555a",
+      "provenance": {
+        "source": "src/art.js",
+        "component": "src/Gear.dc.html",
+        "symbol": "AgonArt.TPL.armor.vest",
+        "materials": [
+          "hide",
+          "hide",
+          "sinew"
+        ]
+      },
+      "status": "extracted-svg",
+      "unityImported": false
+    },
+    {
+      "id": "agon.gear.clothing.boots",
+      "group": "gear",
+      "file": "asset-library/generated/agon/gear/gear.clothing.boots.svg",
+      "viewBox": "0 0 48 48",
+      "sha256": "db8fedd02935c85bd85e9c99b01483fb6f5ef6c381d657fd93e3e307eee1c9d1",
+      "provenance": {
+        "source": "src/art.js",
+        "component": "src/Gear.dc.html",
+        "symbol": "AgonArt.TPL.clothing.boots",
+        "materials": [
+          "hide",
+          "hide",
+          "sinew"
+        ]
+      },
+      "status": "extracted-svg",
+      "unityImported": false
+    },
+    {
+      "id": "agon.gear.clothing.cloak",
+      "group": "gear",
+      "file": "asset-library/generated/agon/gear/gear.clothing.cloak.svg",
+      "viewBox": "0 0 48 48",
+      "sha256": "4c46c0ebe788cff1e697ace692fb0345671cdfa09bcb4f5b7ae8ca62ad8ea982",
+      "provenance": {
+        "source": "src/art.js",
+        "component": "src/Gear.dc.html",
+        "symbol": "AgonArt.TPL.clothing.cloak",
+        "materials": [
+          "hide",
+          "fur",
+          "bone"
+        ]
+      },
+      "status": "extracted-svg",
+      "unityImported": false
+    },
+    {
+      "id": "agon.gear.clothing.gloves",
+      "group": "gear",
+      "file": "asset-library/generated/agon/gear/gear.clothing.gloves.svg",
+      "viewBox": "0 0 48 48",
+      "sha256": "510d44ceac9adcb78be7389b1ebb8fa569b8d6dfc973123902764d0b11c65875",
+      "provenance": {
+        "source": "src/art.js",
+        "component": "src/Gear.dc.html",
+        "symbol": "AgonArt.TPL.clothing.gloves",
+        "materials": [
+          "hide",
+          "fur",
+          "sinew"
+        ]
+      },
+      "status": "extracted-svg",
+      "unityImported": false
+    },
+    {
+      "id": "agon.gear.clothing.hat",
+      "group": "gear",
+      "file": "asset-library/generated/agon/gear/gear.clothing.hat.svg",
+      "viewBox": "0 0 48 48",
+      "sha256": "f458358cac463db6415d395a17a90160a55b6f3c69f0d3c66585149d47d087c0",
+      "provenance": {
+        "source": "src/art.js",
+        "component": "src/Gear.dc.html",
+        "symbol": "AgonArt.TPL.clothing.hat",
+        "materials": [
+          "fur",
+          "feather",
+          "sinew"
+        ]
+      },
+      "status": "extracted-svg",
+      "unityImported": false
+    },
+    {
+      "id": "agon.gear.clothing.tunic",
+      "group": "gear",
+      "file": "asset-library/generated/agon/gear/gear.clothing.tunic.svg",
+      "viewBox": "0 0 48 48",
+      "sha256": "0a721cd463ed4bf1e44da84c26212ec0dd467be4f7f0b415701f140ba25bf71b",
+      "provenance": {
+        "source": "src/art.js",
+        "component": "src/Gear.dc.html",
+        "symbol": "AgonArt.TPL.clothing.tunic",
+        "materials": [
+          "hide",
+          "fur",
+          "sinew"
+        ]
+      },
+      "status": "extracted-svg",
+      "unityImported": false
+    },
+    {
+      "id": "agon.gear.weapon.axe",
+      "group": "gear",
+      "file": "asset-library/generated/agon/gear/gear.weapon.axe.svg",
+      "viewBox": "0 0 48 48",
+      "sha256": "f66113a43c349997efeb0c59d75289b3fd7e7a8242bd10943c75810243216a7c",
+      "provenance": {
+        "source": "src/art.js",
+        "component": "src/Gear.dc.html",
+        "symbol": "AgonArt.TPL.weapon.axe",
+        "materials": [
+          "stone",
+          "wood",
+          "sinew"
+        ]
+      },
+      "status": "extracted-svg",
+      "unityImported": false
+    },
+    {
+      "id": "agon.gear.weapon.bow",
+      "group": "gear",
+      "file": "asset-library/generated/agon/gear/gear.weapon.bow.svg",
+      "viewBox": "0 0 48 48",
+      "sha256": "f221a38f2bbcc7c83f0fdb0e8f45dd7d7f2b08e6da6f506cd01b0ca83392f5a4",
+      "provenance": {
+        "source": "src/art.js",
+        "component": "src/Gear.dc.html",
+        "symbol": "AgonArt.TPL.weapon.bow",
+        "materials": [
+          "wood",
+          "sinew",
+          "hide"
+        ]
+      },
+      "status": "extracted-svg",
+      "unityImported": false
+    },
+    {
+      "id": "agon.gear.weapon.club",
+      "group": "gear",
+      "file": "asset-library/generated/agon/gear/gear.weapon.club.svg",
+      "viewBox": "0 0 48 48",
+      "sha256": "f6a4287ac435c1100f9c1c872216490146c14187e5fe6a6f3a8f367b65dd0d85",
+      "provenance": {
+        "source": "src/art.js",
+        "component": "src/Gear.dc.html",
+        "symbol": "AgonArt.TPL.weapon.club",
+        "materials": [
+          "wood",
+          "hide"
+        ]
+      },
+      "status": "extracted-svg",
+      "unityImported": false
+    },
+    {
+      "id": "agon.gear.weapon.knife",
+      "group": "gear",
+      "file": "asset-library/generated/agon/gear/gear.weapon.knife.svg",
+      "viewBox": "0 0 48 48",
+      "sha256": "32fbeffbeffb82f977710b39c86f608ce49653deb47fb97f2e385f29836046b0",
+      "provenance": {
+        "source": "src/art.js",
+        "component": "src/Gear.dc.html",
+        "symbol": "AgonArt.TPL.weapon.knife",
+        "materials": [
+          "flint",
+          "wood",
+          "fiber"
+        ]
+      },
+      "status": "extracted-svg",
+      "unityImported": false
+    },
+    {
+      "id": "agon.gear.weapon.spear",
+      "group": "gear",
+      "file": "asset-library/generated/agon/gear/gear.weapon.spear.svg",
+      "viewBox": "0 0 48 48",
+      "sha256": "fd2a582e11620f2091220a917b9d2f0b97ed30a350fd270333d3cf1712aca353",
+      "provenance": {
+        "source": "src/art.js",
+        "component": "src/Gear.dc.html",
+        "symbol": "AgonArt.TPL.weapon.spear",
+        "materials": [
+          "flint",
+          "wood",
+          "sinew"
+        ]
+      },
+      "status": "extracted-svg",
+      "unityImported": false
+    }
+  ]
+}

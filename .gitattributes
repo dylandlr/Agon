@@ -1,0 +1,25 @@
+# Scoped to new integration content; never renormalize preserved reference trees.
+bridge/** text eol=lf
+tools/** text eol=lf
+workspace/** text eol=lf
+docs/migration/** text eol=lf
+asset-library/**/*.svg text eol=lf
+asset-library/**/*.json text eol=lf
+asset-library/**/*.md text eol=lf
+asset-library/**/*.html text eol=lf
+asset-library/**/*.png -text
+asset-library/**/*.jpg -text
+asset-library/**/*.ogg -text
+unity-game/**/*.cs text eol=lf
+unity-game/**/*.meta text eol=lf
+unity-game/**/*.unity text eol=lf
+unity-game/**/*.prefab text eol=lf
+unity-game/**/*.asset text eol=lf
+unity-game/**/*.uss text eol=lf
+unity-game/**/*.uxml text eol=lf
+unity-game/**/*.tss text eol=lf
+# Prospective binary masters only. No existing asset/history conversion.
+asset-library/source/**/*.psd filter=lfs diff=lfs merge=lfs -text
+asset-library/source/**/*.aseprite filter=lfs diff=lfs merge=lfs -text
+asset-library/source/**/*.blend filter=lfs diff=lfs merge=lfs -text
+asset-library/source/**/*.wav filter=lfs diff=lfs merge=lfs -text
