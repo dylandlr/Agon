@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agon Character Creator</title>
+<style>
+:root { --bg: #e8ebe4; --panel: #f5f6f1; --ink: #203036; --muted: #5c6a66; --line: #c9cec2; --accent: #a0661a; --grass: #5f8f6c; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #161b1d; --panel: #1f2629; --ink: #e4e8e2; --muted: #9aa6a2; --line: #34403f; --accent: #e0a24a; --grass: #3f6a4d; } }
+:root[data-theme="dark"] { --bg: #161b1d; --panel: #1f2629; --ink: #e4e8e2; --muted: #9aa6a2; --line: #34403f; --accent: #e0a24a; --grass: #3f6a4d; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { padding: 16px; border-bottom: 1px solid var(--line); }
+header h1 { margin: 0; font-size: 18px; } header p { margin: 4px 0 0; color: var(--muted); max-width: 70ch; }
+main { display: grid; grid-template-columns: minmax(260px, 340px) 1fr; gap: 16px; padding: 16px; }
+@media (max-width: 760px) { main { grid-template-columns: 1fr; } }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px; }
+h2 { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 10px 0 6px; } h2:first-child { margin-top: 0; }
+label.row { display: grid; grid-template-columns: 92px 1fr 52px; align-items: center; gap: 8px; margin: 4px 0; }
+label.row output { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+.seg { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
+.seg button, .btn { background: transparent; color: var(--ink); border: 1px solid var(--line); border-radius: 4px; padding: 3px 8px; font: inherit; cursor: pointer; }
+.seg button[aria-pressed=true] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.swatches { display: flex; flex-wrap: wrap; gap: 4px; } .swatches button { width: 22px; height: 22px; border: 2px solid transparent; border-radius: 4px; cursor: pointer; }
+.swatches button[aria-pressed=true] { border-color: var(--ink); }
+.stage { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; }
+.stage figure { margin: 0; text-align: center; } .stage figcaption { color: var(--muted); font-size: 12px; margin-top: 4px; }
+canvas { image-rendering: pixelated; background: var(--grass); border-radius: 4px; display: block; }
+table { border-collapse: collapse; width: 100%; max-width: 420px; } td { padding: 2px 8px 2px 0; border-bottom: 1px solid var(--line); } td + td { text-align: right; font-variant-numeric: tabular-nums; }
+textarea { width: 100%; min-height: 110px; font: 12px/1.4 ui-monospace, monospace; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 4px; padding: 6px; }
+.fine { color: var(--muted); font-size: 12px; }
+.check { display: flex; gap: 6px; align-items: center; margin: 4px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Agon character creator</h1>
+  <p>Every person in Agon is drawn from this body model: segment lengths from shares of stature (Drillis &amp; Contini, in Winter's tables) that follow growth with age, breadths from frame, body mass index and sex, and poses as joint angles. The map sprite, the inspector and this page draw from the same file, <code>scripts/body_model.js</code>.</p>
+</header>
+<main>
+  <section aria-label="Measures">
+    <h2>Body</h2>
+    <div class="seg" id="sex"><button data-v="female">Female</button><button data-v="male">Male</button></div>
+    <div id="sliders"></div>
+    <label class="check"><input type="checkbox" id="pregnant"> Pregnant</label>
+    <h2>Skin</h2><div class="swatches" id="skin"></div>
+    <h2>Hair</h2><div class="swatches" id="hair"></div>
+    <div class="seg" id="tex"><button data-v="0">Straight</button><button data-v="1">Wavy</button><button data-v="2">Curly</button><button data-v="3">Coiled</button></div>
+    <div class="seg" id="beard"><button data-v="0">No beard</button><button data-v="1">Short beard</button><button data-v="2">Full beard</button></div>
+    <h2>Mark (kin colour)</h2><div class="swatches" id="colour"></div>
+    <h2>In hand</h2>
+    <div class="seg" id="held"><button data-v="">Nothing</button><button data-v="wood">Wood</button><button data-v="stone">Stone</button><button data-v="plant">Plant</button><button data-v="raw_meat">Meat</button><button data-v="honey">Honey</button></div>
+    <div style="margin-top:10px; display:flex; gap:6px; flex-wrap:wrap"><button class="btn" id="random">Random person</button><button class="btn" id="reset">Reset</button></div>
+  </section>
+  <section aria-label="Preview">
+    <h2>Pose</h2>
+    <div class="seg" id="action"><button data-v="rest">Rest</button><button data-v="walk">Walk</button><button data-v="eat">Eat</button><button data-v="drink">Drink</button><button data-v="reach">Reach</button><button data-v="touch">Touch</button><button data-v="strike">Strike</button></div>
+    <div class="seg" id="head"><button data-v="display">Head as drawn in the game (×1.55)</button><button data-v="true">True proportions</button></div>
+    <label class="check"><input type="checkbox" id="animate" checked> Animate</label>
+    <label class="row"><span>Phase</span><input type="range" id="phase" min="0" max="0.95" step="0.05" value="0"><output id="phaseOut">0</output></label>
+    <h2>At map resolution (each pixel ×4)</h2>
+    <div class="stage" id="small"></div>
+    <h2>At three times the resolution, as in the inspector</h2>
+    <div class="stage" id="large"></div>
+    <h2>Measurements</h2>
+    <table id="meas"></table>
+    <p class="fine">Bounded to human ranges: stature 45 to 215 cm, BMI 13 to 40, frame 0.8 to 1.25. No limb is drawn under 2 pixels wide.</p>
+    <h2>Character file</h2>
+    <textarea id="json" spellcheck="false" aria-label="Character as JSON"></textarea>
+    <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:6px"><button class="btn" id="apply">Load from the text</button><button class="btn" id="copy">Copy</button><button class="btn" id="png">Save the sprite sheet</button></div>
+  </section>
+</main>
+<script src="body_model.js"></script>
+<script>/*__BODY_MODEL__*/</script>
+<script>
+(function () {
+  "use strict";
+  const B = window.AgonBody, INK = "#203036", $ = (id) => document.getElementById(id);
+  const DEFAULT = { sex: "female", age: 28, height: 165, weight: 60, frame: 1, strength: 1, clothing: 0.4, injury: 0, grey: 0, hairLength: 14,
+    skin: "#b07850", hair: "#2a1a10", hairTexture: 1, beard: 0, pregnant: false, colour: "#c04848", held: "" };
+  let M = { ...DEFAULT }, action = "rest", headTrue = false, phase = 0;
+  const SLIDERS = [["age", "Age", 0, 80, 1, "y"], ["height", "Height", 45, 215, 1, "cm"], ["weight", "Weight", 3, 140, 0.5, "kg"], ["frame", "Frame", 0.8, 1.25, 0.01, "×"],
+    ["strength", "Strength", 0.4, 2, 0.05, "×"], ["clothing", "Clothing", 0, 1, 0.05, ""], ["hairLength", "Hair length", 0, 30, 1, "cm"], ["grey", "Greying", 0, 1, 0.05, ""], ["injury", "Injury", 0, 1, 0.05, ""]];
+  $("sliders").innerHTML = SLIDERS.map(([k, n, lo, hi, st, u]) => `<label class="row"><span>${n}</span><input type="range" id="s-${k}" min="${lo}" max="${hi}" step="${st}"><output id="o-${k}"></output></label>`).join("");
+  const SKINS = ["#f1d3bc", "#e2b996", "#d4a07a", "#c98d63", "#b07850", "#8d5a3b", "#6e4630", "#5e3a26", "#432a1c"];
+  const HAIRS = ["#101010", "#2a1a10", "#3b2718", "#6a5038", "#a06a30", "#c9a060", "#e0c890", "#8a3a1a", "#b0b0b0"];
+  const COLOURS = ["#c04848", "#3a7ac0", "#c0a030", "#8a48c0", "#40a070", "#c07030", "#30a0b0", "#d05090"];
+  const swatches = (id, list, key) => { $(id).innerHTML = list.map((c) => `<button style="background:${c}" data-v="${c}" aria-label="${c}"></button>`).join("");
+    $(id).onclick = (e) => { const v = e.target.dataset.v; if (v) { M[key] = v; sync(); } }; };
+  swatches("skin", SKINS, "skin"); swatches("hair", HAIRS, "hair"); swatches("colour", COLOURS, "colour");
+  const seg = (id, f) => { $(id).onclick = (e) => { const v = e.target.dataset.v; if (v !== undefined) { f(v); sync(); } }; };
+  seg("sex", (v) => (M.sex = v)); seg("tex", (v) => (M.hairTexture = +v)); seg("beard", (v) => (M.beard = +v)); seg("held", (v) => (M.held = v));
+  seg("action", (v) => (action = v)); seg("head", (v) => (headTrue = v === "true"));
+  SLIDERS.forEach(([k]) => { $("s-" + k).oninput = (e) => { M[k] = +e.target.value; sync(); }; });
+  $("pregnant").onchange = (e) => { M.pregnant = e.target.checked; sync(); };
+  $("phase").oninput = (e) => { phase = +e.target.value; $("animate").checked = false; draw(); };
+  $("reset").onclick = () => { M = { ...DEFAULT }; sync(); };
+  $("random").onclick = () => {                      // a plausible person: adult stature by sex, BMI 18 to 30
+    const r = Math.random, female = r() < 0.5, age = Math.floor(r() < 0.25 ? r() * 16 : 16 + r() * 60);
+    const adultH = female ? 162 + (r() - 0.5) * 20 : 175 + (r() - 0.5) * 22, grow = Math.min(1, 0.3 + 0.7 * Math.min(age, 18) / 18) ** 1.2;
+    const h = Math.round(Math.max(50, adultH * (age >= 18 ? 1 : grow))), bmi = age < 16 ? 15 + r() * 4 : 18 + r() * 12;
+    M = { ...M, sex: female ? "female" : "male", age, height: h, weight: Math.round(bmi * (h / 100) ** 2 * 2) / 2, frame: +(0.85 + r() * 0.35).toFixed(2),
+      strength: +(0.6 + r() * 0.9).toFixed(2), clothing: age < 2 ? 0 : +(r()).toFixed(2), skin: SKINS[Math.floor(r() * SKINS.length)], hair: HAIRS[Math.floor(r() * 8)],
+      hairTexture: Math.floor(r() * 4), hairLength: Math.min(30, Math.round(age * 1.6)), beard: !female && age >= 16 ? (age >= 25 ? 2 : 1) : 0,
+      grey: Math.max(0, Math.min(0.8, (age - 40) / 37.5)), pregnant: female && age >= 18 && age < 42 && r() < 0.15, injury: 0, colour: COLOURS[Math.floor(r() * COLOURS.length)] };
+    sync();
+  };
+
+  function sprite(m, o, zoom) {                      // one figure with the game's ink outline (2 px at map density)
+    const r = B.render(m, o), pal = B.palette(m, INK), ol = Math.max(1, Math.round(2 * (o.scale || 1) / 2)), W = r.width + 2 * ol, H = r.height + 2 * ol;
+    const c = document.createElement("canvas"); c.width = W * zoom; c.height = H * zoom; const g = c.getContext("2d");
+    const on = (x, y) => x >= 0 && y >= 0 && x < r.width && y < r.height && r.slot[y * r.width + x] > 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const sx = x - ol, sy = y - ol; let col = null;
+      if (on(sx, sy)) col = pal[B.SLOTS[r.slot[sy * r.width + sx]]];
+      else { for (let dy = -ol; dy <= ol && !col; dy++) for (let dx = -ol; dx <= ol; dx++) if (on(sx + dx, sy + dy)) { col = INK; break; } }
+      if (col) { g.fillStyle = col; g.fillRect(x * zoom, y * zoom, zoom, zoom); }
+    }
+    return c;
+  }
+  function draw() {
+    const o = { action, phase, headScale: headTrue ? 1 : undefined, seed: 3 };
+    for (const [id, sc, zoom] of [["small", 1, 4], ["large", 3, 2]]) {
+      const el = $(id); el.innerHTML = "";
+      [["s", "Front"], ["e", "Side"], ["n", "Back"]].forEach(([view, name]) => {
+        const f = document.createElement("figure"); f.appendChild(sprite(M, { ...o, view, scale: sc }, zoom));
+        const cap = document.createElement("figcaption"); cap.textContent = name; f.appendChild(cap); el.appendChild(f);
+      });
+    }
+    $("phaseOut").value = phase.toFixed(2); $("phase").value = phase;
+  }
+  function sync() {
+    const m = B.measures(M), g = B.build(m);
+    SLIDERS.forEach(([k, , , , st, u]) => { $("s-" + k).value = M[k]; $("o-" + k).value = (+M[k]).toFixed(st >= 1 ? 0 : st >= 0.1 ? 1 : 2) + (u ? " " + u : ""); });
+    $("pregnant").checked = !!M.pregnant;
+    const press = (id, v) => $(id).querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === String(v))));
+    press("sex", M.sex); press("tex", M.hairTexture); press("beard", M.beard); press("held", M.held); press("action", action); press("head", headTrue ? "true" : "display");
+    press("skin", M.skin); press("hair", M.hair); press("colour", M.colour);
+    const cm = (v) => `${Math.round(v)} cm`;
+    $("meas").innerHTML = [["Stature", cm(g.H)], ["Head, vertex to chin", `${cm(g.head)} (${(g.head / g.H * 100).toFixed(1)}%)`], ["Neck", cm(g.neck)], ["Trunk, shoulder to hip joint", cm(g.trunk)],
+      ["Upper arm / forearm / hand", `${Math.round(g.upperArm)} / ${Math.round(g.foreArm)} / ${Math.round(g.hand / 0.55)} cm`], ["Thigh / shank / foot height", `${Math.round(g.thigh)} / ${Math.round(g.shank)} / ${Math.round(g.footH)} cm`],
+      ["Hip joint height", `${cm(g.thigh + g.shank + g.footH)} (${((g.thigh + g.shank + g.footH) / g.H * 100).toFixed(1)}%)`], ["Foot length", cm(g.footL)],
+      ["Shoulder / waist / hip breadth", `${Math.round(g.shoulderW)} / ${Math.round(g.waistW)} / ${Math.round(g.hipW)} cm`], ["Body mass index", m.bmi.toFixed(1)]]
+      .map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("");
+    $("json").value = JSON.stringify(M, null, 1);
+    draw();
+  }
+  $("apply").onclick = () => { try { M = { ...DEFAULT, ...JSON.parse($("json").value) }; sync(); } catch (e) { alert("That is not valid JSON: " + e.message); } };
+  $("copy").onclick = () => { try { navigator.clipboard.writeText($("json").value); } catch (e) { $("json").select(); } };
+  $("png").onclick = () => {                         // every view in every pose, at map resolution
+    const acts = ["rest", "walk", "eat", "drink", "reach", "touch", "strike"], views = ["s", "e", "n"], cells = [];
+    acts.forEach((a) => views.forEach((v) => cells.push(sprite(M, { view: v, action: a, phase: a === "walk" ? 0.25 : a === "strike" ? 0.6 : 0.25, seed: 3 }, 2))));
+    const cw = cells[0].width, ch = cells[0].height, out = document.createElement("canvas"); out.width = cw * views.length; out.height = ch * acts.length;
+    const g = out.getContext("2d"); cells.forEach((c, i) => g.drawImage(c, (i % views.length) * cw, Math.floor(i / views.length) * ch));
+    const a = document.createElement("a"); a.href = out.toDataURL("image/png"); a.download = "character_sheet.png"; a.click();
+  };
+  let last = 0;
+  (function tick(t) {
+    if ($("animate").checked && t - last > 110) { last = t; phase = (phase + 1 / 8) % 1; draw(); }
+    requestAnimationFrame(tick);
+  })(0);
+  sync();
+})();
+</script>
+</body>
+</html>

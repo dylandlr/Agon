@@ -1,0 +1,20 @@
+[project]
+name = "lifesim"
+version = "0.1.0"
+description = "Emergent early societies: multi-agent RL in an early-human ecology"
+requires-python = ">=3.10"
+dependencies = ["jax>=0.4.30", "flax>=0.12.10", "optax>=0.2.8", "numpy"]   # Flax < 0.12.10 breaks on JAX >= 0.11
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-xdist"]
+gpu = ["jax[cuda12]>=0.4.30"]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["lifesim"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

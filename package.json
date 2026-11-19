@@ -1,0 +1,9 @@
+{
+  "name": "agon-reconciled-workspace",
+  "private": true,
+  "scripts": {
+    "build": "node workspace/build.cjs",
+    "verify": "node workspace/verify.cjs",
+    "test": "node tests/verify_links.mjs && node tests/verify_astar.mjs && node tests/verify_jobs.mjs && node tests/verify_worldgen.mjs"
+  }
+}

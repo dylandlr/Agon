@@ -1,0 +1,7 @@
+# Pinned for CI (the versions the code is developed and tested with). CPU-only JAX.
+jax==0.11.2
+flax==0.12.10
+optax==0.2.8
+numpy==2.5.3
+pytest
+pytest-xdist
