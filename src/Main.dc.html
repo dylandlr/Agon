@@ -2891,11 +2891,9 @@ let campSig = '';
 // What there is to build right now: a tile of an opened room that nobody has raised yet.
 // Walls first -- a room with its floor down and no walls keeps nothing out.
 function campTodo(built) {
-  const wq = [], fq = [];
+  const wq = [];
   for (const k of CAMPW0) { if (built.has(k)) continue; const [x, y] = k.split(',').map(Number), g = campGrp(x, y); if (g && g.slice(0, 4) === 'room' && CAMPON[g]) wq.push(k); }
-  if (wq.length) return wq;
-  for (const k of CAMPF0) { if (built.has(k)) continue; const [x, y] = k.split(',').map(Number), g = campGrp(x, y); if (g && g.slice(0, 4) === 'room' && CAMPON[g]) fq.push(k); }
-  return fq;
+  return wq;
 }
 function applyCamp(st) {
   const P = window.AGON_P || {}, full = st.disc !== 'emergent' || P.fullCamp, T = (st.store && st.store.techs) || [];
@@ -2937,7 +2935,8 @@ function applyCamp(st) {
   // particular tile is standing yet, so you watch the wall go up tile by tile.
   const tileOn = (k) => { const [x, y] = k.split(',').map(Number), g = campGrp(x, y);
     if (full) return g ? !!on[g] : on.shelter;
-    if (g && g.slice(0, 4) === 'room') return !!on[g] && BUILT.has(k);
+    // walls have to be raised; a floor is there as soon as the room is opened
+    if (g && g.slice(0, 4) === 'room' && CAMPW0.has(k)) return !!on[g] && BUILT.has(k);
     return g ? !!on[g] : on.shelter; };
   // which tiles fall is fixed per camp, so a ruin looks the same each time it is
   // revisited and simply loses more of itself as the years pass. Gradual on purpose:

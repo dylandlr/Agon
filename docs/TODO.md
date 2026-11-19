@@ -779,3 +779,35 @@ Carried forward, reordered by what blocks what:
 4. relDecay 0.01; decideEvery 6; 0 kills in 20,000 ticks; the colony never raids; lexicon second
    growth path; re-measure r28's shelter routes through `setWorld`; Unity port; colonists born 437
    years old.
+
+## Round 31b — the build loop lands at no survival cost
+
+The AFTER arm of r31 at n=15, against the n=15 baseline in the previous entry:
+
+                        mean   sd    median  extinct      sat    built
+    BEFORE (free timer) 3.00   2.94   2.0     5/15 (33%)  0.171   0.0
+    walls + floors      1.07   2.41   0.0    12/15 (80%)  0.039  34.6
+    walls only          3.33   3.05   3.0     5/15 (33%)  0.253  16.3
+
+Charging for both walls and floors was lethal: 80% of colonies dead by tick 6000 against 33%,
+z = 2.6 on the extinction rate, p < 0.01 -- outside the noise floor, unlike every 5-run comparison
+earlier in this session.
+
+The framing that matters: **this did not create a problem, it removed a crutch.** The old timer
+handed the colony about 63 walls for free regardless of what it could afford, which was a survival
+subsidy masking the collapse measured since r27. Charging for shelter simply exposed that the
+colony cannot pay for it.
+
+The fix was not to lower numbers until it passed. Floors are trodden ground, not construction:
+queueing them doubled the work (120 tiles against 65 walls) and the material bill for no shelter
+benefit, since a room keeps the weather out when its walls close. Only walls are built now; an
+opened room's floor is simply there.
+
+Result: identical extinction rate to getting the walls free (5/15 both), satiation better
+(0.253 against 0.171), and mean population 3.33 against 3.00 -- which is inside the noise, so the
+claim is **no detectable regression**, not an improvement. `tests/final3.py` across five worlds:
+4-14 colonists alive at tick 1500, no page errors.
+
+So the house is earned rather than given, and it costs the colony nothing it was not already
+paying. 16.3 tiles standing on average at tick 6000, against 65 for a finished house -- most
+colonies are still mid-build when they fail, which is the collapse problem, not the build loop.
