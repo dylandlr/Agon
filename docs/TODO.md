@@ -709,3 +709,73 @@ Carried forward: incremental floorplan; the population collapse (mean 2.6 of 12 
 `stepPlanetEco`/`ecoFor` lazy-creation hypothesis; re-measuring r28's shelter routes through
 `setWorld`; relDecay 0.01; decideEvery 6; 0 kills in 20,000 ticks; the colony never raids; lexicon
 second growth path; Unity port items; colonists born 437 years old.
+
+## Round 31 — the house is built by colonists, tile by tile
+
+Dyl, mid-round: "rooms should be built like how its done in rimworld by pawns". So the timer goes.
+
+### What changed
+
+Before this, `stage = floor((tick - shelterT) / BUILD_T)` revealed one whole room every 120 ticks,
+free, with no labour and no materials. Now:
+
+- **`store.built`** is a set of the camp tiles that have actually been raised (whitelisted in the
+  tick's store rebuild at 4635, or it would be dropped -- see r29).
+- **`applyCamp`'s `tileOn`** consults it: a house wall or floor exists when somebody built it. The
+  room group still decides whether a room is *open* to build; `built` decides whether each tile is
+  standing. So you watch a wall go up tile by tile rather than a room appear whole.
+- **`campSig` includes `BUILT.size`**, or the cached early-return would freeze the build.
+- **`stage` now counts finished rooms, not ticks**: the next room opens when the one before it is
+  fully standing, so the house grows at the pace the colony can build.
+- **`campTodo(built)`** is the queue, exposed from engine scope (CAMPW0/CAMPF0 live there). Walls
+  before floors -- a room with its floor down and no walls keeps nothing out.
+- **A `build` work type**, a `build` act that walks to a queued tile, spends one unit of wood or
+  stone (by `wallMatFor`), and raises it. One tile per visit.
+- **`BUILDKEEP = 10`**: construction never takes the last logs.
+
+### Verified
+
+On one world: shelter discovered at tick 868, 43 tiles standing by 1500 (walls 15 -> 55), queue
+empty at 120 tiles by tick 12000, and `store.mats.wood` drawn 46 -> 1 -> 0 as they spend it. The
+house is earned.
+
+Two things the measurements taught me, both worth more than the feature:
+
+- **Building used to take the last log.** In the first version wood sat at 0 for thousands of
+  ticks while the walls went up, so nobody could craft clothing. The tundra runs died with
+  `walls 15, built 0, techs 2` -- they froze before even discovering shelter, against 73/0/13 on
+  the old timer. Hence `BUILDKEEP`.
+- **Build work had to rank with clothing, not with chores.** Offered only in the candidate list at
+  priority 3 it never won, because the food-security rule returns `gather` on almost every tick in
+  a colony this hungry: `built` stayed 0 for 12000 ticks. It is now an early return gated on the
+  colonist being fed (`sat > 0.45`) and the reserve being intact.
+
+### The measurement problem, which is the real finding
+
+I ran a 5-world A/B and read it as a regression: mean population 3.6 -> 2.6, extinctions 1/5 -> 3/5.
+Then a follow-up run of what I believed was a changed build gave 2.0 and 3/5 -- except the edit had
+silently failed, so **it was the same code as the run that gave 2.4 and 4/5**. Identical code, one
+world set, materially different answers.
+
+So I measured the noise. 15 runs of the unchanged build:
+
+    BEFORE  n=15  pop mean 3.00  sd 2.94  median 2.0  extinct 5/15 (33%)
+            pops: 4 4 0 2 0 6 9 0 1 0 6 7 0 5 1
+
+**The standard deviation equals the mean.** Standard error at n=15 is 0.76, so a difference has to
+clear about 2.1 to mean anything. Every 5-run comparison in this session -- including r29's deposit
+A/B -- is inside the noise and should be treated as unmeasured, not as evidence. The run-to-run
+spread comes from the r29 determinism bug (divergence after ~2200 ticks, not `Math.random`, not
+`Date.now`), which is now the thing blocking every gameplay decision.
+
+The AFTER arm at the same n is noted in the next entry.
+
+Carried forward, reordered by what blocks what:
+1. **The determinism bug** -- until identical runs give identical results, no balance change can be
+   evaluated. Hypothesis in r29: `stepPlanetEco` fires on `tick % 100 === 0 && this._eco`, and
+   `_eco` is created lazily by `ecoFor`, which the render path also calls.
+2. **The population collapse** (mean 3.0 of a starting 12 at tick 6000, a third extinct).
+3. Runtime room extents, now much easier with build state per tile.
+4. relDecay 0.01; decideEvery 6; 0 kills in 20,000 ticks; the colony never raids; lexicon second
+   growth path; re-measure r28's shelter routes through `setWorld`; Unity port; colonists born 437
+   years old.
