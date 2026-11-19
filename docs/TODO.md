@@ -811,3 +811,82 @@ claim is **no detectable regression**, not an improvement. `tests/final3.py` acr
 So the house is earned rather than given, and it costs the colony nothing it was not already
 paying. 16.3 tiles standing on average at tick 6000, against 65 for a finished house -- most
 colonies are still mid-build when they fail, which is the collapse problem, not the build loop.
+
+## r32 — determinism hunt (NOT FIXED; narrowed hard)
+
+Dyl asked to fix determinism before roofs. Determinism is **not fixed**. Roofs not started.
+Harness saved in `tests/determinism/` so this resumes cold.
+
+### The bug, measured precisely
+Two runs of identical code on the same world diverge. Uninstrumented (`uninstrumented.py`,
+no rng wrapper, no instrumentation of any kind): 5 fresh pages at 3000 ticks gave 4 distinct
+state hashes, population 11/12/12/12/12.
+
+`first_diverging_tick.py` (6 pages, order-stable per-tick projection) pins it exactly:
+- first differing tick is **always 1093**, never earlier, never later
+- pages fall into **exactly two outcome clusters**, split ~50/50
+So it is one binary branch at one fixed tick, not drift.
+
+### What is ruled out (with the evidence)
+- **Environment reads in the sim.** 0 occurrences of Math.random / Date.now / new Date /
+  performance.now / requestAnimationFrame / setTimeout / getElementById / querySelector /
+  getBoundingClientRect / offsetWidth / innerWidth / devicePixelRatio / navigator / document /
+  localStorage / WeakMap / WeakRef across all 1436 lines of `advance` (4643-6078), and across
+  ENGINE scope (1-3600). art.js has 2 Math.random but both are inside `mockDecide`, reachable
+  only when LLM mode is on (off by default) — still a real determinism bug for LLM mode.
+- **Start state.** `exhaust_fields.py`: at tick 1092, of **259** own fields across the component
+  and the engine, exactly **2** vary across 6 pages — `__host` (the DOM node) and `_rebakeMs`
+  (a `performance.now()` duration that is written at 3989 and never read anywhere). All 257
+  sim-relevant fields are identical, as is the whole of `state` (full sorted deep diff: 0 fields).
+- **RNG alignment.** 8 pages at waits of 400/700/1500 ms: identical state hash, identical engine
+  sizes, identical all-12-cache fingerprint, and identical next 4 rng outputs. Stream is aligned.
+- **The out-of-state caches.** `_Q` (per-agent Q-tables, full q-vectors), `_PV`, `_TX`, `_away`,
+  `_burnT` hashed per tick for 1100 ticks across 4 pages: zero divergence.
+- **Render.** Patching `__agon.render = () => null` for the whole run: still diverges (5 pages,
+  3 distinct). Render also never touches `this.rng` (0 occurrences past 6093). `advance` calls
+  `setState` exactly once, as its last statement.
+- **The satellite painter.** Killing `_satW` + stubbing `_sat.prep`: diverges *more* (3 distinct
+  vs 1), so not the cause.
+- **Transcendental JIT instability.** `micro_transcendental.py`: sin cos tan exp log pow (both
+  forms) ** atan atan2 hypot sqrt cbrt, 400 inputs each, digested cold then after 300k warmup
+  iterations — **all stable**, byte-identical. So this is NOT last-bit float drift.
+
+### The one decisive asymmetry
+`jit_flags.py`: with `--js-flags=--no-opt`, 4 pages are **byte-identical**. With default JIT,
+4 pages give **4 distinct** hashes. Since the transcendentals are provably stable, `--no-opt`
+is *masking* something timing-related rather than fixing float math. Instrumenting the run also
+pins the outcome to one cluster, which points the same way.
+
+### Where it has to be
+Identical `state`, identical all 257 enumerable fields, identical caches, aligned rng — yet the
+tick-1093 branch flips. The remaining input is therefore **closure-scope state not reachable by
+property enumeration**: a `let`/`const` inside `ENGINE()` (1195) or inside a bundle module, which
+`Object.keys` cannot see. Next round: instrument at source level (counter/log inside ENGINE,
+not a wrapper) and bisect tick 1093's own execution.
+
+### Fixed this round
+- **`setWorld` leaked 8 of 12 per-world caches.** It reset `_Q/_K/_KC/_away` only; `_burnT`,
+  `_TX`, `_PV`, `_eco`, `_busy`, `_dec`, `_calls`, `_culture` survived a world change, so a new
+  world inherited the old one's learning, toxin rolls, burn clocks and provisioning roster.
+  Measured as a tick-1 divergence between two runs of the same world in one page. Now all 12
+  are cleared. No behaviour change on a fresh page (they start empty) — verified: 3 pages at
+  1000 ticks identical, alive=14 built=8 techs=9 walls=23, no page errors.
+
+### Found, NOT fixed (needs a decision from Dyl)
+- **`engineFor` memoizes engines: `ENGINES[id] || (ENGINES[id] = ENGINE(...))` (3709).**
+  Re-entering a world returns the *same* engine object with every closure mutation from the
+  previous visit intact (campSig, grass spread into TER, CAMPON, scenery). So "new game, same
+  seed" resumes a dirty world instead of a fresh one. I did not clear it: the memo is presumably
+  what lets you walk back to an already-visited macro cell and find it as you left it, so
+  clearing it trades world persistence for determinism. **Which way?**
+- **`this._culture` is read at 5224 but written nowhere in the codebase.** The cultural-inheritance
+  path for a new colonist's Q-table (inherit the colony's accumulated learning rather than only
+  the best living teacher's) is dead code and has never run.
+- **`mockDecide` (art.js 1918, 1931) uses `Math.random`** for goal choice and reply delay, so
+  LLM-mock mode is nondeterministic by construction. Left alone: it is off by default and the
+  fix needs a seeded rng threaded into art.js.
+
+### Not done
+- **Roofs.** Deliberately not started: the point of fixing determinism first was to make the roof
+  change measurable, and it still isn't. Say the word and I will either keep hunting at source
+  level or build roofs accepting that A/B results below ~2.1 population remain inside the noise.

@@ -4482,7 +4482,12 @@ class Component extends DCLogic {
     return { agents, store };
   }
   setWorld(k, f, b, sd, nr, gp, cell) {
+    // every per-world cache the tick reads must die with the world, or the new world inherits the old one's
+    // learning, toxin rolls, burn clocks and provisioning roster: measured as a tick-1 divergence between two
+    // runs of the same world in one page. _Q/_K/_KC/_away were reset here already; the other eight were not.
     this._Q = {}; this._K = {}; this._KC = {}; this._away = [];
+    this._burnT = {}; this._TX = {}; this._PV = null; this._eco = null;
+    this._busy = {}; this._dec = {}; this._calls = 0; this._culture = null;
     const st = this.state, kk = k || st.size, ff = f ?? st.form;
     if (!SIZES[kk]) return;
     let bb, ss, gg = Object.assign({}, st.gp || {}, gp || {}), pc = st.pcell, c = st.cell, ps = st.planetSeed || 1, ex = st.explored;
