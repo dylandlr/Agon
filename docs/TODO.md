@@ -643,3 +643,69 @@ decideEvery 6 discarding 69% of contact; 0 kills in 20,000 ticks; the colony nev
 needs a second growth path; camp clearing apron; Unity emergent tech, staged building, migration
 and ruins; Unity `JobGiver` cooldown; interior walls pushing shadow sprites; colonists born 437
 years old; caves one level only.
+
+## Round 30 — three view toggles, and an honest audit of the walls
+
+Verified:
+- **Shadows on/off.** One gate at the point every shadow is collected, so it covers scenery,
+  colonists, corpses, animals and bushes together. Measured: 1371 shadow elements in the DOM with
+  it on, 640 with it off, 1371 again on. (The 640 that remain are wall ink and other dark fills,
+  not shadows.)
+- **Names instead of numbers.** Colonists already carry `a.name`; the in-world label was hardcoded
+  to `{{a.id}}`. It now reads `{{a.nameLabel}}`, which is the name when the toggle is on and the
+  id otherwise. Measured: 29 id labels and 55 name strings on screen by default, 0 ids and 84
+  names with it on.
+- **Action captions.** When a colonist's `act` changes to something worth announcing, the word
+  rises over their head and fades over 10 ticks -- `eating`, `gathering`, `taking shelter`,
+  `fighting` and so on, from a table of 15. Only on a change, or every pawn would carry a
+  permanent caption; `move` and `idle` are deliberately not in the table. Measured: 10 captions
+  on screen at once shortly after switching it on.
+- All three sit in the Map panel beside Sound and Signs. They render as plain text when off,
+  which is the existing `segBtn` inactive style, the same as Sound and Signs.
+- `tests/final3.py` across five worlds: 5-13 colonists alive at tick 1500, no page errors.
+
+### The walls: the algorithm was already right, and I should say so
+
+I audited the HTML renderer against `docs/walls-rimworld-linked-atlas.md` rather than assuming
+there was something to fix, and most of it already matched:
+
+- The link mask is `Up=1, Right=2, Down=4, Left=8`, which is `Graphic_Linked`'s order exactly.
+- All 16 mask variants exist for each of the three materials, in both window and no-window forms,
+  plus the corner-filler sprite. The atlas is complete.
+- The corner-filler guard is `lk(1,0) && lk(0,1) && lk(1,1)` -- the SE diagonal plus both flanking
+  cardinals, which is `Graphic_LinkedCornerFiller`'s rule. Iterating every wall tile and testing
+  only its SE corner covers every four-tile meeting exactly once, so it is equivalent to
+  RimWorld's four-diagonal version without the duplicate quads.
+
+**The one genuine gap was the link flags.** `ShouldLinkWith` in RimWorld is a `LinkFlags`
+intersection, and a wall's flags take in natural rock and the map edge as well as walls and doors
+-- which is why a RimWorld wall raised against a mountain joins the rock face instead of showing
+an end cap. Agon linked walls and doors only. Added `linksAt`, which also links Mountain (5),
+Cliff (12), boulders and out-of-bounds. Hills (3) deliberately does not link: it is walkable
+ground here, not a rock face.
+
+**And here is the part worth knowing: it barely matters in practice.** Measured across the five
+worlds, 307 camp walls in total:
+
+- rock-adjacent wall sides: **1**
+- map-edge wall sides: **0**
+- corners meeting the fill rule: **0**, and 0 corner sprites in the DOM
+
+The camp is always sited on cleared flat ground away from rock, and its floorplan is entirely
+single-thickness walls, so there is never a 2x2 block to notch. The corner filler ported in r19 is
+correct but is dead code for the standard camp; I confirmed the rule still fires by adding a
+synthetic 2x2 block and checking it. So the link-flags fix is correct rather than visible, and the
+remaining differences from RimWorld are art (grain texture, the lit south strip), not wall logic.
+
+Not done:
+- Walls are still SVG sprites rather than a sampled 4x4 texture atlas. That is a rendering
+  technique difference, not a behaviour one, and nothing in the audit suggests it would look
+  closer for the effort.
+- If RimWorld-style thick walls or rock-abutting camps are wanted, the floorplan has to produce
+  them -- which is the incremental-floorplan work scoped in r28.
+
+Carried forward: incremental floorplan; the population collapse (mean 2.6 of 12 at tick 6000,
+2 of 5 worlds extinct, r29); determinism breaking between tick 2200 and 2500 with the
+`stepPlanetEco`/`ecoFor` lazy-creation hypothesis; re-measuring r28's shelter routes through
+`setWorld`; relDecay 0.01; decideEvery 6; 0 kills in 20,000 ticks; the colony never raids; lexicon
+second growth path; Unity port items; colonists born 437 years old.

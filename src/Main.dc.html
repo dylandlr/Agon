@@ -145,7 +145,8 @@ body.agon-paused *{animation-play-state:paused !important}
       <sc-for list="{{glows}}" as="g" hint-placeholder-count="3"><div style="{{g.wrap}}"><div style="{{g.dot}}"></div></div></sc-for>
       <sc-for list="{{pawns}}" as="a" hint-placeholder-count="4">
         <div style="{{a.uiWrap}}">
-          <div style="{{a.nameStyle}}">{{a.id}}</div>
+          <div style="{{a.nameStyle}}">{{a.nameLabel}}</div>
+          <div style="{{a.actStyle}}">{{a.actText}}</div>
           <div style="{{a.tagStyle}}"><svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true" style="display: block"><path d="{{a.tagD}}" fill="none" stroke="#1c110b" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"></path></svg></div>
           <div style="{{a.hpBar}}"><div style="{{a.hpFill}}"></div></div>
         <div style="{{a.enBar}}" title="{{a.enTitle}}"><div style="{{a.enFill}}"></div></div>
@@ -245,6 +246,11 @@ body.agon-paused *{animation-play-state:paused !important}
       <button onClick="{{toggleMute}}" aria-pressed="{{muted}}" title="{{muteTitle}}" style="{{muteStyle}}; flex: 1; padding: 0 4px; min-width: 0">{{muteLabel}}</button>
       <button onClick="{{toggleWords}}" aria-pressed="{{words}}" title="{{wordsTitle}}" style="{{wordsStyle}}; flex: 1; padding: 0 4px; min-width: 0">{{wordsLabel}}</button>
     </div>
+    <div style="display: flex; gap: 3px">
+      <button onClick="{{toggleShadows}}" aria-pressed="{{shadowsOn}}" title="{{shadowsTitle}}" style="{{shadowsStyle}}; flex: 1; padding: 0 3px; min-width: 0; font-size: 10px">{{shadowsLabel}}</button>
+      <button onClick="{{toggleNames}}" aria-pressed="{{namesOn}}" title="{{namesTitle}}" style="{{namesStyle}}; flex: 1; padding: 0 3px; min-width: 0; font-size: 10px">{{namesLabel}}</button>
+    </div>
+    <button onClick="{{toggleActs}}" aria-pressed="{{actsOn}}" title="{{actsTitle}}" style="{{actsStyle}}; width: 100%">{{actsLabel}}</button>
   </div>
 
   <!-- left: view tools -->
@@ -814,6 +820,8 @@ const BIOMES = {
 const RIVAL_NAMES = ['Redhollow', 'Ashford', 'Stonecrow', 'Marrow Bend', 'Gallowmere', 'Thornwick'], RIVAL_COL = ['#e0504a', '#d98a3a', '#b45ac8', '#4ab0a0', '#c8b83a', '#7a8ae0'];
 // planet: a small global map. elevation and moisture are layered value noise, temperature falls with latitude and altitude; each cell is classified into a biome
 // starting scenarios: who is there, whether there is a house, how crowded the valley is, and the local danger. Chosen through the generator params (gp.scn), so each one builds its own world
+// the word shown over a colonist's head when they start doing this, if act captions are on
+const ACTWORD = { eat: 'eating', drink: 'drinking', sleep: 'sleeping', craft: 'crafting', gather: 'gathering', hunt: 'hunting', fish: 'fishing', build: 'building', haul: 'hauling', shelter: 'taking shelter', strike: 'fighting', flee: 'fleeing', tend: 'tending', talk: 'talking', dead: '' };
 const SCENARIOS = {
   band: { label: 'New band', blurb: 'Twelve arrivals under open sky. A fire, a little food, and nothing built: they have to work out shelter for themselves.', n: 12, house: 'none', food: 6, rivals: 1, near: 1 },
   community: { label: 'Built community', blurb: 'Twelve settlers in a walled house with a hearth, a bench and a stocked table.', n: 12, house: 'full', food: 6, rivals: 1, near: 1 },
@@ -2492,9 +2500,20 @@ grMark('shelter');
 const WALLMATS = { wattle: { label: 'Wattle and daub', ins: 8, hp: 1, burn: 0.8, needs: ['shelter'], note: 'Woven sticks plastered with mud and dung between timber posts. Quick to raise, warm enough, but a storm or a fire takes it apart.' }, timber: { label: 'Timber', ins: 10, hp: 2, burn: 1, needs: ['carpentry'], note: 'Split logs set upright and pegged. Warmer and far tougher than wattle; it burns.' }, stone: { label: 'Dry stone', ins: 12, hp: 4, burn: 0, needs: ['shaping', 'leverage'], note: 'Courses of shaped stone laid without mortar, the big footings levered into place. Warmest, toughest, and it does not burn.' } };
 const wallMatFor = (techs) => techs.includes('shaping') && techs.includes('leverage') ? 'stone' : techs.includes('carpentry') ? 'timber' : 'wattle';
 const RVWALL = new Set([...WALLS].filter((k) => !CAMPK.has(k)));
+// What a wall joins itself to, as RimWorld's LinkFlags do: other walls, doors, natural rock
+// (mountain and cliff faces, and boulders) and the edge of the map. Agon linked walls and doors
+// only, so a wall raised against a mountain showed an end cap where RimWorld joins the rock.
+// Hills (3) is walkable ground here rather than a rock face, so it deliberately does not link.
+const linksAt = (px, py) => {
+  if (px < 0 || py < 0 || px >= W || py >= H) return true;
+  const kk = key(px, py);
+  if (WALLS.has(kk) || doors.has(kk) || BOUL.has(kk)) return true;
+  const t = terAt(px, py);
+  return t === 5 || t === 12;
+};
 for (const k of WALLS) for (const mat of (RVWALL.has(k) ? ['wattle'] : ['wattle', 'timber', 'stone'])) {
   const [x, y] = k.split(',').map(Number);
-  const has = (dx, dy) => WALLS.has(key(x + dx, y + dy)) || doors.has(key(x + dx, y + dy));
+  const has = (dx, dy) => linksAt(x + dx, y + dy);
   const m = (has(0, -1) ? 1 : 0) | (has(1, 0) ? 2 : 0) | (has(0, 1) ? 4 : 0) | (has(-1, 0) ? 8 : 0), win = WINDOWS.has(k) ? 1 : 0, rv = RVWALL.has(k);
   if (mat === 'wattle') SCENERY.push({ outer: 'position: absolute; left: ' + x * TS + 'px; top: ' + y * TS + 'px; width: 48px; height: 48px; z-index: ' + ((y + 1) * TS - 2) + '; pointer-events: none', inner: 'width: 100%; height: 100%', cls: 'wsh' + m });
   SCENERY.push({ mat: rv ? null : mat, outer: 'position: absolute; left: ' + x * TS + 'px; top: ' + y * TS + 'px; width: 48px; height: 48px; z-index: ' + ((y + 1) * TS), inner: 'width: 100%; height: 100%', cls: 'wl' + mat[0] + m + win });
@@ -2502,7 +2521,7 @@ for (const k of WALLS) for (const mat of (RVWALL.has(k) ? ['wattle'] : ['wattle'
 // corner filler, as RimWorld's Graphic_LinkedCornerFiller: a diagonal neighbour that links, with both flanking cardinals linked too, gets a flat cover patch over the shared corner; checking each wall's south-east corner once covers every such meeting point
 for (const k of WALLS) {
   const [x, y] = k.split(',').map(Number);
-  const lk = (dx, dy) => WALLS.has(key(x + dx, y + dy)) || doors.has(key(x + dx, y + dy));
+  const lk = (dx, dy) => linksAt(x + dx, y + dy);
   if (!(lk(1, 0) && lk(0, 1) && lk(1, 1))) continue;
   const rv = RVWALL.has(k);
   for (const mat of (rv ? ['wattle'] : ['wattle', 'timber', 'stone']))
@@ -5870,7 +5889,12 @@ class Component extends DCLogic {
       }
       // idle agonists glance around now and then; the face turns with them
       if ((act === 'idle' || act === 'rest') && r() < 0.07) { const GD = [[0, 1], [1, 0], [-1, 0], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]], gz = GD[Math.floor(r() * GD.length)]; a.face = gz; if (gz[0]) a.fx = gz[0]; }
-      a.act = act === 'down' ? 'sleep' : act; // a downed colonist lies on the ground in the sleeping pose; a.dn marks it
+      const actPrev = a.act, actNow = act === 'down' ? 'sleep' : act;
+      if (actNow !== actPrev) {
+        const w = ACTWORD[actNow];
+        if (w) { a.actShow = w; a.actT0 = tick; }
+      }
+      a.act = actNow; // a downed colonist lies on the ground in the sleeping pose; a.dn marks it
       a.held = act === 'eat' || act === 'gather' ? 'berries' : act === 'drink' ? 'waterskin' : act === 'sleep' ? 'none' : act === 'craft' || act === 'strike' || a.inv.tool || a.gear.weapon ? 'tool' : 'none';
       { const fc = fatalCause(a); if (fc) { (window.AGON_LOG = window.AGON_LOG || []).push({ t: tick, id: a.id, ev: 'death', cause: fc, act: a.act, sat: +a.sat.toFixed(2), hyd: +a.hyd.toFixed(2), x: a.x, y: a.y, bub: a.bub }); a.alive = false; a.dtick = tick; a.cause = fc; a.act = 'dead'; if (s.learn) learnDie(a); log.push({ t: tick, text: a.id + ' died of ' + a.cause, kind: 'bad' }); } }
     }
@@ -6169,6 +6193,11 @@ class Component extends DCLogic {
       const on = i === s.sel || (s.msel || []).includes(i);
       const mk = msgKeyOf(a), LEXN = s.lex || null, wordsOn = this.optGet('words', false);
       const dmgOn = !!a.dmgV && a.dmgV >= 0.005 && s.tick - a.dmgT < 6;
+      const namesOn = this.optGet('names', false), label = namesOn ? (a.name || a.id) : a.id;
+      // what they just started doing, named in a word and left to rise and fade. Only on a change,
+      // or every pawn would carry a permanent caption.
+      const actsOn = this.optGet('acts', false), actAge = s.tick - (a.actT0 || 0);
+      const actOn = actsOn && !!a.actShow && actAge < 10;
       const syms = mk && !wordsOn ? A.msgSyms(mk, a.fac ? null : LEXN) : [], bubW = mk && wordsOn ? A.msgText(mk) : '';
       const deadM = mk === 'dead', bubShow = (syms.length > 0 || !!bubW) && (!deadM || (s.tick - a.dtick) < DEATH_POP), skullG = deadM && !bubShow ? A.msgSyms('dead') : [];
       return {
@@ -6186,6 +6215,9 @@ class Component extends DCLogic {
         tagD: fightTag(a, s.tick) ? ({ attack: 'M5 19 L17 7 M13 6 h5 v5 M19 19 L7 7 M11 6 H6 v5', raid: 'M7 21 V4 M7 5 h10 l-3 4 l3 4 H7', defend: 'M12 3 L19 6 V12 C19 17 15 20 12 21 C9 20 5 17 5 12 V6Z', flee: 'M20 12 H5 M11 6 L5 12 L11 18', parley: 'M4 12 H20 M8 8 L4 12 L8 16 M16 8 L20 12 L16 16' }[a.intent.k] || '') : '',
         tagStyle: fightTag(a, s.tick) ? 'position: absolute; left: 3px; top: 7px; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 1.5px solid #1c110b; box-sizing: border-box; background: ' + ({ attack: '#e0786a', raid: '#e8a23c', defend: '#7cacdf', flee: '#d4c63c', parley: '#7fbf8e' }[a.intent.k] || '#aea69a') + '; pointer-events: none' : 'display: none',
         nameStyle: 'position: absolute; left: -12px; width: 72px; top: 44px; text-align: center; font-size: 11px; line-height: 14px; font-weight: 700; color: ' + (a.fac ? RIVAL_COL[(a.fac - 1) % RIVAL_COL.length] : '#ede9e1') + '; text-shadow: 0 1px 0 #1c110b, 1px 0 0 #1c110b, -1px 0 0 #1c110b, 0 -1px 0 #1c110b; pointer-events: none',
+        nameLabel: label,
+        actText: actOn ? a.actShow : '',
+        actStyle: 'position: absolute; left: 24px; top: -34px; transform: translateX(-50%) translateY(' + (actOn ? -actAge * 1.6 : 0) + 'px); white-space: nowrap; font-size: 10px; line-height: 13px; font-weight: 700; color: #f3e3c8; text-shadow: 0 1px 0 #1c110b, 1px 0 0 #1c110b, -1px 0 0 #1c110b, 0 -1px 0 #1c110b; pointer-events: none; opacity: ' + (actOn ? Math.max(0, 1 - actAge / 10).toFixed(2) : 0) + '; transition: transform 0.4s linear, opacity 0.4s linear; display: ' + (actOn ? 'block' : 'none'),
         bubWords: bubW,
         bubWordStyle: 'display: ' + (bubW ? 'block' : 'none') + '; padding: 0 3px; font-size: 11px; line-height: 14px; font-weight: 700; color: #1c110b; white-space: nowrap',
         bubble: 'position: absolute; left: 24px; top: -20px; transform: translateX(-50%); height: 24px; padding: 0 ' + (bubW ? 7 : 4) + 'px; display: ' + (bubShow ? 'flex' : 'none') + '; gap: 1px; align-items: center; justify-content: center; border-radius: 12px; background: ' + (deadM ? '#8a2e26' : '#ede9e1') + '; border: 2px solid #1c110b; box-sizing: border-box; box-shadow: 0 2px 0 rgba(28,17,11,0.45); animation: pop 0.25s ease-out',
@@ -6837,7 +6869,7 @@ class Component extends DCLogic {
       tiles, props: SCENERY.filter((o) => (!o.tk || !burntSet.has(o.tk)) && (!o.grp || E0.CAMPON[o.grp]) && (!o.mat || o.mat === wallMatNow)).concat(RIVAL_PROPS, bushes, plotProps, carcProps, beds, covers, doorsP, wellP, tallyP, tentProps, fireProps, shelfIcons).filter(inV).map((o) => o.cls === undefined ? { ...o, cls: '' } : (season !== 1 && o.cls.startsWith('t-') && !o.cls.startsWith('t-dead') && (season !== 2 || !o.cls.startsWith('t-pine')) && (season !== 0 || !o.cls.startsWith('t-pine')) ? { ...o, cls: o.cls + ' q' + season } : o)), embers: EMBERS,
       birds, flies: s.xray ? [] : flies, glows: s.xray ? [] : glows, fish, seaAn, seaPk, seaFl, ripples, ambStyle,
       fireGlow: E0.CAMPON.fire ? ring(130, 0.05, LM.darkness, ms, false) : 'display: none', fireGlow2: E0.CAMPON.fire ? ring(70, 0.07, LM.darkness, ms, true) : 'display: none',
-      shadows: SHADOWS.filter((o) => !o.grp || E0.CAMPON[o.grp]).concat(entShadows, s.bushes.map((b) => ({ style: shapeSt(bushBox(b).sh) }))),
+      shadows: !this.optGet('shadows', true) ? [] : SHADOWS.filter((o) => !o.grp || E0.CAMPON[o.grp]).concat(entShadows, s.bushes.map((b) => ({ style: shapeSt(bushBox(b).sh) }))),
       mtnShadowStyle: mtnShadowStyle,
       shadowLayer: 'position: absolute; left: 0; top: 0; width: ' + WPX + 'px; height: ' + HPX + 'px; z-index: 5; pointer-events: none; opacity: ' + q04(shOp) + '; transform: translate(' + Math.round(shX / 2) * 2 + 'px, ' + Math.round(shY / 2) * 2 + 'px)',
       dayStyle: 'position: absolute; left: 0; top: 0; width: ' + WPX + 'px; height: ' + HPX + 'px; pointer-events: none; z-index: 59; background: #f0a050; mix-blend-mode: multiply; opacity: ' + q04(warm * 0.3) + (warm * 0.3 < 0.005 ? '; display: none' : ''),
@@ -6867,6 +6899,21 @@ class Component extends DCLogic {
       muted: !this.optGet('aOn', true), muteLabel: this.optGet('aOn', true) ? 'Sound on' : 'Muted',
       muteTitle: this.optGet('aOn', true) ? 'Mute all sound' : 'Unmute',
       muteStyle: segBtn(!this.optGet('aOn', true)),
+      shadowsOn: this.optGet('shadows', true),
+      shadowsLabel: this.optGet('shadows', true) ? 'Shadows' : 'No shadows',
+      shadowsTitle: this.optGet('shadows', true) ? 'Hide shadows' : 'Show shadows',
+      shadowsStyle: segBtn(!this.optGet('shadows', true)),
+      toggleShadows: () => { this.prefSet('shadows', !this.optGet('shadows', true)); this.setState({ uiN: (this.state.uiN || 0) + 1 }); },
+      namesOn: this.optGet('names', false),
+      namesLabel: this.optGet('names', false) ? 'Names' : 'Numbers',
+      namesTitle: this.optGet('names', false) ? 'Label them by number instead' : 'Label them by name instead',
+      namesStyle: segBtn(this.optGet('names', false)),
+      toggleNames: () => { this.prefSet('names', !this.optGet('names', false)); this.setState({ uiN: (this.state.uiN || 0) + 1 }); },
+      actsOn: this.optGet('acts', false),
+      actsLabel: this.optGet('acts', false) ? 'Doing' : 'Quiet',
+      actsTitle: this.optGet('acts', false) ? 'Stop naming what they start doing' : 'Name what they start doing, over their head',
+      actsStyle: segBtn(this.optGet('acts', false)),
+      toggleActs: () => { this.prefSet('acts', !this.optGet('acts', false)); this.setState({ uiN: (this.state.uiN || 0) + 1 }); },
       words: this.optGet('words', false),
       wordsLabel: this.optGet('words', false) ? 'Words' : 'Signs',
       wordsTitle: this.optGet('words', false) ? 'Show what they sign, as marks' : 'Read their signs as words',
