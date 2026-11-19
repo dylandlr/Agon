@@ -218,7 +218,8 @@ def do_item(name, extra, args, kind):
     ticks = max(a["steps"], ticks // a["steps"] * a["steps"])
     if not (out / "params.msgpack").exists():
         cmd = [sys.executable, str(HERE / "train_phase2.py"), "--preset", PRESET, "--worlds", str(args.worlds),
-               "--ticks", str(ticks), "--log-every", "10", "--ckpt-every", "10", "--out", str(out), "--resume",
+               "--ticks", str(ticks), "--log-every", str(args.log_every),
+               "--ckpt-every", str(args.ckpt_every), "--out", str(out), "--resume",
                *(["--agent-chunk", str(args.agent_chunk)] if getattr(args, "agent_chunk", 0) else []), *extra]
         if run(cmd, f"{out}.log") != 0:
             raise SystemExit(f"training {name} failed; see {out}.log")
@@ -471,6 +472,18 @@ def main():
                     help="continuous world after training (0 = none); 1,200 days = 30 years at 40 days per "
                          "year of age, long enough for a child born early to grow up (600 days)")
     ap.add_argument("--playback-every", type=int, default=8)
+    # One history.json row per this many updates. A 1e8-agent-step society30 run on 128 worlds is
+    # about 95 updates, so the old hardcoded 10 left only ~9 rows -- too few to read a curve from.
+    # Use 1 for a run you intend to diagnose; rows are small and written atomically every time.
+    ap.add_argument("--log-every", type=int, default=1,
+                    help="history.json rows: 1 = every update (see docs/MEASUREMENT.md)")
+    # checkpoint.pkl is ~1.3 GB at society30, so checkpointing is the expensive write, not logging.
+    # Kept at 10: on Colab, where runs are routinely cut off by a timeout, this is the amount of
+    # training a crash can destroy (~10 updates = ~10M agent-steps at 128 worlds). Raising it to
+    # save Drive writes risks losing half a run. Diagnosis data does NOT depend on this -- since
+    # history.json is written every row, the curves survive a crash regardless.
+    ap.add_argument("--ckpt-every", type=int, default=10,
+                    help="updates between checkpoints; resume granularity vs write cost")
     ap.add_argument("--only", type=int, default=None, help="run just item K (HPRC array task)")
     ap.add_argument("--playback-days", type=float, default=None,
                     help="days kept in each continuous-world playback page (probe default 0.25: at 1-minute "

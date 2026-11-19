@@ -1924,6 +1924,12 @@ GPU support: NVIDIA on Linux, or on Windows through WSL2. Native Windows and
 Macs run on the CPU. Outputs land in `runs/<run-name>/`: `history.json`,
 `curves.png`, `playback.html` (opened in your browser automatically).
 
+`history.json` is written on every logged row and is the only artifact that
+survives an interrupted run. **[docs/MEASUREMENT.md](docs/MEASUREMENT.md) is the
+single source of truth** for what each run saves, what every `history.json`
+field means, and how to read the curves to tell whether anything was learned.
+Start any diagnosis there: it needs no GPU and no matching code version.
+
 ## Running on GPUs (Texas A&M HPRC)
 
 The `hprc/` folder targets the Grace cluster (A100 GPUs). Everything also

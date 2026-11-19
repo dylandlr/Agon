@@ -2,6 +2,10 @@
 
 Each check shows a behavior is possible with generic actions and pays off; none is trained or rewarded directly.
 
+These checks say a behavior is *available and worth doing*, not that any agent learned it. For
+whether a trained run learned anything, read [docs/MEASUREMENT.md](docs/MEASUREMENT.md) — the
+single source of truth for run artifacts and run diagnosis.
+
 **9 of 9 checks pass.**
 
 | Check | Result | Evidence |

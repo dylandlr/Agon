@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import json
+import os
 import pickle
 import time
 from pathlib import Path
@@ -228,6 +229,17 @@ def main():
         return
     history, acc, start = [], None, 0
     ck_path = out / "checkpoint.pkl"
+
+    def write_history():
+        """Every logged row on disk, always. Written beside the target and renamed, because a run
+        killed mid-write (a Colab timeout, a Slurm time limit) must not leave a half-written file:
+        os.replace is atomic, so history.json is either the previous version or the new one.
+        This is the only record of what a run learned that survives an interrupted run, so it is
+        written on every logged row and not only at a checkpoint. See docs/MEASUREMENT.md."""
+        tmp = out / "history.json.tmp"
+        with open(tmp, "w") as f:
+            json.dump({"args": vars(args), "history": history}, f, indent=1)
+        os.replace(tmp, out / "history.json")
     if args.resume and ck_path.exists():
         old = json.load(open(out / "history.json"))["args"].get("code_version") \
             if (out / "history.json").exists() else None
@@ -312,6 +324,13 @@ def main():
                 "sleep_memory": {"waiting_share": round(float(m["waiting_share"]), 3),
                                  "retention_kl": round(float(m["retention_kl"]), 5),
                                  "long_term_filled": round(float(m["long_term_filled"]), 3)},
+                # The critic, at the weights that produced this rollout. explained_variance is the
+                # single number saying whether delayed consequences can reach the policy at all:
+                # 1 = V predicts the return, 0 = no better than the mean, < 0 = worse. rmse and
+                # target_sd give it scale (rmse near target_sd is the same as ev near 0).
+                "value": {"explained_variance": round(float(m["value_ev"]), 4),
+                          "rmse": round(float(m["value_rmse"]), 5),
+                          "target_sd": round(float(m["target_sd"]), 5)},
                 # Per output (action, aim, said, written): share of updates clipped, and the KL moved
                 "per_output": {name: {"clip_fraction": round(float(m["clip_fraction"][j]), 4),
                                       "approx_kl": round(float(m["approx_kl"][j]), 5)}
@@ -326,14 +345,15 @@ def main():
             history.append(row)
             print(json.dumps(row), flush=True)
             acc = None
+            write_history()
         if (u + 1) % args.ckpt_every == 0 or u == cfg.num_updates - 1:
             ckpt.save(ck_path, {"runner": runner, "pop": pop, "update": u + 1})
-            json.dump({"args": vars(args), "history": history}, open(out / "history.json", "w"), indent=1)
+            write_history()
     from flax import serialization
     (out / "params.msgpack").write_bytes(serialization.to_bytes(runner[0]))
     with open(out / "population.pkl", "wb") as f:
         pickle.dump(jax.tree_util.tree_map(np.asarray, pop), f)
-    json.dump({"args": vars(args), "history": history}, open(out / "history.json", "w"), indent=1)
+    write_history()
     print(f"saved to {out}")
 
 

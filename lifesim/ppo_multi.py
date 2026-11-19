@@ -573,6 +573,21 @@ def make_train(env_cfg: EnvConfig, cfg: MAConfig):
         adv = gae(traj.reward, traj.value, traj.done, traj.boot, last_val, gam, cfg.gae_lambda ** cfg.tick_scale)
         targets = adv + traj.value
 
+        # Can the critic predict the return at all? Explained variance of V against the GAE targets
+        # over the steps actually lived, measured at the weights that produced the rollout (before
+        # this update's gradient): 1 = perfect, 0 = no better than guessing the mean, < 0 = worse
+        # than the mean. GAE itself only carries credit about 1/(1 - gamma*lambda) ticks back, so a
+        # consequence further away than that reaches the policy ONLY through V. If this stays near
+        # zero, no delayed survival behaviour can be learned, whatever the reward says.
+        v_mask = traj.valid.astype(jnp.float32)
+        v_n = jnp.maximum(v_mask.sum(), 1.0)
+        v_resid = (((targets - traj.value) ** 2) * v_mask).sum() / v_n
+        t_mean = (targets * v_mask).sum() / v_n
+        t_var = (((targets - t_mean) ** 2) * v_mask).sum() / v_n
+        value_ev = 1.0 - v_resid / jnp.maximum(t_var, 1e-8)
+        value_rmse = jnp.sqrt(v_resid)
+        target_sd = jnp.sqrt(t_var)
+
         # ---------------------------------------------------- sleep consolidation
         valid_f = traj.valid.astype(jnp.float32)
         if PENDING:
@@ -796,6 +811,8 @@ def make_train(env_cfg: EnvConfig, cfg: MAConfig):
                    "waiting_share": ((traj.stage == 0) & ~finalized & traj.valid).sum()
                    / jnp.maximum(((traj.stage == 0) & traj.valid).sum(), 1),
                    "retention_kl": ents[3].mean(), "long_term_filled": res.filled.mean(),
+                   # The critic: see the note where these are computed, above
+                   "value_ev": value_ev, "value_rmse": value_rmse, "target_sd": target_sd,
                    # per output (action, aim, said, written): share of updates clipped, and the KL moved
                    "clip_fraction": ents[4].reshape(-1, 4).mean(0), "approx_kl": ents[5].reshape(-1, 4).mean(0)}
         if cfg.world_model:
