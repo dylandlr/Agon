@@ -549,3 +549,97 @@ clearing apron width; Unity emergent tech, staged building, migration and ruins;
 `JobGiver` cooldown; interior walls pushing shadow sprites; thirst loop untraced; colonists
 born 437 years old (`LIFE = 2000000` against `YEAR = 2000`); jungle maps too rock-poor for
 caves; caves still one level rather than descending.
+
+## Round 29 — three real bugs fixed, one diagnosis overturned, and a large correction to my own measurements
+
+### The correction first, because it matters more than anything else here
+
+**`window.AGON_P` has no `seed` key and no `biome` key.** It is a bag of about fifty behaviour
+flags (`hung`, `tire`, `eatFirst`, `storeCap`, `noStartFire`, ...). Passing
+`{seed:21,biome:'desert'}` sets keys nothing reads, so the run is the default world every time:
+`wseed 33403`, temperate, same camp, same 48 bushes. Verified by reading `state.wseed` and
+`state.biome` back from six runs that should have differed — all identical.
+
+World choice goes through `setWorld`, which is **positional**:
+`setWorld(size, form, biome, seed, nRivals, gp, cell)`. That genuinely works (wseed 9076 / 5497 /
+40190 / 24245 / 18239 for five worlds).
+
+So the per-seed and per-biome structure of several earlier claims is invalid:
+
+- **r28's headline table is void.** "Time to shelter: tundra 192, desert 520, temperate 912/1684,
+  jungle 960" was five runs of one temperate world. The four new experiential routes to shelter
+  are still in and still sound as a mechanism, but **the claim that the tundra outlier was fixed
+  and that the spread follows the biome is unsupported** and needs re-measuring through `setWorld`.
+- **r27's band-versus-community sweep** was one world sampled eight times, not four worlds twice.
+  Its conclusion (the collapse is not caused by the unbuilt start) may still hold but was not
+  established the way I said it was.
+- **The r28/r29 analysis doc** is written as "seed 21". It is the default world. Its *within-world*
+  findings stand -- the decision funnel, parley rates, who attacks, tech loss, the lexicon freeze,
+  relDecay -- because none of those depend on which world it was. Its biome framing does not.
+
+I had already caught `AGON_P.biome` doing nothing in an earlier round and then kept using
+`AGON_P.seed`, assuming the seed worked even though the biome did not. It does not.
+
+### Fixed, verified
+
+- **Rival colonists had unseeded personalities, so no run was reproducible from its world seed.**
+  `mkAgent` seeds each agent's personality generator from `500 + i * 7`, but for `i > 99` it added
+  `Math.floor(Math.random() * 99999)` -- and rivals are created with ids `100 + k * 10 + j`, so
+  every rival in every run got an unseeded brain. Found by fingerprinting two identical runs: they
+  diverged on the **first tick**, in exactly four agents, all rivals, needs differing in the fourth
+  decimal with positions identical. `mkAgent` already receives the seeded generator as `r`; it now
+  uses it. Two runs are now byte-identical at 1, 5, 20, 100, 500, 1000 and 2000 ticks.
+- **A stray debug global was shipping in builds.** `window.__TILLED = (window.__TILLED || 0) + 1`
+  sat in the tilling path of every release build. Removed.
+- **The only `Math.random()` inside the tick** was the tool-wear roll beside it; now `r()`.
+- **A test-only `AGON_P.paused` flag.** The harness used to poll every 50 ms until `window.__agon`
+  existed, so the game auto-advanced a load-dependent number of ticks before pausing and no two
+  runs started from the same tick. Runs now start at tick 0 every time.
+- **`tests/final3.py` rewritten** to select worlds through positional `setWorld`, with the trap
+  documented at the top of the file. It now sweeps five genuinely different worlds: 9-12 colonists
+  alive at tick 1500 across temperate, desert, tundra, jungle, no page errors.
+
+### Diagnosis made, then overturned by its own A/B
+
+I traced the food economy on a reproducible run and found what looked like a poverty trap. A
+colonist could only bank food while holding **3+ berries** *and* standing within **1 tile** of one
+of the **two** table cells *and* with goal `haul` or `wander`. Measured co-occurrence of the first
+two conditions: 47 agent-ticks in 0-500, 150 in 500-1000, then **0 in 1000-2000, 0 in 2000-4000,
+0 in 4000-6000** -- because as the near bushes thinned the band ranged further and agent-ticks spent
+beside the table fell from 1047 to 62. Meanwhile `store.food` ran 6 -> 30 -> 33 -> 19 -> 0 and
+`spoiled` froze at exactly 29 for 7000 ticks, which is what nothing-enters-storage looks like.
+
+So I widened it: 2+ berries, within 2 tiles, and crates and the hearth counted as drop-off points.
+Then I A/B'd it over five real worlds at 6000 ticks:
+
+                 pop   deposits   food>0   meanSat   techs   extinct
+      before     2.6      27      34.4%     0.402     7.6     2 of 5
+      after      2.2      26      39.8%     0.386     6.4     2 of 5
+
+**Deposits were already happening about 27 times per 6000 ticks in both arms.** The narrow window
+was not the binding constraint, and the change costs satiation and techs for a small gain in the
+fraction of time the store is non-empty. Reverted. The "both conditions never co-occur" measurement
+was real but it was taken on one world, and it does not generalise.
+
+What the A/B did establish, and it is worse than anything reported before: **mean population is 2.6
+of a starting 12 at tick 6000, with 2 of 5 worlds extinct.** Every earlier survival figure came from
+one world.
+
+### Open, with a named hypothesis
+
+- **Determinism still breaks between tick 2200 and 2500.** Not `Math.random` and not `Date.now` --
+  I trapped both across 4000 advances and neither is called once. The first thing to differ is
+  ecology: animal count 52 vs 44, bush count 86 vs 79, with techs still equal. Hypothesis:
+  `stepPlanetEco` runs on `tick % 100 === 0 && this._eco`, and `this._eco` is created lazily by
+  `ecoFor`, which the render path also calls -- so whether it exists when the tick-0 step fires
+  depends on whether a frame rendered first, which is wall-clock dependent. A one-step offset in a
+  planet ecology would surface exactly this way, thousands of ticks later. Worth confirming by
+  forcing `_eco` to exist before tick 0.
+- **Re-measure r28's shelter routes through `setWorld`** before trusting any biome claim about them.
+- The population collapse is still the dominant problem and is now measured properly: 2.6 of 12.
+
+Carried forward: incremental floorplan (scoped in r28); relDecay 0.01 erasing relationship memory;
+decideEvery 6 discarding 69% of contact; 0 kills in 20,000 ticks; the colony never raids; lexicon
+needs a second growth path; camp clearing apron; Unity emergent tech, staged building, migration
+and ruins; Unity `JobGiver` cooldown; interior walls pushing shadow sprites; colonists born 437
+years old; caves one level only.
