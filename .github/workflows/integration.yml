@@ -24,9 +24,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - run: npm ci
       - run: npm run verify
       - run: npm run check:repository
       - run: npm run assets:check
+      - run: npm run assets:test
+      - run: npm run assets:render
       - run: npm test
 
   bridge:

@@ -6,12 +6,19 @@ and weights out of public CI logs/artifacts. A gate is not passed by writing its
 An individual work item marked verified does not imply its entire gate is complete.
 
 Planning-foundation checks on 2026-11-19: 30 dependency-linked work items validate;
-46 Unity asset files have metadata with 63 unique file/directory GUIDs; 37 SVGs
+46 Unity asset files have metadata with 63 unique file/directory GUIDs; 370 SVGs
 regenerate identically and parse as standalone XML; 83 colony reference checks
 pass; 208 original source blobs remain unchanged. The gallery is available locally,
 but the connected browser could not reach the local preview server; browser-render
 and Unity visual-fidelity checks remain open. New CI jobs are configured, not yet
 reported as passing remote runs.
+
+World recovery extension: six parser/coverage regression tests pass, including all
+96 material/connection/window wall variants and 330 r18/current exact SVG matches.
+All 370 SVGs decode and rasterize through Sharp/librsvg. Ten contact sheets are
+generated locally; the 24-sprite overview was visually inspected. This does not
+establish browser-to-Unity fidelity or complete the G02 gate. Layered characters,
+canvas terrain, doors, weather and Unity import remain pending.
 
 | Gate | Required evidence |
 | --- | --- |

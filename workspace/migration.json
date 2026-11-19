@@ -157,7 +157,7 @@
       "id": "A03",
       "title": "Recover terrain, flora, walls, doors and weather art",
       "milestone": "M2",
-      "status": "planned",
+      "status": "in_progress",
       "dependsOn": [
         "A01"
       ],
@@ -167,7 +167,12 @@
         "F15"
       ],
       "gate": "G02",
-      "evidence": []
+      "evidence": [
+        "asset-library/catalog.json",
+        "asset-library/source/recovered/r18/manifest.json",
+        "tools/assets/source-art.test.cjs",
+        "tools/assets/render-review.cjs"
+      ]
     },
     {
       "id": "A04",

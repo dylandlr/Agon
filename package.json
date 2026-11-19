@@ -5,8 +5,15 @@
     "check:repository": "node tools/repository/check.cjs",
     "assets:export": "node tools/assets/export-agon.cjs",
     "assets:check": "node tools/assets/export-agon.cjs --check",
+    "assets:test": "node --test tools/assets/source-art.test.cjs",
+    "assets:render": "node tools/assets/render-review.cjs",
     "build": "node workspace/build.cjs",
     "verify": "node workspace/verify.cjs",
     "test": "node tests/verify_links.mjs && node tests/verify_astar.mjs && node tests/verify_jobs.mjs && node tests/verify_worldgen.mjs"
+  },
+  "devDependencies": {
+    "acorn": "8.19.0",
+    "eslint-scope": "9.1.2",
+    "sharp": "0.35.5"
   }
 }

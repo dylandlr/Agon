@@ -7,6 +7,8 @@ asset-library/**/*.svg text eol=lf
 asset-library/**/*.json text eol=lf
 asset-library/**/*.md text eol=lf
 asset-library/**/*.html text eol=lf
+asset-library/**/*.js text eol=lf
+asset-library/**/*.css text eol=lf
 asset-library/**/*.png -text
 asset-library/**/*.jpg -text
 asset-library/**/*.ogg -text

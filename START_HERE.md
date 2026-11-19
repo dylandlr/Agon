@@ -20,10 +20,17 @@ mechanics. Windows desktop is the first working delivery target.
 Quick repository checks:
 
 ```sh
+npm ci
 npm run check:repository
 npm run assets:check
+npm run assets:test
 npm run verify
 ```
+
+The current art library has 370 source-derived SVGs, including 333 world sprites.
+The supplied r18 HTML independently matches 330 of those world sprites; current
+source adds three corner fillers. `npm run assets:render` generates contact sheets.
+Layered characters, canvas terrain and Unity content import remain unfinished.
 
 Do not use the historical root README as the current status report. It is retained
 verbatim as part of the colony source. `RECONCILIATION.md` records the initial source
