@@ -4647,8 +4647,11 @@ class Component extends DCLogic {
   componentWillUnmount() { if (this._tipOff) this._tipOff(); clearTimeout(this.timer); clearTimeout(this._boot); clearInterval(this._kt); window.removeEventListener('keydown', this._kd); window.removeEventListener('keyup', this._ku); window.removeEventListener('blur', this._kb); document.removeEventListener('pointerdown', this._pd); window.removeEventListener('pointermove', this._pm); window.removeEventListener('pointerup', this._pu); document.removeEventListener('click', this._pc); if (this._pmo) this._pmo.disconnect(); }
   advance() {
     const { campTodo, DOORS, syncNames, kindSuit, mkAgent, SC, EDGE, faunaPickW, faunaPick, faunaTile, BOUL, BLOCK, elevAt, applyMut, SUBST, windAt, blocked, W, H, FLOORS, WALLS, terAt, inCamp, ANK, mkAnimal, bfs, stepGrade, waterAdj, TERN, BENCH, RIVALS, CAMPC, rs, BIOME, HEARTH, CAVES, BEDS, TABLE, mkChild, CAVE_AT: CAT, CSND, CDEPTH, CRUB , LOWLIGHT, coatBg } = this.E;
-    const r = this.rng, s = this.state;
+    let r = this.rng; const s = this.state;
     const tick = s.tick + 1, night = (tick % 50) >= 25, mindOn = !window.AGON_NOMIND;
+    // debug only: with window.AGON_TR set to a tick number, label every rng draw taken during that one
+    // tick with its call site, so two runs that diverge can be diffed down to the line. Off otherwise.
+    if (window.AGON_TR === tick) { const f0 = r, lg = (window.__TRV = []); r = function () { const v = f0(); lg.push(((new Error().stack || '').split('\n')[2] || '').trim().slice(0, 140)); return v; }; }
     if (tick % 100 === 0 && this._eco) stepPlanetEco(this._eco);
     // roof-fall rubble blocks tiles until it is cleared; the engine's BLOCK set mirrors the state list
     const crub = (s.crub || []).filter((q) => q.until > tick), crubK = new Set(crub.map((q) => q.k));
@@ -5194,7 +5197,11 @@ class Component extends DCLogic {
           // a calm animal (boars and deer settle in narrow gaps and pin colonists there) is shoved aside: the walker takes its tile and the animal takes the walker's
           { const oa = at.get(key(st[0], st[1])); if (oa && !oa.inv && oa.k && !oa.dead && AK[oa.k] && (AK[oa.k].role !== 'pred' || (!(window.AGON_P || {}).noShovePred && (oa.st === 'calm' || oa.st === 'rest') && (a.sat < 0.2 || a.hyd < 0.2))) && (oa.st === 'calm' || oa.st === 'idle' || oa.st === 'graze' || oa.st === 'rest' || oa.own) && Math.max(Math.abs(st[0] - a.x), Math.abs(st[1] - a.y)) === 1) { const ax = a.x, ay = a.y; at.delete(key(ax, ay)); at.delete(key(oa.x, oa.y)); a.x = oa.x; a.y = oa.y; oa.x = ax; oa.y = ay; at.set(key(a.x, a.y), a); at.set(key(oa.x, oa.y), oa); a.face = [Math.sign(a.x - ax), Math.sign(a.y - ay)]; return 'moved'; } }
           { const oc = at.get(key(st[0], st[1])); if (oc && oc.inv && oc.alive && oc !== a && (oc.act === 'shelter' || oc.act === 'idle' || oc.act === 'sleep' || (((window.AGON_P || {}).swapAll) && oc.act === 'move')) && !a.fac === !oc.fac && canStep(a, st[0] - a.x, st[1] - a.y) !== undefined) { const ax = a.x, ay = a.y; at.delete(key(ax, ay)); at.delete(key(oc.x, oc.y)); a.x = oc.x; a.y = oc.y; oc.x = ax; oc.y = ay; at.set(key(a.x, a.y), a); at.set(key(oc.x, oc.y), oc); if (oc.act === 'sleep') { oc.slpM = false; oc.stress = Math.min(1, (oc.stress || 0) + 0.05); oc.bub = 'angry'; oc.bubT = 2; if (r() < 0.5) log.push({ t: tick, text: a.id + ' nudges ' + oc.id + ' awake and steps past', kind: 'info' }); } return 'moved'; } }
-          if (at.has(key(st[0], st[1]))) { const ds = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]].sort(() => r() - 0.5); for (const [dx, dy] of ds) if (canStep(a, dx, dy) && !at.has(key(a.x + dx, a.y + dy))) { place(a, dx, dy); return 'moved'; } }
+          // Fisher-Yates, not .sort(() => r() - 0.5): V8's sort calls the comparator a different number of
+          // times depending on whether the frame is optimized (14 cold, 8 hot for 8 elements) and returns a
+          // different permutation, so a random comparator desynchronises the rng stream the moment the JIT
+          // tiers up. That was the determinism bug. This takes exactly ds.length - 1 draws, always.
+          if (at.has(key(st[0], st[1]))) { const ds = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]; for (let i = ds.length - 1; i > 0; i--) { const j = (r() * (i + 1)) | 0, t = ds[i]; ds[i] = ds[j]; ds[j] = t; } for (const [dx, dy] of ds) if (canStep(a, dx, dy) && !at.has(key(a.x + dx, a.y + dy))) { place(a, dx, dy); return 'moved'; } }
           return 'stuck'; } }
       if (st[2]) return 'here';
       place(a, st[0] - a.x, st[1] - a.y); return 'moved';

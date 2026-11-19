@@ -890,3 +890,88 @@ not a wrapper) and bisect tick 1093's own execution.
 - **Roofs.** Deliberately not started: the point of fixing determinism first was to make the roof
   change measurable, and it still isn't. Say the word and I will either keep hunting at source
   level or build roofs accepting that A/B results below ~2.1 population remain inside the noise.
+
+## r33 — determinism FIXED (root cause: random comparator in Array.prototype.sort)
+
+### Root cause
+`moveTo`'s sidestep fallback shuffled the 8 neighbour offsets with
+`[...8 dirs].sort(() => r() - 0.5)` (old src line 5200). **V8's `Array.prototype.sort` calls the
+comparator a different number of times depending on whether the calling frame is optimized.**
+Measured directly (`tests/determinism/sortcmp` logic, mulberry32 rng, 8 elements):
+
+- unoptimized (cold): **14** comparator calls
+- optimized (hot): **8** comparator calls
+- and the resulting permutation differs in **200 of 201** seeds tested
+
+The comparator draws from the colony rng, so the moment TurboFan tiered up the frame containing
+that sort, the run consumed a different number of draws, the rng stream desynchronised, and every
+later tick diverged. Whether tier-up happened before or after the first time a colonist got boxed
+in decided which way a run went — hence a *fixed* first-divergence tick with *two* stable outcomes.
+
+### Why it took so long to see
+Every way of observing it moved it, because observation changes tier-up timing:
+- `--no-opt` → deterministic (always cold, always 14 draws)
+- `--always-turbofan` / `--always-opt` → deterministic (always hot, always 8)
+- an `Error().stack` label on each draw → pinned to the cold outcome
+- enabling the existing `mvDbg` flag → pinned to the cold outcome
+- inserting 13 no-op `ph()` statements into `advance` → pinned to the hot outcome
+- heavy per-tick full-state dumps → pinned to one outcome
+Only a *counter* on the rng was light enough to leave the bug intact, which is what finally
+measured it: at tick 1093 the two clusters took **129 vs 115** draws, a 14-draw gap — one
+8-element shuffle's worth.
+
+### How it was localised (in order, all evidence in tests/determinism/)
+1. `uninstrumented.py` — real, 5 pages / 3000 ticks gave 4 distinct hashes.
+2. `first_diverging_tick.py` — first difference always tick 1093, two stable clusters.
+3. `exact2` (full-precision `String(number)`, no rounding) — ticks 1..1092 **bit-identical**, so
+   no float drift and nothing to quantize; a non-state input had to be read at 1093.
+4. `classify.py` — classified each page, then diffed all 262 component+engine fields between a
+   genuine canonical and a genuine deviant page at tick 1092: only `__host` (a DOM node) and
+   `_rebakeMs` (a `performance.now()` duration that is written and never read) differed.
+5. `draws3` — draw counts 129 vs 115 at tick 1093. A branch, not arithmetic.
+6. Symptom check: `hap` differed by exactly 0.003 = the `grief ? 0.15 : 0` term in `hapT` times the
+   0.02 EMA rate, i.e. downstream of one colonist stepping to y=11 instead of y=12. A movement flip.
+7. 14 draws ≈ one 8-element random-comparator sort → micro-tested the sort → root cause.
+
+Ruled out along the way, each with evidence, not inspection: clock/DOM/`Math.random` reads anywhere
+in the tick path (0 occurrences across all 1436 lines of `advance`, all of ENGINE scope, and art.js
+outside the LLM mock); render (stubbing it still diverged, and it never touches the rng); the
+satellite painter (killing it diverged *more*); all 12 out-of-state caches; transcendental JIT
+instability (13 functions stable cold vs hot at magnitudes 1 to 1e15); FMA contraction (10 patterns
+stable; x86_64 anyway); every engine rng stream (all fresh-per-call except `rs`, used once at
+worldgen); `MARS` (round-trips through state, `marInit()` returns a fresh object); `bfs`'s reusable
+stamped buffers (stamps strictly increase, cannot collide).
+
+### The fix
+Fisher-Yates in place of the sort: exactly `ds.length - 1` draws, every time, tier-independent,
+and unbiased (a random comparator is not a fair shuffle anyway). One site; it was the only
+randomised or side-effecting sort comparator in the codebase (checked all 18 `.sort(` call sites
+in Main.dc.html and art.js).
+
+### Verified
+`tests/determinism/verify_fixed.py` — fresh pages, no instrumentation, exact full-precision hash:
+- 6000 ticks, default world: 3/3 identical (alive 6, built 50)
+- 9000 ticks, default world: 3/3 identical (alive 6, built 50)
+- 4000 ticks, seed 21 temperate: 3/3 identical
+- 4000 ticks, seed 7 tundra: 3/3 identical
+- no page errors in any run
+`jit_flags.py` — `--no-opt` and default now produce the **same** hash (`1shorr9`); before the fix
+`--no-opt` gave one value and default gave 4 distinct ones. That is the direct confirmation.
+
+### Consequences to know about
+- **Every A/B baseline from r1-r32 is void.** The draw sequence changed, so all previous numbers
+  (the n=15 noise floor of mean 3.00 sd 2.94 included) were measured on a sim that silently forked
+  mid-run. The noise floor has to be re-measured before any future A/B means anything — and it
+  should now be much tighter, since identical inputs finally give identical output.
+- A debug hook stayed in `advance`: `window.AGON_TR = <tick>` labels every rng draw taken during
+  that one tick with its call site. Off by default (one comparison per tick). Determinism was
+  verified with it present.
+- Still open from r32, unchanged: `engineFor` memoizes engines so re-entering a world resumes a
+  dirty one (needs Dyl's call — world persistence vs determinism); `this._culture` read but never
+  written; `mockDecide` uses `Math.random` so LLM-mock mode is still nondeterministic.
+- Seeds 21 and 7 finish 4000 ticks with `built=0` — pawn construction never starts there. Separate
+  issue (shelter discovery), not new.
+
+### Not done
+- **Roofs.** Determinism was the gate and it is now open: a roof change can finally be A/B'd
+  against a stable baseline. Next round.
