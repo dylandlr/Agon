@@ -975,3 +975,77 @@ in Main.dc.html and art.js).
 ### Not done
 - **Roofs.** Determinism was the gate and it is now open: a roof change can finally be A/B'd
   against a stable baseline. Next round.
+
+## r34 — noise floor re-measured; roofs designed, NOT implemented
+
+No source changes. Roofs are a proposal awaiting a go, as asked.
+
+### Determinism gate (passed)
+tests/determinism/verify_fixed.py, exit 0: 6000 and 9000 ticks on the default world and 4000
+ticks on seed 21 temperate and seed 7 tundra, three fresh pages each, exact full-precision
+state hash, no page errors. Repeat-run variance is exactly zero.
+
+### The noise floor
+Old floor (mean 3.00, sd 2.94, n=15) is void twice: the draw sequence changed in r33, and it
+mixed run-to-run nondeterminism with world-to-world variance. Those are different things, and
+the first is now zero.
+
+New panel, tests/noise/panel.py: 12 biomes x seeds 3 and 21 = 24 worlds, fresh page each,
+24 distinct world hashes. At 6000 ticks: alive mean 2.50 sd 3.44 (min 0, max 13, median 0),
+walls 36.25/20.94, built 21.21/19.70, techs 9.38/4.85. Extinct 13/24 = 54%. No page errors.
+Raw rows in /tmp/mar/panel6000.json (ephemeral; re-run the panel to regenerate).
+
+Comparison method for every future A/B: same 24 worlds under both arms, compared as PAIRED
+per-seed differences, never two independent means.
+- Unpaired MDE on this panel: 2.91 colonists at 80% power. Useless against a mean of 2.50.
+- Paired MDE = 2.93 * sd_d / sqrt(24): rho 0.9 -> 0.92, 0.7 -> 1.59, 0.5 -> 2.06, 0 -> 2.91.
+- rho is NOT estimable without a real A/B, so the first roof A/B must report sd_d. Expect it
+  lower than intuition: any change to the draw count makes the arms diverge outright from the
+  tick it first fires. Pairing still removes biome and terrain variance, the big component.
+- Halving the MDE needs 4x the panel = 96 worlds, about 60 minutes.
+
+Surviving population is a BAD primary endpoint: median 0, 54% on the floor. Panel now also
+records `survived` (time to extinction) and `peak`; use time-to-extinction as primary next
+round. Its baseline needs one panel re-run (~15 min) as the roof round's first step.
+
+### The finding that reframes roofs
+Shelter is one predicate, FLOORS.has(tile), used at 8 sites in the tick (5479, 5495, 5497,
+5587, 5663, 5667, 5694, 5915). Floors are NOT gated on walls being built — source comment:
+"a floor is there as soon as the room is opened". So full wall-material insulation (wattle 8,
+timber 10, stone 12) arrives the instant a room opens, with no wall standing.
+
+**Built walls currently buy nothing thermally. The r31 build loop has no survival payoff.**
+
+Panel agrees: built>0 worlds had alive mean 1.94 and 9/16 extinct; built==0 worlds had 3.62
+and 4/8. Small n and confounded by biome, so not proof that building hurts — but no evidence
+it helps, and the code says why it wouldn't.
+
+### Roof proposal (full version in claude/research/roofs-design-and-noise-floor.md)
+A. Roof as the last course (low risk): ROOF set + CAMPR0 blueprint, campTodo returns a room's
+   walls then its roof, shelter moves off FLOORS. **Not as a hard swap** — only 5/24 worlds
+   finish their walls by 6000 ticks (8 never start, 11 partial), so an all-or-nothing gate
+   would strand 19/24. Grade insulation by roof coverage instead; safer AND more realistic
+   than RimWorld's 75% cliff.
+B. Spans, supports, collapse (medium): roof buildable only within span(material) of a support,
+   BFS from supports like CDEPTH; losing the last support collapses it, reusing the existing
+   cave roof-fall (rubble + harm blunt/blast).
+C. Enclosed-room thermal envelope (high): flood-fill the room, relax toward ambient at a rate
+   set by wall ins x perimeter + roof ins x area + door leakage, hearth as interior source.
+   Replaces the flat additive warmth, so every downstream balance number moves.
+
+Recommendation: A with graded coverage, paired against the panel; then B; C only if B holds.
+
+RimWorld reference (from the wiki, never decompiled source): 6-tile support chaining through
+roof, thin-roof collapse 15-30 crush + rubble, constructed roofs cost NO materials and take 65
+ticks, room needs >=75% coverage to decouple from outdoor temperature. The three places to be
+more honest: charge materials, span by material, insulation by coverage.
+
+### Decision needed
+engineFor memoizes engines (ENGINES[id] || (ENGINES[id] = ENGINE(...))), so re-entering a world
+resumes a mutated one — "new game, same seed" is not a fresh world. Clearing it trades world
+persistence (walking back to a visited macro cell) for determinism across re-entry. Which way?
+
+### Still open, unchanged
+this._culture read but never written (cultural inheritance of learning is dead code);
+mockDecide uses Math.random so LLM-mock mode is nondeterministic; seeds 21 and 7 reach 4000
+ticks with built=0 because pawn construction never starts there.

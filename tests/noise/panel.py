@@ -20,7 +20,17 @@ RUN = r"""
   __agon.setWorld(undefined, undefined, biome, seed);
   return new Promise((res) => setTimeout(() => {
     __agon.setState({ playing: false });
-    for (let i = 0; i < ticks; i++) __agon.advance();
+    // time-to-extinction is a far better endpoint than the surviving count: at 6000 ticks the
+    // count is floored at 0 in over half the panel, which throws away most of the signal.
+    let deathTick = -1, peak = 0;
+    for (let i = 0; i < ticks; i++) {
+      __agon.advance();
+      const A0 = __agon.state.agents || [];
+      let n = 0;
+      for (let j = 0; j < A0.length; j++) if (A0[j].alive && !A0[j].fac) n++;
+      if (n > peak) peak = n;
+      if (n === 0 && deathTick < 0) deathTick = __agon.state.tick;
+    }
     const s = __agon.state, store = s.store || {}, A = s.agents || [];
     const live = A.filter(a => a.alive && !a.fac);
     const h = (x) => { let n = 5381; for (let i = 0; i < x.length; i++) { n = ((n * 33) ^ x.charCodeAt(i)) >>> 0; } return n.toString(36); };
@@ -31,6 +41,9 @@ RUN = r"""
     res({
       tick: s.tick,
       todo,
+      deathTick,            // -1 if the colony was still alive at the end
+      survived: deathTick < 0 ? ticks : deathTick,
+      peak,
       alive: live.length,
       walls: __agon.E.WALLS ? __agon.E.WALLS.size : -1,
       built: (store.built || []).length,
@@ -80,7 +93,7 @@ async def main():
         return v, st.mean(v), (st.stdev(v) if len(v) > 1 else 0.0), min(v), max(v)
     print(f"\nPANEL: {len(rows)} worlds, {ticks} ticks, between-seed spread (NOT measurement error)")
     print(f"{'metric':8s} {'mean':>8s} {'sd':>8s} {'min':>5s} {'max':>5s}")
-    for key in ('alive', 'walls', 'built', 'techs'):
+    for key in ('survived', 'peak', 'alive', 'walls', 'built', 'techs'):
         v, m, sd, lo, hi = stats(key)
         print(f"{key:8s} {m:8.2f} {sd:8.2f} {lo:5d} {hi:5d}")
     ext = sum(1 for r in rows if r['alive'] == 0)
