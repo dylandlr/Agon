@@ -1114,3 +1114,85 @@ Target to measure against: worlds completing their walls by 6000 ticks, currentl
 ### Unchanged open items
 engineFor memoization decision still owed; this._culture read but never written; mockDecide uses
 Math.random so LLM-mock mode is nondeterministic.
+
+## r36 — found the real construction blocker. Two levers measured; neither adopted yet.
+
+Defaults unchanged: both new flags (AGON_P.keep, AGON_P.fibre) are off, and AGON_P.bdbg
+instrumentation is off. Nothing shipped as default this round.
+
+### Panel-scale determinism and inertness
+The keep A/B's arm A reproduced the r34 panel on **24/24 worlds** (alive mean 2.50, built 21.21,
+identical per world on alive+built+techs). That is the strongest determinism/inertness check run
+so far — stronger than verify_fixed, which is only 4 cases.
+
+### Answering the r35 candidate list
+1. **Longer horizon: closed.** 12000 ticks lifts wall completion only 5/24 -> 8/24. Not the fix.
+2. **BUILDKEEP: real but minor.** keep=3 moved completion 5/24 -> 8/24 (5 gained, 2 lost, exact
+   p=0.45, unresolved). Survival dead flat: alive diff exactly 0.00, t=0.00, MDE 1.01 (rho 0.89,
+   much tighter pairing than the roof A/B's 0.45-0.71). The r31 fear that building takes the last
+   log and freezes the colony **does not materialise at keep=3** — useful negative.
+3. **Build priority: NOT the blocker**, despite what one world suggested. The single-world probe
+   showed 1835 buildable ticks against 237 agent-ticks of building and I nearly acted on it; the
+   24-world panel says otherwise. Mean share of ticks: materials at/below reserve **41.4%**,
+   nobody fed/watered 20.0%, queue empty 17.2%, buildable 17.9%, no shelter tech 3.6%.
+4. Roof cost: not tested; superseded by the finding below.
+
+### The actual blocker (design defect, not tuning)
+`wallMatFor` returns **wattle** unless the colony has carpentry (-> timber) or BOTH shaping and
+leverage (-> stone). `BUILDMAT` maps **both wattle and timber to wood**. So in a treeless biome a
+colony must discover two techs before placing one wall tile, while holding stone and fiber it
+cannot spend. Of the nine material-blocked worlds, five average **0.0-0.6 wood**, so BUILDKEEP is
+irrelevant there — the resource never arrives.
+
+Evidence: tundra s21, highlands s3, alpine s21 have **no wall material chosen at all** while
+holding 12/42/25 stone and 37/49/7 fiber. temperate s21 and badlands s21 chose timber holding
+0 and 1 wood. Worlds that build (temperate s3) chose stone and had both.
+
+This also explains r35: roofs looked unevaluable because most colonies cannot build *walls*.
+
+### Fiber-costed wattle (AGON_P.fibre) — works, but taxes technology
+Wattle is woven withies, so fiber is the more honest cost. Paired A/B, 24 worlds, 6000 ticks:
+
+| metric | A | B | B-A | t | rho | MDE |
+|---|---|---|---|---|---|---|
+| survived | 4896.96 | 4774.96 | -122.00 | -0.70 | 0.80 | 511.94 |
+| alive | 2.50 | 2.12 | -0.38 | -0.86 | 0.78 | 1.28 |
+| peak | 13.46 | 13.46 | 0.00 | 0.00 | 0.98 | 0.18 |
+| built | 21.21 | 27.21 | +6.00 | 1.75 | 0.61 | 10.02 |
+| techs | 9.38 | 8.54 | **-0.83** | **-1.79** | 0.90 | 1.36 |
+
+**Never placed a tile: 8/24 -> 4/24** — halved, which is the mechanism working. Finished walls
+5/24 -> 8/24. Extinct 13/24 both, McNemar 1/1.
+
+But `techs` is the largest |t| in the table and points the wrong way (p ~ 0.09, 2 better / 6
+worse). Fiber is contested between walls, clothing and tools, so building now costs technology.
+Split by wood availability:
+
+| group | n | techs | built | alive | zero-tile |
+|---|---|---|---|---|---|
+| wood-poor (avg < 6) | 6 | -1.50 | +15.17 | -0.17 | 5 -> 3 |
+| wood-ok (avg >= 6) | 18 | -0.61 | +2.94 | -0.44 | 3 -> 1 |
+
+I expected the tax to fall only on wood-rich worlds (unnecessary diversion) — it does not, it is
+worse in the poor ones. So blanket substitution is not the answer.
+
+### Proposal for next round: material fallback, not substitution
+Make the wall cost pick what is actually to hand — spend wood when the colony has it, else fiber,
+else stone where the techs allow — rather than binding wattle to one resource. That leaves the 18
+wood-rich worlds exactly as they are today (no tech tax, no change) and unblocks the 5 dry ones.
+People build from what is at hand; this is more realistic than either current behaviour.
+
+Open question for Dyl: in a wood-poor world, fiber-built walls still cost about 1.5 techs. Is
+shelter worth that trade, or should wall material be cheaper per tile so it competes less with
+tools? That is a design call, not a measurement.
+
+### Also noted
+- temperate s3 spends 1737 agent-ticks choosing to build and places 39 tiles (44.5 agent-ticks
+  per tile, against 3-6 everywhere else). Some pathological re-targeting. Not chased.
+- Five worlds are blocked by food/water, not materials (volcanic s3 unfed 81%, jungle s3 73%,
+  highlands s21 72%, alpine s3 72%). No material fix helps them.
+- The git remote reports dylandlr/Agon has moved; pushes follow a redirect. Worth updating origin.
+
+### Unchanged open items
+engineFor memoization decision still owed; this._culture read but never written; mockDecide uses
+Math.random so LLM-mock mode is nondeterministic.
