@@ -4697,7 +4697,11 @@ class Component extends DCLogic {
     // stock. r31 set it at 10 after building took the last log and tundra froze. The 12000-tick panel
     // says it is now the dominant brake: materials sit at or below it on 41% of ticks, and six of the
     // 24 worlds are starved 98-99% of the time and never place a single tile. AGON_P.keep A/Bs it.
-    const BUILDMAT = { wattle: 'wood', timber: 'wood', stone: 'stone' }, BUILDKEEP = (window.AGON_P || {}).keep ?? 10;
+    // Wattle is woven withies, and it currently costs wood, the same as timber. In a treeless biome
+    // that means a colony must discover both shaping and leverage before it can place one wall tile,
+    // while sitting on stone and fiber it cannot use: five of the 24 panel worlds hold 7-362 fiber
+    // and average 0.0-0.6 wood, and never build. AGON_P.fibre A/Bs costing wattle fiber instead.
+    const BUILDMAT = { wattle: (window.AGON_P || {}).fibre ? 'fiber' : 'wood', timber: 'wood', stone: 'stone' }, BUILDKEEP = (window.AGON_P || {}).keep ?? 10;
     // Roofs (AGON_P.roof). Without one, shelter is the floor tile itself, which is why a colony
     // today gets full insulation with no wall standing. With roofs on: a roof over the tile is what
     // keeps rain off and holds heat in, insulation scales with how much of the room is actually
