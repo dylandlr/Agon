@@ -50,19 +50,20 @@ RUN = r"""
       techs: (store.techs || []).length,
       food: Math.round((store.food || 0) * 100) / 100,
       hash: h(JSON.stringify(A) + '|' + JSON.stringify(store)),
+      BS: window.__BS || null,
       biome: s.biome, wseed: s.wseed
     });
   }, 1800));
 }
 """
 
-async def run_one(ticks, seed, biome):
+async def run_one(ticks, seed, biome, flags=''):
     async with async_playwright() as p:
         b = await p.chromium.launch()
         pg = await b.new_page(viewport={'width': 1000, 'height': 640})
         errs = []
         pg.on('pageerror', lambda e: errs.append(str(e)))
-        await pg.add_init_script("window.AGON_P={paused:1}")
+        await pg.add_init_script("window.AGON_P={paused:1%s}" % (',' + flags if flags else ''))
         await pg.goto('file:///tmp/ab/app_zoom/Agon.html')
         for _ in range(400):
             if await pg.evaluate("()=>window.__agon?1:null"): break
@@ -75,10 +76,11 @@ async def run_one(ticks, seed, biome):
 async def main():
     ticks = int(sys.argv[1]) if len(sys.argv) > 1 else 6000
     out_path = sys.argv[2] if len(sys.argv) > 2 else '/tmp/mar/panel.json'
+    flags = sys.argv[3] if len(sys.argv) > 3 else ''
     rows = []
     t0 = time.time()
     for i, (biome, seed) in enumerate(PANEL):
-        r, errs = await run_one(ticks, seed, biome)
+        r, errs = await run_one(ticks, seed, biome, flags)
         r['seed'] = seed
         r['errs'] = errs[:2]
         rows.append(r)

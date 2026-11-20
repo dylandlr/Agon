@@ -4709,6 +4709,22 @@ class Component extends DCLogic {
     const lex = Object.assign({}, s.lex || Object.fromEntries(A.lexSeed().map((g) => [g, 0]))); let lexHit = false;
     const agents = s.agents.map((a) => ({ ...a, inv: { ...a.inv }, mats: { ...(a.mats || {}) }, gear: { ...(a.gear || {}) }, work: { hunt: 0, gather: 0, craft: 0, haul: 0, cold: 0, stormed: 0, sheltered: 0, sawwall: 0, ...(a.work || {}) }, mind: (a.mind || []).slice(), pers: a.pers || [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5], th: a.th || [0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125], thS: (a.thS || [0, 0, 0, 0, 0, 0, 0, 0]).slice(), thN: a.thN || 0, wn: (a.wn || []).map((w) => ({ ...w })), mis: { ...(a.mis || {}) }, know: { ...(a.know || {}) }, xp: { ...(a.xp || {}) }, rgU: a.rgU ? { ...a.rgU } : undefined, bel: Object.fromEntries(Object.entries(a.bel || {}).map(([k, b]) => [k, { ...b }])) }));
     const store = { built: ((s.store || {}).built || []).slice(), shelterT: (s.store || {}).shelterT ?? null, water: (s.store || {}).water || 0, wallMat: (s.store || {}).wallMat || null, norms: (s.store || {}).norms || {}, mats: { ...((s.store || {}).mats || {}) }, food: (s.store || {}).food || 0, items: ((s.store || {}).items || []).slice(), known: ((s.store || {}).known || []).slice(), techs: ((s.store || {}).techs || []).slice(), insight: (s.store || {}).insight || 0, bad: (s.store || {}).bad || 0, spoiled: (s.store || {}).spoiled || 0, lots: ((s.store || {}).lots || []).map((l) => l.slice()), lk: (s.store || {}).lk || 'berry', know: { ...((s.store || {}).know || {}) }, forced: ((s.store || {}).forced || []).slice(), rec: { ...((s.store || {}).rec || {}) }, plots0: (s.store || {}).plots0, cult: (s.store || {}).cult };
+    // AGON_P.bdbg: which of the four build-gate conditions actually stalls construction. Snapshot at
+    // the top of the tick, before the agent loop mutates the queue or the stores. Off by default.
+    if ((window.AGON_P || {}).bdbg) {
+      const D = (window.__BS = window.__BS || { ticks: 0, noTech: 0, qEmpty: 0, noMat: 0, unfed: 0, ok: 0, acts: 0, matSum: 0 });
+      D.ticks++;
+      const mat = store.mats[BUILDMAT[store.wallMat || 'wattle']] || 0;
+      D.matSum += mat;
+      if (!store.techs.includes('shelter')) D.noTech++;
+      else if (!BUILDQ.length) D.qEmpty++;
+      else if (mat <= BUILDKEEP) D.noMat++;
+      else {
+        let any = false;
+        for (const a of agents) if (a.alive && !a.fac && a.sat > 0.45 && a.hyd > 0.4) { any = true; break; }
+        if (any) D.ok++; else D.unfed++;
+      }
+    }
     const lorePend = [];
     // emergent knowledge: a technology exists only while the colonists who are alive still know enough to satisfy its pattern
     if (s.disc === 'emergent' && (tick % 4 === 0 || !(s.store || {}).know)) {
@@ -5823,12 +5839,14 @@ class Component extends DCLogic {
         else if (hereP && hereP.g === -1 && Math.floor(tick / 500) % 4 !== 3) { hereP.g = 0; act = 'gather'; a.bub = 'gather'; a.bubT = 2; log.push({ t: tick, text: a.id + ' sows a crop plot', kind: 'info' }); }
         else { const ripe = plots.some((q) => q.g >= 1); const res = moveTo(a, (x, y) => plots.some((q) => q.x === x && q.y === y && (ripe ? q.g >= 1 : tillable(q, a)))); act = res === 'moved' ? 'move' : 'idle'; }
       } else if (G === 'build' && !a.fac && BUILDQ.length) {
+        if (window.__BS) window.__BS.chose = (window.__BS.chose || 0) + 1;
         const mk = BUILDMAT[store.wallMat || 'wattle'];
         const near = BUILDQ.map((k) => { const [x, y] = k.split(',').map(Number); return { k, x, y, d: cheb(a, { x, y }) }; }).sort((p, q) => p.d - q.d)[0];
         if (near && near.d <= 1 && (store.mats[mk] || 0) > BUILDKEEP) {
           store.mats[mk] -= 1; BUILTS.add(near.k); builtAdded = true;
           const qi = BUILDQ.indexOf(near.k); if (qi >= 0) BUILDQ.splice(qi, 1);
           a.work.build = (a.work.build || 0) + 1; a.rw = (a.rw || 0) + 0.3;
+          if (window.__BS) window.__BS.acts++;
           act = 'build'; a.bub = 'craft'; a.bubT = 2;
         } else if (near) { const res = moveTo(a, (x, y) => cheb({ x, y }, near) <= 1); act = res === 'moved' ? 'move' : 'idle'; }
         else act = 'idle';
