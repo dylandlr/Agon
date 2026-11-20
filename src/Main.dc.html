@@ -4693,7 +4693,11 @@ class Component extends DCLogic {
     const BUILTS = new Set((s.store && s.store.built) || []);
     let builtAdded = false;
     const BUILDQ = campTodo(BUILTS);
-    const BUILDMAT = { wattle: 'wood', timber: 'wood', stone: 'stone' }, BUILDKEEP = 10;
+    // BUILDKEEP is the material a colony refuses to spend on walls, so clothing and tools still have
+    // stock. r31 set it at 10 after building took the last log and tundra froze. The 12000-tick panel
+    // says it is now the dominant brake: materials sit at or below it on 41% of ticks, and six of the
+    // 24 worlds are starved 98-99% of the time and never place a single tile. AGON_P.keep A/Bs it.
+    const BUILDMAT = { wattle: 'wood', timber: 'wood', stone: 'stone' }, BUILDKEEP = (window.AGON_P || {}).keep ?? 10;
     // Roofs (AGON_P.roof). Without one, shelter is the floor tile itself, which is why a colony
     // today gets full insulation with no wall standing. With roofs on: a roof over the tile is what
     // keeps rain off and holds heat in, insulation scales with how much of the room is actually

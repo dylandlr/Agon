@@ -83,6 +83,13 @@ async def main():
         print(f"{s['metric']:9s} {s['mean_a']:7.2f} {s['mean_b']:7.2f} {s['mean_diff']:7.2f} "
               f"{s['sd_d']:7.2f} {s['se']:6.2f} {s['t']:6.2f} {s['rho']:6.2f} {s['mde']:6.2f}   "
               f"{s['better']}/{s['worse']}/{s['same']}")
+    # the r36 target: worlds that actually finish what they start
+    finA = sum(1 for r in A if r['todo'] == 0 and r['built'] > 0)
+    finB = sum(1 for r in B if r['todo'] == 0 and r['built'] > 0)
+    zeroA = sum(1 for r in A if r['built'] == 0)
+    zeroB = sum(1 for r in B if r['built'] == 0)
+    print(f"\nfinished walls: A {finA}/{len(A)}   B {finB}/{len(B)}"
+          f"      never placed a tile: A {zeroA}/{len(A)}   B {zeroB}/{len(B)}")
     exA = sum(1 for r in A if r['alive'] == 0)
     exB = sum(1 for r in B if r['alive'] == 0)
     print(f"\nextinct: A {exA}/{len(A)}   B {exB}/{len(B)}")
