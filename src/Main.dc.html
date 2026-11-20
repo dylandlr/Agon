@@ -2890,10 +2890,39 @@ const DOORS_ALL = DOORS.slice(), BEDS_ALL = BEDS.slice(), FURN_BLK = { fire: [HE
 let campSig = '';
 // What there is to build right now: a tile of an opened room that nobody has raised yet.
 // Walls first -- a room with its floor down and no walls keeps nothing out.
+// A roof covers a room's interior floor tiles. Roof keys are floor keys, and CAMPW0 and CAMPF0 are
+// disjoint, so wall keys and roof keys can share one BUILT set without colliding.
+let CAMPR0 = null;
+function campRoof0() {
+  if (CAMPR0) return CAMPR0;
+  CAMPR0 = new Set();
+  for (const k of CAMPF0) { const [x, y] = k.split(',').map(Number), g = campGrp(x, y); if (g && g.slice(0, 4) === 'room') CAMPR0.add(k); }
+  return CAMPR0;
+}
+const ROOF = new Set();
+// Coverage per room, cached on campSig: a roof is raised tile by tile, so shelter arrives by
+// degrees rather than switching on. Walls earn wind protection before any roof exists.
+let covCache = null, covSig = null;
+function campCov(g) {
+  if (covSig !== campSig) {
+    covCache = {};
+    const bump = (gg, f, v) => { const c = covCache[gg] || (covCache[gg] = { wt: 0, wb: 0, rt: 0, rb: 0 }); c[f + 't']++; if (v) c[f + 'b']++; };
+    for (const k of CAMPW0) { const [x, y] = k.split(',').map(Number), gg = campGrp(x, y); if (gg && gg.slice(0, 4) === 'room') bump(gg, 'w', WALLS.has(k)); }
+    for (const k of campRoof0()) { const [x, y] = k.split(',').map(Number), gg = campGrp(x, y); if (gg) bump(gg, 'r', ROOF.has(k)); }
+    covSig = campSig;
+  }
+  const c = covCache[g];
+  if (!c) return { wall: 0, roof: 0 };
+  return { wall: c.wt ? c.wb / c.wt : 0, roof: c.rt ? c.rb / c.rt : 0 };
+}
 function campTodo(built) {
-  const wq = [];
-  for (const k of CAMPW0) { if (built.has(k)) continue; const [x, y] = k.split(',').map(Number), g = campGrp(x, y); if (g && g.slice(0, 4) === 'room' && CAMPON[g]) wq.push(k); }
-  return wq;
+  const wq = [], left = {};
+  for (const k of CAMPW0) { const [x, y] = k.split(',').map(Number), g = campGrp(x, y); if (!(g && g.slice(0, 4) === 'room' && CAMPON[g])) continue; if (!built.has(k)) { wq.push(k); left[g] = (left[g] || 0) + 1; } }
+  if (!(window.AGON_P || {}).roof) return wq;
+  // a room's roof is only worth raising once its own walls carry it
+  const rq = [];
+  for (const k of campRoof0()) { if (built.has(k)) continue; const [x, y] = k.split(',').map(Number), g = campGrp(x, y); if (g && CAMPON[g] && !left[g]) rq.push(k); }
+  return wq.concat(rq);
 }
 function applyCamp(st) {
   const P = window.AGON_P || {}, full = st.disc !== 'emergent' || P.fullCamp, T = (st.store && st.store.techs) || [];
@@ -2948,6 +2977,8 @@ function applyCamp(st) {
   const wallRuin = (k) => tileRuin(k) && h01(k + '|' + (R.tick || 0)) >= fall;
   for (const k of CAMPW0) { if (tileOn(k) || wallRuin(k)) WALLS.add(k); else WALLS.delete(k); }
   for (const k of CAMPF0) { if (tileOn(k) || tileRuin(k)) FLOORS.add(k); else FLOORS.delete(k); }
+  ROOF.clear();
+  if ((window.AGON_P || {}).roof) for (const k of campRoof0()) { const [x, y] = k.split(',').map(Number), g = campGrp(x, y); if (g && on[g] && (full || BUILT.has(k))) ROOF.add(k); }
   for (const k of CAMPK) { const [x, y] = k.split(',').map(Number); if (x >= 0 && y >= 0 && x < W && y < H) TILESX[y * W + x] = tileOn(k) ? TILES[y * W + x] : TILES0[y * W + x]; }
   DOORS.length = 0; for (const d of DOORS_ALL) { const k = key(d.x, d.y); if (!CAMPK.has(k) || (ANXDK.has(k) ? on.annex : tileOn(k))) DOORS.push(d); }
   BEDS.length = 0; for (const b of BEDS_ALL) { const k = key(b[0], b[1]); if (ANXK.has(k) ? on.annex : on.bedding) BEDS.push(b); }
@@ -3542,7 +3573,7 @@ const NOTILE = { style: 'visibility: hidden' };
     for (const i of out) TER[i] = 1; grassN += out.length; if (out.length) _TG = null; return out;
   };
   const applyGrass = (list) => { let n = 0; for (const i of list || []) if (TER[i] === 0) { TER[i] = 1; n++; } grassN += n; if (n) _TG = null; return n; };
-  return { campTodo, grassSpread, applyGrass, FLOWER, WALLMATS, wallMatFor, TILESX, campSig: () => campSig, campGrp, ANX, NROOM, TERSW: () => [SOILB[0], GRASSB[0], FORESTC, '#7b7164', '#3d7292', '#8c8174', '#2a211a', '#2a211a', '#d9461a', '#2a1f3a', SANDC, '#e4eef4', '#6d6256', '#0d0907', '#bfe3f2', '#8a7c68'], doorParts, RAMPS, seaBed, seaFloorInner, SEATM, isSea, seaAdj, seaDepth, nearSea, hasSea: () => !!SEAM, LITH, CAVE_AT, DOORS, CAMPON, applyCamp, TILES0, syncNames, coatBg, LOWLIGHT: (MAC ? MAC.temp : 11 + 1.6 * B.t) < 9, poolOf: () => { faunaW(); return POOL; }, fish0: () => { const o = {}; for (const q of AMB.fish) o[q.k] = (o[q.k] || 0) + 2.5; return o; }, waterN: (() => { let n = 0; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (terAt(x, y) === 4 && !isSea(x, y)) n++; return n; })(), seaN: (() => { let n = 0; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (isSea(x, y)) n++; return n; })(), mar0: () => marInit(), zoneN: () => ZONEN, waterAt: (x, y) => terAt(x, y) === 4, kindSuit, BIOMEK, SC, EDGE, faunaPickW, faunaPick, faunaTile, MINI_COL, SANDF: (x, y) => SANDF(x, y), SNOWF: (x, y) => SNOWF(x, y), OX, OY, CAMP, SCENERY, TILE, TORDER, GRID, COVB, GTH, FTH, FERTN, FRICH, FGRAV, MWAT, veilUri, CRUB, CSND: CAVES.CSND, CDEPTH: CAVES.CDEPTH, CAVE_AT, CAVE_IN, caveUri, NOTILE, terrGroups, waterTile, MUT, SUBST, applyMut, GEN_DEFAULT, GP, WIND, windF, windAt, terrInner, waterMaskInner, shoreMaskInner, BIOME, RIVER, FORDS, OASES, STONES, RIVALS, RIVAL_PROPS, OX, OY, rs, inCamp, CAMPC, LAKES, isLake, MASS, HILLS, ELEV, elevAt, bandAt, elevM, TER, terAt, CAVES, BOUL, WALLS, FLOORS, BLOCK, BEDS, doors, sh2, TABLE, CRATES, HEARTH, STOOLS, SHELVES, BENCH, BARRELS, RUG, WINDOWS, DOORS, doorOpen, blocked, waterAdj, bfs, stepGrade, STEPT, hull, LAMP, shadowPath, occLayers, svgUri, darker, svgBg, CI, lobesOf, canopy, star, poly, pineSvg, deadSvg, bushSvg, rockSvg, BIRD, bflySvg, FISH, spr, SPRITE_CSS, OBJS, addObj, SCENERY, TREE, bgCss, fl, doorParts, GLYPH, statusesOf, injuriesOf, fightTag, msgKeyOf, pfx, fxOf, EMBERS, bedParts, SHADOWS, shapeSt, FLOWER, inB, nearWater, TILES, BANDC, topoInner, TERN, gradeOf, tileLines, inPoly, ANK, ASZ, LHT, ALH, PLH, DLH, CANOPY_LH, ABB, AFT, pawnBox, animalBox, bushBox, dynTargets, groundTarget, resolveT, findTarget, hitTest, AMB, makeWorld, WPX, HPX, MINI_COL, MINI_URI, W, H, FORM, mkAnimal, mkAgent, mkChild, MTN };
+  return { campTodo, ROOF, campCov, campRoof0, grassSpread, applyGrass, FLOWER, WALLMATS, wallMatFor, TILESX, campSig: () => campSig, campGrp, ANX, NROOM, TERSW: () => [SOILB[0], GRASSB[0], FORESTC, '#7b7164', '#3d7292', '#8c8174', '#2a211a', '#2a211a', '#d9461a', '#2a1f3a', SANDC, '#e4eef4', '#6d6256', '#0d0907', '#bfe3f2', '#8a7c68'], doorParts, RAMPS, seaBed, seaFloorInner, SEATM, isSea, seaAdj, seaDepth, nearSea, hasSea: () => !!SEAM, LITH, CAVE_AT, DOORS, CAMPON, applyCamp, TILES0, syncNames, coatBg, LOWLIGHT: (MAC ? MAC.temp : 11 + 1.6 * B.t) < 9, poolOf: () => { faunaW(); return POOL; }, fish0: () => { const o = {}; for (const q of AMB.fish) o[q.k] = (o[q.k] || 0) + 2.5; return o; }, waterN: (() => { let n = 0; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (terAt(x, y) === 4 && !isSea(x, y)) n++; return n; })(), seaN: (() => { let n = 0; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (isSea(x, y)) n++; return n; })(), mar0: () => marInit(), zoneN: () => ZONEN, waterAt: (x, y) => terAt(x, y) === 4, kindSuit, BIOMEK, SC, EDGE, faunaPickW, faunaPick, faunaTile, MINI_COL, SANDF: (x, y) => SANDF(x, y), SNOWF: (x, y) => SNOWF(x, y), OX, OY, CAMP, SCENERY, TILE, TORDER, GRID, COVB, GTH, FTH, FERTN, FRICH, FGRAV, MWAT, veilUri, CRUB, CSND: CAVES.CSND, CDEPTH: CAVES.CDEPTH, CAVE_AT, CAVE_IN, caveUri, NOTILE, terrGroups, waterTile, MUT, SUBST, applyMut, GEN_DEFAULT, GP, WIND, windF, windAt, terrInner, waterMaskInner, shoreMaskInner, BIOME, RIVER, FORDS, OASES, STONES, RIVALS, RIVAL_PROPS, OX, OY, rs, inCamp, CAMPC, LAKES, isLake, MASS, HILLS, ELEV, elevAt, bandAt, elevM, TER, terAt, CAVES, BOUL, WALLS, FLOORS, BLOCK, BEDS, doors, sh2, TABLE, CRATES, HEARTH, STOOLS, SHELVES, BENCH, BARRELS, RUG, WINDOWS, DOORS, doorOpen, blocked, waterAdj, bfs, stepGrade, STEPT, hull, LAMP, shadowPath, occLayers, svgUri, darker, svgBg, CI, lobesOf, canopy, star, poly, pineSvg, deadSvg, bushSvg, rockSvg, BIRD, bflySvg, FISH, spr, SPRITE_CSS, OBJS, addObj, SCENERY, TREE, bgCss, fl, doorParts, GLYPH, statusesOf, injuriesOf, fightTag, msgKeyOf, pfx, fxOf, EMBERS, bedParts, SHADOWS, shapeSt, FLOWER, inB, nearWater, TILES, BANDC, topoInner, TERN, gradeOf, tileLines, inPoly, ANK, ASZ, LHT, ALH, PLH, DLH, CANOPY_LH, ABB, AFT, pawnBox, animalBox, bushBox, dynTargets, groundTarget, resolveT, findTarget, hitTest, AMB, makeWorld, WPX, HPX, MINI_COL, MINI_URI, W, H, FORM, mkAnimal, mkAgent, mkChild, MTN };
 }
 // ---- tier link: planet cell -> region map -> local window. Each tier is generated from the one above it.
 const PLANETS = {}, MACROS = {};
@@ -4646,7 +4677,7 @@ class Component extends DCLogic {
     const loop = () => { if (this.state.playing && !(this.state.menuOpen && !window.AGON_P)) { this.advance(); const tk = this.state.tick; if (tk > 0 && this.optGet('autosave', 200) > 0 && tk % this.optGet('autosave', 200) === 0 && this._lastAuto !== tk && !this.state.menuOpen) { this._lastAuto = tk; this.saveGame('auto', 'Autosave'); } } else this._freeze(true); this.timer = setTimeout(loop, window.AgonArt.TICK_MS / this.state.speed); }; this.timer = setTimeout(loop, window.AgonArt.TICK_MS); }
   componentWillUnmount() { if (this._tipOff) this._tipOff(); clearTimeout(this.timer); clearTimeout(this._boot); clearInterval(this._kt); window.removeEventListener('keydown', this._kd); window.removeEventListener('keyup', this._ku); window.removeEventListener('blur', this._kb); document.removeEventListener('pointerdown', this._pd); window.removeEventListener('pointermove', this._pm); window.removeEventListener('pointerup', this._pu); document.removeEventListener('click', this._pc); if (this._pmo) this._pmo.disconnect(); }
   advance() {
-    const { campTodo, DOORS, syncNames, kindSuit, mkAgent, SC, EDGE, faunaPickW, faunaPick, faunaTile, BOUL, BLOCK, elevAt, applyMut, SUBST, windAt, blocked, W, H, FLOORS, WALLS, terAt, inCamp, ANK, mkAnimal, bfs, stepGrade, waterAdj, TERN, BENCH, RIVALS, CAMPC, rs, BIOME, HEARTH, CAVES, BEDS, TABLE, mkChild, CAVE_AT: CAT, CSND, CDEPTH, CRUB , LOWLIGHT, coatBg } = this.E;
+    const { ROOF, campCov, campGrp, campRoof0, campTodo, DOORS, syncNames, kindSuit, mkAgent, SC, EDGE, faunaPickW, faunaPick, faunaTile, BOUL, BLOCK, elevAt, applyMut, SUBST, windAt, blocked, W, H, FLOORS, WALLS, terAt, inCamp, ANK, mkAnimal, bfs, stepGrade, waterAdj, TERN, BENCH, RIVALS, CAMPC, rs, BIOME, HEARTH, CAVES, BEDS, TABLE, mkChild, CAVE_AT: CAT, CSND, CDEPTH, CRUB , LOWLIGHT, coatBg } = this.E;
     let r = this.rng; const s = this.state;
     const tick = s.tick + 1, night = (tick % 50) >= 25, mindOn = !window.AGON_NOMIND;
     // debug only: with window.AGON_TR set to a tick number, label every rng draw taken during that one
@@ -4663,6 +4694,17 @@ class Component extends DCLogic {
     let builtAdded = false;
     const BUILDQ = campTodo(BUILTS);
     const BUILDMAT = { wattle: 'wood', timber: 'wood', stone: 'stone' }, BUILDKEEP = 10;
+    // Roofs (AGON_P.roof). Without one, shelter is the floor tile itself, which is why a colony
+    // today gets full insulation with no wall standing. With roofs on: a roof over the tile is what
+    // keeps rain off and holds heat in, insulation scales with how much of the room is actually
+    // roofed, and walls alone still break the wind. Off, every expression below reduces to today's.
+    const ROOFON = !!(window.AGON_P || {}).roof;
+    const shelt = (x, y) => (ROOFON ? ROOF.has(key(x, y)) : FLOORS.has(key(x, y)));
+    const covAt = (x, y) => { if (!ROOFON) return null; const g = campGrp(x, y); return g && g.slice(0, 4) === 'room' ? campCov(g) : null; };
+    // what counts as worth walking to: a roof if the colony has raised any, otherwise the floor,
+    // which still breaks the wind. Without this the seek test and its target disagree and a cold
+    // colonist walks to a floor, is still counted exposed, and sets off again every tick.
+    const shelOK = (x, y) => ((ROOFON && ROOF.size) ? ROOF.has(key(x, y)) : FLOORS.has(key(x, y)));
     // the colony's signs: what it has agreed a mark means. Seeded with the signs a body can make on its own.
     const lex = Object.assign({}, s.lex || Object.fromEntries(A.lexSeed().map((g) => [g, 0]))); let lexHit = false;
     const agents = s.agents.map((a) => ({ ...a, inv: { ...a.inv }, mats: { ...(a.mats || {}) }, gear: { ...(a.gear || {}) }, work: { hunt: 0, gather: 0, craft: 0, haul: 0, cold: 0, stormed: 0, sheltered: 0, sawwall: 0, ...(a.work || {}) }, mind: (a.mind || []).slice(), pers: a.pers || [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5], th: a.th || [0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125], thS: (a.thS || [0, 0, 0, 0, 0, 0, 0, 0]).slice(), thN: a.thN || 0, wn: (a.wn || []).map((w) => ({ ...w })), mis: { ...(a.mis || {}) }, know: { ...(a.know || {}) }, xp: { ...(a.xp || {}) }, rgU: a.rgU ? { ...a.rgU } : undefined, bel: Object.fromEntries(Object.entries(a.bel || {}).map(([k, b]) => [k, { ...b }])) }));
@@ -5476,7 +5518,7 @@ class Component extends DCLogic {
       // somebody else has solved it. Each is a tick count carried on the colonist, so it is lost
       // when they die, exactly like the craft signatures they learn at the bench.
       if (!a.fac) {
-        const tHere = terAt(a.x, a.y), underRoof = FLOORS.has(key(a.x, a.y));
+        const tHere = terAt(a.x, a.y), underRoof = shelt(a.x, a.y);
         if (a.temp < -0.5 && !underRoof) a.work.cold = (a.work.cold || 0) + 1;
         if (wet && !underRoof && tHere !== 6 && tHere !== 7) a.work.stormed = (a.work.stormed || 0) + 1;
         if (tHere === 6 || tHere === 7) a.work.sheltered = (a.work.sheltered || 0) + 1;
@@ -5492,10 +5534,13 @@ class Component extends DCLogic {
         const tphA = tick % 50, seasonA = Math.floor(tick / 500) % 4, wthA = wthAt(tick);
         const amb = seasonTemp(tick) + BIOME.t + 6 * Math.cos(2 * Math.PI * (tphA - 12.5) / 50) + (wthA === 'cold snap' ? -9 : wthA === 'heat wave' ? 10 : 0);
         const inBed = a.act === 'sleep' && a.bed >= 0 && BEDS[a.bed] && BEDS[a.bed][0] === a.x && BEDS[a.bed][1] === a.y, huddle = agents.reduce((n, b) => n + (b !== a && b.alive && cheb(a, b) <= 1 ? 1 : 0), 0), leeK = key(a.x, a.y - 1), lee = BOUL.has(leeK) || WALLS.has(leeK) || terAt(a.x, a.y - 1) === 5 || terAt(a.x, a.y - 1) === 12, tentNear = (s.tents || []).some((q) => q.t > tick && cheb(a, q) <= 1),
-          warmth = (FLOORS.has(key(a.x, a.y)) ? (a.fac ? 6 : this.E.WALLMATS[store.wallMat || 'wattle'].ins) : 0) + (inBed ? 5 : 0) + (terAt(a.x, a.y) >= 6 ? 6 : 0) + (cheb(a, { x: HEARTH[0], y: HEARTH[1] }) <= 4 && techs.includes('firecraft') ? 10 : 0) + (a.fac && a.home && cheb(a, { x: a.home[0], y: a.home[1] }) <= 3 ? 10 : 0) + Math.min(6, 2 * huddle) + (lee ? 3 : 0) + (tentNear ? 8 : 0); // bodies close together share heat (+2 each, up to 3), a rock or wall to windward breaks the wind, a hide windbreak keeps most of it off
+          rcov = ROOFON ? (shelt(a.x, a.y) ? Math.max(0.25, (covAt(a.x, a.y) || { roof: 0 }).roof) : 0) : (FLOORS.has(key(a.x, a.y)) ? 1 : 0),
+          warmth = rcov * (a.fac ? 6 : this.E.WALLMATS[store.wallMat || 'wattle'].ins) + (inBed ? 5 : 0) + (terAt(a.x, a.y) >= 6 ? 6 : 0) + (cheb(a, { x: HEARTH[0], y: HEARTH[1] }) <= 4 && techs.includes('firecraft') ? 10 : 0) + (a.fac && a.home && cheb(a, { x: a.home[0], y: a.home[1] }) <= 3 ? 10 : 0) + Math.min(6, 2 * huddle) + (lee ? 3 : 0) + (tentNear ? 8 : 0); // bodies close together share heat (+2 each, up to 3), a rock or wall to windward breaks the wind, a hide windbreak keeps most of it off
         if (!a.sub && a.alive) { applyMut(a, 0.004, r); if (a.sub) { a.sz = Math.min(1.45, a.sz); if (a.build !== 'child') a.height = Math.round(168 * a.sz * (0.96 + 0.04 * a.g.strength) * (0.9 + 0.1 * a.g.frame)); log.push({ t: tick, text: a.id + ' was altered by ' + SUBST[a.sub].label.toLowerCase() + ' (' + SUBST[a.sub].eff + ')', kind: 'warn' }); } }
-        const outd = !FLOORS.has(key(a.x, a.y)) && terAt(a.x, a.y) < 6, wv = windAt(a.x, a.y, tick);
-        const chill = outd ? Math.min(9, Math.max(0, wv.sp - 3.5) * 0.9 * (amb < 22 ? 1 : 0.3)) : 0;
+        const outd = !shelt(a.x, a.y) && terAt(a.x, a.y) < 6, wv = windAt(a.x, a.y, tick);
+        // standing walls break the wind even before the roof goes on, so building pays off at once
+        const wallShield = (ROOFON && outd && FLOORS.has(key(a.x, a.y))) ? (covAt(a.x, a.y) || { wall: 0 }).wall : 0;
+        const chill = outd ? Math.min(9, Math.max(0, wv.sp - 3.5) * 0.9 * (amb < 22 ? 1 : 0.3)) * (1 - 0.8 * wallShield) : 0;
         if (outd && wv.sp > 11) a.ene -= 0.0004 * (wv.sp - 11);
         const eff = amb + warmth - chill;
         const coldGap = Math.max(0, 10 - eff) / (0.5 + 0.5 * (a.g.insulation + gearIns(a))), heatGap = Math.max(0, eff - 28);
@@ -5584,7 +5629,7 @@ class Component extends DCLogic {
       if ((window.AGON_P || {}).oldSleep) { if (a.ene < 0.3 || (night && a.ene < 0.7)) a.slpM = true; else if (a.ene >= 0.95 || (!night && a.ene >= 0.5)) a.slpM = false; }
       else {
         const ch = a.chr !== undefined ? a.chr : (a.chr = sleepPhase(a)), circ = 0.5 + 0.5 * Math.cos(2 * Math.PI * ((tick % 50) - 37.5 - ch) / 50), drv = 2 * (1 - a.ene) + 0.85 * circ + (a.build === 'child' ? 0.15 : 0) - 0.2 * Math.max(0, a.stress - 0.4) - (a.sat < 0.3 || a.hyd < 0.3 ? 0.25 : 0);
-        if (((a.sat < 0.25 || a.hyd < 0.25 || (a.temp < -0.5 && !FLOORS.has(key(a.x, a.y)))) && a.ene >= 0.15) || (a.slpM && a.ene >= ((window.AGON_P || {}).slpDone ?? 2))) { if (a.ene >= 0.03) a.slpM = false; } else if (a.ene < ((window.AGON_P || {}).slpLo ?? 0.3) || drv > ((window.AGON_P || {}).slpThr ?? 0.75)) a.slpM = true; else if ((circ < 0.45 && a.ene >= 0.8) || a.ene >= ((window.AGON_P || {}).slpDone ?? 2)) a.slpM = false;
+        if (((a.sat < 0.25 || a.hyd < 0.25 || (a.temp < -0.5 && !shelt(a.x, a.y))) && a.ene >= 0.15) || (a.slpM && a.ene >= ((window.AGON_P || {}).slpDone ?? 2))) { if (a.ene >= 0.03) a.slpM = false; } else if (a.ene < ((window.AGON_P || {}).slpLo ?? 0.3) || drv > ((window.AGON_P || {}).slpThr ?? 0.75)) a.slpM = true; else if ((circ < 0.45 && a.ene >= 0.8) || a.ene >= ((window.AGON_P || {}).slpDone ?? 2)) a.slpM = false;
       }
       const homeOK = !a.fac && this.E.CAMPON.shelter && FLOORS.size > 0, rulesBusy = !!a.slpM || ((CAVES.length > 0 || homeOK) && (wthNow === 'storm' || (wthNow === 'cold snap' && a.temp < -0.3)));
       const clothNeed = !a.fac && !a.gear.clothing && tick >= 60 && a.sat > 0.4 && a.hyd > 0.35 && !a.slpM, farmNow = !(window.AGON_P || {}).noFarmShift && !a.fac && !clothNeed && a.sat > 0.15 && a.hyd > 0.25 && ((parseInt(a.id.slice(1), 10) || 0) + Math.floor(tick / 40)) % 4 === 0 && (plots.some((q) => q.g >= 1) || (Math.floor(tick / 500) % 4 !== 3 && plots.some((q) => q.g < 0))), reflexNow = (((needD || needE) && !clothNeed) && !farmNow) || rulesBusy, lrnV = s.learn && !a.fac && !G0 ? learnStep(a, reflexNow, pickWork) : null;
@@ -5660,11 +5705,11 @@ class Component extends DCLogic {
         const nearCamp = cheb(a, { x: CAMPC[0], y: CAMPC[1] }) <= 8, hurt = a.hea < 0.6 || a.inj > 0.2, safeHere = preds.every((q) => cheb(q, a) >= AK[q.k].sight + 4);
         if (safeHere && !hurt && !nearCamp) act = 'idle';
         else { const res = moveTo(a, (hurt || nearCamp) ? (x, y) => inCamp(x, y) : (x, y) => preds.every((q) => cheb({ x, y }, q) >= AK[q.k].sight + 4) && cheb({ x, y }, { x: CAMPC[0], y: CAMPC[1] }) <= cheb(a, { x: CAMPC[0], y: CAMPC[1] })); act = res === 'moved' ? 'move' : 'idle'; if (act === 'move') { a.bub = 'flee'; a.bubT = 2; } } }
-      else if (shelterNeed && !(homeOK ? FLOORS.has(key(a.x, a.y)) : (terAt(a.x, a.y) === 7 && (CDEPTH.get(a.y * W + a.x) ?? 9) <= 3))) { const res = moveTo(a, homeOK ? (x, y) => FLOORS.has(key(x, y)) && !blocked(x, y) : (x, y) => terAt(x, y) === 7 && (CDEPTH.get(y * W + x) ?? 9) <= 3); act = res === 'moved' ? 'move' : 'idle'; }
+      else if (shelterNeed && !(homeOK ? shelOK(a.x, a.y) : (terAt(a.x, a.y) === 7 && (CDEPTH.get(a.y * W + a.x) ?? 9) <= 3))) { const res = moveTo(a, homeOK ? (x, y) => shelOK(x, y) && !blocked(x, y) : (x, y) => terAt(x, y) === 7 && (CDEPTH.get(y * W + x) ?? 9) <= 3); act = res === 'moved' ? 'move' : 'idle'; }
       else if (shelterNeed) { if (a.slpM || a.ene < 0.3) { act = 'sleep'; a.ene = Math.min(1, a.ene + 0.06); if (a.bub !== 'sleep') { a.bub = 'sleep'; a.bubT = 4; } } else { act = 'shelter'; a.ene = Math.min(1, a.ene + 0.01); } } // sheltering from the weather is also when the tired sleep
       // freezing colonists with food and water in hand warm up at the hearth (or a cave or floor) before carrying on with work
       else if (!a.fac && a.inv.berries > 0 && a.sat < 0.45 && !(a.pkT > tick)) { packEat(a); act = 'eat'; a.bub = 'eat'; a.bubT = 2; log.push({ t: tick, text: a.id + ' eats from the pack', kind: 'info' }); } // food in hand comes before every errand
-      else if (!a.fac && a.temp < -0.5 && !FLOORS.has(key(a.x, a.y)) && terAt(a.x, a.y) < 6 && cheb(a, { x: CAMPC[0], y: CAMPC[1] }) > 8 && !(s.tents || []).some((q) => q.t > tick && cheb(a, q) <= 1) && (a.mats.hide || 0) + (a.mats.fur || 0) >= 2 && a.ene > 0.02) {
+      else if (!a.fac && a.temp < -0.5 && !shelt(a.x, a.y) && terAt(a.x, a.y) < 6 && cheb(a, { x: CAMPC[0], y: CAMPC[1] }) > 8 && !(s.tents || []).some((q) => q.t > tick && cheb(a, q) <= 1) && (a.mats.hide || 0) + (a.mats.fur || 0) >= 2 && a.ene > 0.02) {
         // cold, far from home, with skins on their back: drape them over branches as a windbreak and sit it out behind it. Nothing has to be known for this; anyone who has carried a hide in the wind thinks of it
         const nh = Math.min(2, a.mats.hide || 0); a.mats.hide = (a.mats.hide || 0) - nh; if (nh < 2) a.mats.fur = (a.mats.fur || 0) - (2 - nh);
         s.tents = (s.tents || []).filter((q) => q.t > tick); s.tents.push({ x: a.x, y: a.y, t: tick + 400, by: a.id }); act = 'idle'; a.bub = 'cold'; a.bubT = 3;
@@ -5691,7 +5736,7 @@ class Component extends DCLogic {
         if (fw && waterAdj(a.x, a.y)) { const how = fishHow(a); fishTry(a, how); act = 'gather'; a.bub = 'eat'; a.bubT = 2; } else if (sw && this.E.seaAdj(a.x, a.y)) { seaTry(a, fishHow(a) || 'bare'); act = 'gather'; a.bub = 'eat'; a.bubT = 2; } else { const res = moveTo(a, (x, y) => (fw && waterAdj(x, y)) || (sw && this.E.seaAdj(x, y))); act = res === 'moved' ? 'move' : 'idle'; }
       }
       else if (sleepy) {
-        const coldOut = a.temp < -0.3 && !FLOORS.has(key(a.x, a.y)); if (bed && a.ene >= 0.05 && !(!coldOut && a.ene < 0.3 && cheb(a, { x: bed[0], y: bed[1] }) > 6) && !(!coldOut && a.sat < 0.4 && cheb(a, { x: bed[0], y: bed[1] }) > 10)) { /* no forty-tile walk to bed on an empty stomach */ const res = moveTo(a, (x, y) => x === bed[0] && y === bed[1]); act = res === 'here' ? 'sleep' : res === 'moved' ? 'move' : a.ene < 0.3 ? 'sleep' : 'idle'; }
+        const coldOut = a.temp < -0.3 && !shelt(a.x, a.y); if (bed && a.ene >= 0.05 && !(!coldOut && a.ene < 0.3 && cheb(a, { x: bed[0], y: bed[1] }) > 6) && !(!coldOut && a.sat < 0.4 && cheb(a, { x: bed[0], y: bed[1] }) > 10)) { /* no forty-tile walk to bed on an empty stomach */ const res = moveTo(a, (x, y) => x === bed[0] && y === bed[1]); act = res === 'here' ? 'sleep' : res === 'moved' ? 'move' : a.ene < 0.3 ? 'sleep' : 'idle'; }
         else if (!bed && !a.fac && a.ene >= 0.05 && !(cheb(a, { x: HEARTH[0], y: HEARTH[1] }) <= 2) && !(!coldOut && a.ene < 0.3 && cheb(a, { x: HEARTH[0], y: HEARTH[1] }) > 8)) { const res = moveTo(a, (x, y) => cheb({ x, y }, { x: HEARTH[0], y: HEARTH[1] }) <= 2 && !blocked(x, y)); act = res === 'here' ? 'sleep' : res === 'moved' ? 'move' : 'sleep'; }
         else act = 'sleep';
         if (act === 'sleep') { a.ene = Math.min(1, a.ene + 0.06); if (a.bub !== 'sleep') { a.bub = 'sleep'; a.bubT = 4; } }
@@ -5912,7 +5957,7 @@ class Component extends DCLogic {
         if (a.san === undefined) a.san = 0.9; if (a.hap === undefined) a.hap = 0.6;
         const nearP = agents.filter((b) => b !== a && b.alive && cheb(b, a) <= 4).length, pet = animals.some((q) => q.own === a.id && cheb(q, a) <= 4);
         const grief = agents.some((b) => !b.alive && b.dtick >= 0 && tick - b.dtick < 150 && cheb(b, a) <= 6);
-        const sheltered = FLOORS.has(key(a.x, a.y)) || cheb(a, { x: HEARTH[0], y: HEARTH[1] }) <= 3, comfort = Math.max(0, 1 - Math.abs(a.temp) * 1.5), soc = 0.4 + a.pers[1];
+        const sheltered = shelt(a.x, a.y) || cheb(a, { x: HEARTH[0], y: HEARTH[1] }) <= 3, comfort = Math.max(0, 1 - Math.abs(a.temp) * 1.5), soc = 0.4 + a.pers[1];
         const hapT = 0.25 * a.sat + 0.15 * a.hyd + 0.15 * a.ene + 0.2 * comfort + 0.15 * (1 - a.inj) + 0.12 * Math.min(1, nearP / 2) * soc + (sheltered ? 0.06 : 0) + (pet ? 0.08 : 0) - (grief ? 0.15 : 0) - 0.2 * a.stress - (a.infection ? 0.1 : 0);
         a.hap = Math.max(0, Math.min(1, a.hap + (Math.max(0, Math.min(1, hapT)) - a.hap) * 0.02));
         const sk = A.traitFx(a, 'stressK');

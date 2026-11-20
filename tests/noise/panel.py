@@ -102,4 +102,5 @@ async def main():
     print(f"page errors: {sum(1 for r in rows if r['errs'])}")
     print(f"wall-clock: {time.time()-t0:.0f}s")
 
-asyncio.run(main())
+if __name__ == '__main__':      # ab.py imports PANEL and RUN from here; don't run on import
+    asyncio.run(main())
