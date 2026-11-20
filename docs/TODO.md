@@ -1049,3 +1049,68 @@ persistence (walking back to a visited macro cell) for determinism across re-ent
 this._culture read but never written (cultural inheritance of learning is dead code);
 mockDecide uses Math.random so LLM-mock mode is nondeterministic; seeds 21 and 7 reach 4000
 ticks with built=0 because pawn construction never starts there.
+
+## r35 — roofs implemented (model A, graded) and measured: NULL, and the experiment was inconclusive
+
+### Shipped
+Roof model A behind `AGON_P.roof`, off by default. A room's interior floor tiles get a roof
+blueprint (CAMPR0); campTodo hands pawns a room's walls first and its roof only once those walls
+stand; roof tiles are raised one at a time from the same material store. Roof keys are floor
+keys and CAMPW0/CAMPF0 are disjoint, so wall and roof keys share one BUILT set without colliding.
+The eight sites that treated "on a floor" as "under a roof" now call shelt(). Insulation scales
+with how much of the room is roofed (floored at 25% once covered). Walls alone cut wind chill in
+proportion to wall coverage, so building pays off before the roof goes on. Shelter-seeking aims
+at a roof once any exists, else at a floor — without that the seek test and its target disagree
+and a cold colonist loops.
+
+### Gates (both passed)
+- Determinism: verify_fixed.py all four cases byte-identical over 3 fresh pages, exit 0.
+- **Inertness**: with the flag off, every number reproduces r34 exactly — 6/50 at 6000, 6/50 at
+  9000, 10/0 on seed 21 temperate, 3/0 on seed 7 tundra. So the A/B below measures the flag, not
+  the rewrite that carried it.
+- Zero page errors in all 48 A/B runs.
+
+### The A/B (24 worlds, 6000 ticks, paired, tests/noise/ab.py)
+| metric | A | B | B-A | sd_d | SE | t | rho | MDE | better/worse/same |
+|---|---|---|---|---|---|---|---|---|---|
+| survived | 4896.96 | 5051.21 | +154.25 | 1116.39 | 227.88 | 0.68 | 0.61 | 667.69 | 10/8/6 |
+| alive | 2.50 | 2.46 | -0.04 | 3.88 | 0.79 | -0.05 | 0.45 | 2.32 | 9/7/8 |
+| peak | 13.46 | 13.33 | -0.12 | 0.95 | 0.19 | -0.65 | 0.71 | 0.57 | 6/6/12 |
+| built | 21.21 | 27.92 | +6.71 | 29.77 | 6.08 | 1.10 | 0.46 | 17.80 | 10/7/7 |
+| techs | 9.38 | 9.04 | -0.33 | 3.96 | 0.81 | -0.41 | 0.65 | 2.37 | 7/10/7 |
+
+Extinct 13/24 in both arms. McNemar discordants: B saved 5, B killed 5 — a perfect null.
+**Nothing is significant; every |t| is far below 2.07.** `peak` is the one well-measured metric
+(sd_d 0.95, rho 0.71, MDE 0.57) and it is flat, so that is a real null rather than a wide error bar.
+
+Pairing worked better than I predicted: rho 0.45-0.71, not ~0. Record this — it is the first real
+estimate and it means future A/Bs on this panel can be powered honestly. sd_d for `survived` is
+1116 ticks, so this panel resolves about 670 ticks; for `alive`, 2.32 colonists.
+
+### Why the result does not mean "roofs do not matter"
+**Only 1 of 24 worlds ever completed a roof.** 9 built more than A but never finished, 14 built no
+more at all. The feature essentially never fired, so this A/B did not test roofs — it tested a
+build queue colonists do not finish. The one world that did complete a roof went alive 4 -> 0,
+which at n=1 is not evidence of anything.
+
+The upstream blocker predates roofs and was already visible in r34: only 5 of 24 worlds finish
+their *walls* by 6000 ticks, so at most 5 could even begin roofing. Roofing roughly doubles the
+tile count (todo reaches 61 in some worlds), which makes the ask harder still.
+
+Several worlds show *negative* built diffs (alpine s3 44->0, savanna s3 43->0, jungle s3 38->2).
+Checked: those worlds also died much earlier in B (alpine s3 survived 3721 -> 2055), so this looks
+like ordinary trajectory divergence after the arms split, not roofs suppressing wall-building.
+Not proven though — if the next round wants certainty, instrument BUILDQ occupancy directly.
+
+### Next round should NOT be more roof tuning
+The bottleneck is construction throughput, not roof design. Before roofs can be evaluated at all,
+colonies have to finish what they start. Candidates, in rough order of cheapness:
+- raise the build horizon: re-run at 12000 ticks and see how many worlds finish walls
+- cut the roof's material cost (thatch cheaper than wall material, or charge every other tile)
+- revisit BUILDKEEP = 10 (the reserve may starve building in material-poor biomes)
+- revisit build priority against the food-security early return
+Target to measure against: worlds completing their walls by 6000 ticks, currently 5/24.
+
+### Unchanged open items
+engineFor memoization decision still owed; this._culture read but never written; mockDecide uses
+Math.random so LLM-mock mode is nondeterministic.
