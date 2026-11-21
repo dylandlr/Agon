@@ -2498,7 +2498,20 @@ const GRM = [], grMark = (g) => GRM.push([g, SCENERY.length, OBJS.length]);
 grMark('shelter');
 // wall materials: what the walls are made of decides how warm the house is, how much a blow or a fire takes off, and what the walls look like. The camp builds in the best material it knows (wattle and daub from shelter, timber from carpentry, dry stone once it can shape stone and lever it into place); rival huts are wattle
 const WALLMATS = { wattle: { label: 'Wattle and daub', ins: 8, hp: 1, burn: 0.8, needs: ['shelter'], note: 'Woven sticks plastered with mud and dung between timber posts. Quick to raise, warm enough, but a storm or a fire takes it apart.' }, timber: { label: 'Timber', ins: 10, hp: 2, burn: 1, needs: ['carpentry'], note: 'Split logs set upright and pegged. Warmer and far tougher than wattle; it burns.' }, stone: { label: 'Dry stone', ins: 12, hp: 4, burn: 0, needs: ['shaping', 'leverage'], note: 'Courses of shaped stone laid without mortar, the big footings levered into place. Warmest, toughest, and it does not burn.' } };
-const wallMatFor = (techs) => techs.includes('shaping') && techs.includes('leverage') ? 'stone' : techs.includes('carpentry') ? 'timber' : 'wattle';
+// AGON_P.vern — build from what is to hand, the way vernacular architecture actually works.
+// Today's rule asks only what the colony knows, never what it has, so colonies pick timber while
+// holding no wood and stand on 42-215 stone they cannot spend. It also gates ALL stone behind
+// shaping AND leverage; levering big footings is dressed masonry, but stacking undressed stone is
+// among the oldest techniques there is, so under vern it asks for shaping alone. Choice is then by
+// abundance, not by rank, which keeps forested colonies in wood and rocky ones in stone.
+const WALLRES = { wattle: 'wood', timber: 'wood', stone: 'stone' };
+const wallMatFor = (techs, mats) => {
+  if (!mats) return techs.includes('shaping') && techs.includes('leverage') ? 'stone' : techs.includes('carpentry') ? 'timber' : 'wattle';
+  const can = { wattle: true, timber: techs.includes('carpentry'), stone: techs.includes('shaping') };
+  let best = null, bestN = -1;
+  for (const m of ['stone', 'timber', 'wattle']) { if (!can[m]) continue; const n = mats[WALLRES[m]] || 0; if (n > bestN) { bestN = n; best = m; } }
+  return best || 'wattle';
+};
 const RVWALL = new Set([...WALLS].filter((k) => !CAMPK.has(k)));
 // What a wall joins itself to, as RimWorld's LinkFlags do: other walls, doors, natural rock
 // (mountain and cliff faces, and boulders) and the edge of the map. Agon linked walls and doors
@@ -4742,7 +4755,14 @@ class Component extends DCLogic {
       if (store.techs.includes('markmaking')) for (const k of Object.keys(store.rec)) if (!uni[k]) uni[k] = store.rec[k];
       // what has been built stays built: once the colony has had fire, a house, beds, shelves or a bench, that practice is kept alive by the thing itself (the hearth keeps burning, the walls stand), so these five never drop out of the known list when their carriers die
       for (const k of ['firecraft', 'shelter', 'bedding', 'storage', 'carpentry']) if (store.techs.includes(k) && !store.forced.includes(k)) store.forced.push(k);
-      { const wm = this.E.wallMatFor(store.techs); if (store.techs.includes('shelter') && wm !== (store.wallMat || 'wattle') && ['wattle', 'timber', 'stone'].indexOf(wm) > ['wattle', 'timber', 'stone'].indexOf(store.wallMat || 'wattle')) { store.wallMat = wm; lorePend.push({ t: tick, text: 'The walls are rebuilt in ' + this.E.WALLMATS[wm].label.toLowerCase(), kind: 'info' }); } }
+      { const VERN = !!(window.AGON_P || {}).vern, RES = { wattle: 'wood', timber: 'wood', stone: 'stone' };
+        const cur = store.wallMat || 'wattle', wm = this.E.wallMatFor(store.techs, VERN ? store.mats : null);
+        // Under vern a colony may also switch DOWN, because a wall it cannot supply is no wall at all.
+        // Hysteresis: only when the current material has run dry, or the candidate is twice as plentiful.
+        const curN = store.mats[RES[cur]] || 0, wmN = store.mats[RES[wm]] || 0;
+        const take = VERN ? (wm !== cur && (curN <= BUILDKEEP || wmN >= 2 * (curN + 1)))
+          : (wm !== cur && ['wattle', 'timber', 'stone'].indexOf(wm) > ['wattle', 'timber', 'stone'].indexOf(cur));
+        if (store.techs.includes('shelter') && take) { store.wallMat = wm; lorePend.push({ t: tick, text: 'The walls are rebuilt in ' + this.E.WALLMATS[wm].label.toLowerCase(), kind: 'info' }); } }
       const nt = A.lore.derive(uni, ev, (window.AGON_P || {}).forceMark ? [...store.forced, 'markmaking'] : store.forced), was = store.techs;
       for (const k of nt) if (!was.includes(k)) lorePend.push({ t: tick, text: 'The colony now knows ' + A.techOf(k).label.toLowerCase() + ': ' + A.techOf(k).text, kind: 'info' });
       for (const k of was) if (!nt.includes(k)) lorePend.push({ t: tick, text: 'The knowledge of ' + A.techOf(k).label.toLowerCase() + ' is lost: no one alive remembers how.', kind: 'warn' });
