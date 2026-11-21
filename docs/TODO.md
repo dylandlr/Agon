@@ -1196,3 +1196,72 @@ tools? That is a design call, not a measurement.
 ### Unchanged open items
 engineFor memoization decision still owed; this._culture read but never written; mockDecide uses
 Math.random so LLM-mock mode is nondeterministic.
+
+## r37 — vernacular wall material (AGON_P.vern). First significant result, with a real caveat.
+
+Default unchanged (flag off). Not adopted yet — see the open question.
+
+### What the probe found
+Of the worlds blocked on materials, five have `shaping` and **none has `leverage`**, while holding
+42-215 stone and 0-1 wood. Three had also chosen **timber while holding zero wood**: wallMatFor
+asked only what the colony knows, never what it has. That is a defect, not a balance problem.
+
+### The change (behind AGON_P.vern)
+- Undressed stone asks for `shaping` alone. Levering big footings is dressed masonry; stacking
+  undressed stone is among the oldest techniques there is, so gating all stone behind both techs
+  was the anachronism. The WALLMATS note ("courses of shaped stone... big footings levered into
+  place") describes the dressed version, which is a different thing.
+- Material chosen by **abundance**, not rank, so forested colonies stay in wood and rocky ones go
+  to stone. A colony may switch DOWN when its material runs dry — a wall it cannot supply is no
+  wall at all. Hysteresis: switch only when the current material is below the reserve or the
+  candidate is twice as plentiful, so the choice does not thrash.
+- No new material key, deliberately: render draws walls from wallMatNow and filters scenery by
+  material, so a fourth key risked unsprited walls for a cosmetic gain.
+
+### Paired A/B, 24 worlds, 6000 ticks
+| metric | A | B | B-A | t | rho | MDE |
+|---|---|---|---|---|---|---|
+| survived | 4896.96 | 5064.08 | +167.12 | 1.09 | 0.83 | 451.17 |
+| alive | 2.50 | 2.17 | -0.33 | -0.61 | 0.63 | 1.61 |
+| peak | 13.46 | 13.29 | -0.17 | -0.94 | 0.72 | 0.52 |
+| built | 21.21 | 29.08 | **+7.88** | **2.09** | 0.52 | 11.04 |
+| techs | 9.38 | 9.88 | +0.50 | 0.77 | 0.80 | 1.89 |
+
+- **built t=2.09 against a 2.069 critical value at 23 df, nominal p~0.048** — the first result all
+  session to clear significance. But five metrics were tested and Bonferroni would want p<0.01
+  (|t|>2.81), so treat it as suggestive, not established.
+- **Never placed a tile 8/24 -> 3/24, gained 5 / lost 0, exact p=0.0625.** One-directional and
+  clean; the best evidence here, better than the t-test.
+- Finished walls 5/24 -> 8/24 (gained 6, lost 3, p=0.51 — unresolved).
+- Extinct 13/24 -> 12/24, McNemar 3 saved / 2 killed. Zero page errors.
+- **techs +0.50, where fiber-wattle was -0.83.** This confirms the r36 prediction: stone is an idle
+  resource and competes with nothing, while fiber competes with clothing, which solves the same
+  problem shelter does.
+- No trivialisation: peak is flat (-0.17), so reachable stone did not make winter free. That was
+  the main risk and it did not appear.
+
+### The caveat, and it matters
+The flat aggregate hides a split. Grouping by whether a world newly starts building:
+
+| group | n | alive | techs | survived |
+|---|---|---|---|---|
+| newly building | 5 | 5.80 -> 3.20 | 10.00 -> 8.60 | 5781 -> 5552 |
+| all others | 19 | 1.63 -> 1.89 | 9.21 -> 10.21 | 4664 -> 4936 |
+
+Colonies that newly take up building lose population and techs; everyone else improves slightly.
+Building costs labour and material, and at 6000 ticks the colonies paying that cost have not yet
+collected the return. Note grassland s21 goes 13 -> 5 alive while still surviving to 6000, and
+temperate s3 goes 8 -> 4 with built unchanged at 39, which is ordinary trajectory divergence
+rather than a cost of building.
+
+### Open question before adopting as default
+Does shelter pay for itself over a longer horizon? Testable: run the same vern A/B at 12000 ticks
+and see whether the newly-building group catches up or overtakes. If it does, vern should become
+the default on all four of Dyl's axes at once (realism, functionality, experiment value, risk).
+If it does not, building is simply a net loss as currently priced, and the next lever is cost per
+tile or the insulation ordering — stone ins 12 over wattle 8 is thermally backwards anyway, since
+stone has high thermal mass and poor insulation.
+
+### Unchanged open items
+engineFor memoization decision still owed; this._culture read but never written; mockDecide uses
+Math.random; keep=3 measured free but unresolved (5/24 -> 8/24, p=0.45).
