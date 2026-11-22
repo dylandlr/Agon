@@ -1362,3 +1362,57 @@ r35 could not measure roofs because only 1 of 24 worlds ever completed one. With
 walls reach 10/24 finished and only 3/24 never start, so roofs now have a population of worlds to
 be measured on. Arm A is the new default (vern, no roof); arm B adds roof:1. Arm A doubles as a
 24-world check that the default flip equals r37's vern arm.
+
+## r40 — roofs measured against the vern default: net HARMFUL, and the cause is a design error of mine
+
+Roofs stay off by default. Do not ship model A as written.
+
+### Paired A/B, 24 worlds, 6000 ticks. Arm A = new default (vern, no roof). Arm B = roof:1.
+| metric | A | B | B-A | t | rho |
+|---|---|---|---|---|---|
+| survived | 5064.08 | 5016.75 | -47.33 | -0.22 | 0.61 |
+| alive | 2.17 | 1.83 | -0.33 | -0.47 | 0.27 |
+| peak | 13.29 | 13.33 | +0.04 | 0.18 | 0.49 |
+| built | 29.08 | 40.21 | +11.12 | 1.88 | 0.44 |
+| techs | 9.88 | 9.00 | -0.88 | -1.00 | 0.63 |
+
+**Extinct 12/24 -> 16/24** (McNemar saved 3, killed 7, exact p=0.344). Zero page errors.
+Nothing significant, but every survival metric points the same way and extinction is the worst of
+them. rho fell to 0.27-0.63 from vern's 0.52-0.83: roofs perturb trajectories far more.
+
+**Metric warning:** the harness's "finished walls" line is NOT comparable across these arms. With
+roofs on, campTodo's queue includes roof tiles, so arm B's 1/24 means walls AND roof complete,
+against arm A's 8/24 meaning walls alone. Fix the harness before quoting that line again.
+
+### Roofs do now fire, but barely finish
+Of the 8 worlds that completed walls in arm A: only **1** also completed its roof in B. Mean roof
+tiles raised 8.0, mean still owed 17.6 — roofs get about a third built. So the cost is paid in
+full and the benefit, which scales with coverage, is collected at about a third.
+
+### The cause, and it is my error from r35
+With roofs on, `rcov` is 0 on an unroofed tile, so insulation is **zero until a roof exists**.
+Turning roofs on therefore REMOVES the floor insulation a colony already had, at exactly the
+moment it is trying to afford a roof. Cold biomes die in that gap: highlands s3 went 46 tiles
+built and 6 alive -> 0 built and 0 alive; alpine s3 45 -> 7 tiles, 5 -> 0 alive; forest s3 and
+jungle s21 also went to 0 alive. The 25% floor and the wall wind-shield I added in r35 as
+mitigation do not help, because both only apply once there is a roof or standing walls.
+
+I predicted this failure mode in r35 ("if the offset is too small the honest outcome is that
+model A makes colonies worse off") and the offset was too small.
+
+### The fix to try next: shelter must never go backwards
+Insulation should be additive, not a replacement:
+  warmth = wallTerm(wall coverage) + roofTerm(roof coverage)
+with the floor/wall term keeping roughly what a floor gives today, and the roof adding weather
+protection and heat retention on top. A walled but roofless enclosure genuinely does retain some
+heat and block wind, so this is also more realistic than the current all-or-nothing switch.
+Under that scheme a roof can only ever improve a colony, so the measurement asks "how much does
+it help", not "does it kill them before they finish".
+
+Only after that is the graded-coverage question worth revisiting.
+
+### Where the sequence stands
+- r33 determinism fixed; r34 noise floor rebuilt (paired, 24 worlds); r36 found construction
+  blocked on materials; r37-r39 vernacular materials fixed it and became the default.
+- Walls now reach 8/24 finished and only 3/24 never start, against 5/24 and 8/24 before.
+- Roofs remain unshipped: evaluable at last, and measured as harmful as designed.
