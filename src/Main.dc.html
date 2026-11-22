@@ -4755,7 +4755,10 @@ class Component extends DCLogic {
       if (store.techs.includes('markmaking')) for (const k of Object.keys(store.rec)) if (!uni[k]) uni[k] = store.rec[k];
       // what has been built stays built: once the colony has had fire, a house, beds, shelves or a bench, that practice is kept alive by the thing itself (the hearth keeps burning, the walls stand), so these five never drop out of the known list when their carriers die
       for (const k of ['firecraft', 'shelter', 'bedding', 'storage', 'carpentry']) if (store.techs.includes(k) && !store.forced.includes(k)) store.forced.push(k);
-      { const VERN = !!(window.AGON_P || {}).vern, RES = { wattle: 'wood', timber: 'wood', stone: 'stone' };
+      // Default since r39. Adopted on correctness, not on survival, which two rounds measured as
+      // unaffected: colonies were choosing a material they could not supply, and all stone sat behind
+      // a tech pair that describes dressed masonry. AGON_P.novern restores the old rule for A/Bs.
+      { const VERN = !((window.AGON_P || {}).novern), RES = { wattle: 'wood', timber: 'wood', stone: 'stone' };
         const cur = store.wallMat || 'wattle', wm = this.E.wallMatFor(store.techs, VERN ? store.mats : null);
         // Under vern a colony may also switch DOWN, because a wall it cannot supply is no wall at all.
         // Hysteresis: only when the current material has run dry, or the candidate is twice as plentiful.

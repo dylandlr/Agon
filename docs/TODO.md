@@ -1333,3 +1333,32 @@ of worlds to be measured on. That was the original goal two rounds back.
 ### Unchanged open items
 engineFor memoization decision still owed; this._culture read but never written; mockDecide uses
 Math.random; stone ins 12 over wattle 8 is thermally backwards and worth revisiting.
+
+## r39 — decisions taken: vern is the default; engineFor stays as it is
+
+### 1. Vernacular wall material is now the default
+`AGON_P.novern` restores the old rule for A/Bs. Verified both directions exactly at 6000 ticks:
+with no flags, highlands s3 / grassland s21 / temperate s3 reproduce r37's vern arm on built,
+alive and techs (46/45/39 tiles, stone in all three); with novern they reproduce the old baseline
+(0 built, alive 7 and 13).
+
+Adopted on correctness, functionality and experiment value, NOT on survival — two rounds measured
+survival as unaffected (alive +0.08 at 12000, extinct 14/24 -> 12/24, peak flat). The defects it
+fixes are real regardless of any A/B: colonies chose timber while holding zero wood because
+wallMatFor asked only what they knew and never what they had, and all stone was gated behind
+shaping AND leverage, which describes dressed masonry rather than stacked fieldstone.
+BUILDKEEP stays at 10 so the next A/B stays readable.
+
+### 2. engineFor memoization: no change, and the r34 note was wrong
+I flagged this as a decision Dyl owed. It is not one. `reloadWorld()` (line 4446) already drops
+PLANETS, MACROS and ENGINES and takes a fresh seed, so a genuine restart is covered. The memo's
+behaviour on `setWorld` to an already-visited world is *correct*: travelling back to a macro cell
+should find it as you left it, trees cleared and all. What I actually hit in r32 was my own test
+harness calling setWorld twice in one page and expecting independence, which the panel already
+avoids by using a fresh page per world. Closing this; no code change.
+
+### 3. Next: the roof A/B, finally evaluable
+r35 could not measure roofs because only 1 of 24 worlds ever completed one. With vern default,
+walls reach 10/24 finished and only 3/24 never start, so roofs now have a population of worlds to
+be measured on. Arm A is the new default (vern, no roof); arm B adds roof:1. Arm A doubles as a
+24-world check that the default flip equals r37's vern arm.
