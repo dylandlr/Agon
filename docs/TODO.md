@@ -1265,3 +1265,71 @@ stone has high thermal mass and poor insulation.
 ### Unchanged open items
 engineFor memoization decision still owed; this._culture read but never written; mockDecide uses
 Math.random; keep=3 measured free but unresolved (5/24 -> 8/24, p=0.45).
+
+## r38 — vern at 12000 ticks: the tech cost reverses, the population gap does not. Verdict below.
+
+### Paired A/B, 24 worlds, 12000 ticks (same panel, same build, flag off vs vern:1)
+| metric | A | B | B-A | t | rho | MDE |
+|---|---|---|---|---|---|---|
+| survived | 7519.12 | 8064.08 | +544.96 | 0.82 | 0.68 | 1951.91 |
+| alive | 3.17 | 3.25 | **+0.08** | 0.12 | 0.70 | 2.03 |
+| peak | 13.46 | 13.29 | -0.17 | -0.94 | 0.72 | 0.52 |
+| built | 26.67 | 31.46 | +4.79 | 1.39 | 0.58 | 10.09 |
+| techs | 10.17 | 10.46 | +0.29 | 0.34 | 0.79 | 2.50 |
+
+Finished walls A 8/24 -> B 10/24. Never placed a tile A 6/24 -> B 3/24 (gained 3, lost 0,
+p=0.25). Extinct A 14/24 -> B 12/24 (McNemar saved 3, killed 1, p=0.625). Zero page errors.
+
+### Correction to r37
+**The r37 "first significant result" does not survive the longer horizon.** built falls from
++7.88 (t=2.09) to +4.79 (t=1.39) because the BASELINE catches up with time: finished walls
+5/24 -> 8/24 and never-placed 8/24 -> 6/24 between 6000 and 12000 ticks with the flag off. So a
+good part of r37's apparent effect was the measurement window, not the change. I flagged this
+confound before seeing the numbers and it was real. Nothing here is significant.
+
+### Does shelter pay for itself? Partly.
+Same split as r37, newly-building worlds vs the rest:
+
+| horizon | group | n | alive | techs | survived |
+|---|---|---|---|---|---|
+| 6000 | newly building | 5 | 5.80 -> 3.20 | 10.00 -> 8.60 | 5781 -> 5552 |
+| 6000 | others | 19 | 1.63 -> 1.89 | 9.21 -> 10.21 | 4664 -> 4936 |
+| 12000 | newly building | 3 | 8.33 -> 4.67 | **9.33 -> 11.67** | 9636 -> 9640 |
+| 12000 | others | 21 | 2.43 -> 3.05 | 10.29 -> 10.29 | 7217 -> 7839 |
+
+- **The technology cost reverses**: the newly-building group goes from -1.40 techs at 6000 to
+  **+2.33 at 12000**. That is the investment story holding for technology — the colony pays up
+  front and is ahead later.
+- **The population gap does not close**: -2.60 at 6000, -3.67 at 12000. But n=3, it is the same
+  handful of worlds (grassland s21 13 -> 5 is most of it), and the group shrank from 5 to 3
+  because the baseline caught up on two. Unresolvable at this sample size; do not read it as
+  established either way.
+- Conditioning on surviving past 6000 (n=14, since a dead colony cannot collect a return):
+  alive 5.43 -> 5.57, techs 13.07 -> 13.36. Neutral to slightly positive.
+
+### Verdict and recommendation: adopt vern as the default
+Not because the measurements are significant — they are not, and after two rounds of looking,
+the effect on survival is best described as **absent**. The case rests on the other three axes:
+
+- **Correctness.** It fixes two genuine defects. Colonies chose timber while holding zero wood,
+  because wallMatFor asked only what they knew and never what they had. And all stone was gated
+  behind shaping AND leverage, which conflates stacked fieldstone with dressed masonry.
+- **Functionality.** Worlds that never place a tile fall 8/24 -> 3/24 at 6000 and 6/24 -> 3/24 at
+  12000, gained 3 lost 0 both times — one-directional at both horizons. The build loop stops
+  being dead content, which is also the precondition for roofs being evaluable at all.
+- **Experiment value.** Material now tracks biome, so rocky worlds build in stone and forested
+  ones in wood: different architecture per playthrough, which is the stated goal.
+- **Risk: measured and absent.** alive +0.08, extinct 14 -> 12, peak flat, so reachable stone did
+  not trivialise winter. The only live worry is the n=3 population gap above.
+
+If adopted, `keep` stays at 10 — keep=3 measured free but unresolved, and changing two things at
+once would make the next A/B unreadable.
+
+### Next, once vern is default
+Re-run the roof A/B. r35 could not evaluate roofs because only 1 of 24 worlds ever completed one;
+with walls reaching 10/24 finished and only 3/24 never starting, roofs finally have a population
+of worlds to be measured on. That was the original goal two rounds back.
+
+### Unchanged open items
+engineFor memoization decision still owed; this._culture read but never written; mockDecide uses
+Math.random; stone ins 12 over wattle 8 is thermally backwards and worth revisiting.
