@@ -1461,3 +1461,56 @@ graded-coverage and roof-bonus numbers become worth tuning.
 The honest position on roofs as they stand: they are a visible, working construction behaviour
 that costs labour and returns no measurable survival. That may be acceptable for an observation
 game about emergent technology, but it should be a deliberate choice rather than an accident.
+
+## r42 — roof benefits + global build order (measured)
+Code shipped in 0831985 (eff damping toward 22, dry-storage spoilage cut, global wall-first
+gate in campTodo, campCov coverage cache). Paired A/B over the fixed 24-world panel, 6000
+ticks, arm B = `roof:1` (/tmp/mar/ab_roof4.json).
+
+### Headline: the global gate fixed the r41 cannibalisation
+| metric | A | B | B-A | t | rho |
+|---|---|---|---|---|---|
+| survived | 5064 | 5016 | -48 | -0.36 | 0.88 |
+| alive | 2.17 | 3.00 | +0.83 | 2.03 | 0.75 |
+| peak | 13.29 | 13.33 | +0.04 | 0.44 | 0.92 |
+| built | 29.08 | 42.12 | **+13.04** | **2.75** | 0.79 |
+| techs | 9.88 | 9.62 | -0.25 | -0.65 | 0.93 |
+
+- **Finished walls: A 8/24, B 7/24** — discordants 1 gained / 2 lost, exact p=1.0. r41's
+  regression (8->4, 0 gained / 5 lost) is gone. Wall completion is statistically at baseline.
+- **built +13.0, t=2.75, significant**: roofs still get built. The 7 wall-complete worlds in B
+  placed up to 57 roof tiles each (jungle s21 built 97 vs 40 in A).
+- **alive +0.83 at t=2.03** — just under the 2.069 bar (MDE 1.20). Directionally positive,
+  not resolvable by this panel.
+- **Extinctions 12/24 -> 10/24**; discordants 3 saved / 1 killed, exact binomial p=0.625. ns.
+
+### What the per-world probe showed (honesty notes)
+- **9/24 worlds are byte-identical across arms.** The flag provably changes nothing until a
+  colony first clears every currently-enabled wall — no accidental RNG divergence from the new
+  code paths (the r33 lesson held).
+- **Room unlocking opens windows in the global gate.** Rooms enable over time with techs, so
+  "no wall remains anywhere" is true between unlocks, and a few roof tiles trickle in before the
+  camp is fully enclosed (probe: savanna s3 placed exactly 1 roof tile at ~t=4750 in such a
+  window, then the next room opened and walls resumed). Roofing what already stands before
+  expanding is arguably the right behaviour; noted as a deliberate acceptance, not an oversight.
+- **The savanna extinction saves (s3, s21: 0 -> 4 alive) are NOT roof thermals.** Both placed <=1
+  roof tile; the saves are trajectory divergence seeded at the gate window. Same class as desert
+  s3 getting WORSE (survived 4838 -> 2973) and jungle s21 dying after roofing heavily (built 97,
+  died t=4002 — labour diverted to 57 roof tiles is a real opportunity cost). Divergence cuts
+  both ways; the paired panel is what nets it out.
+- **Among the 7 wall-complete (roof-heavy) worlds: 6 improved or held alive, 1 died**
+  (temperate s21 5->9, highlands s21 2->6, wetland s21 0->4, highlands s3 6->8, grassland s21
+  5->7, forest s3 2->2, jungle s21 4->0). Suggestive that roofs help where they actually exist;
+  n=7 proves nothing.
+
+### Not measured
+- Dry storage was not measured directly (panel doesn't record spoilage); its effect is folded
+  into the survival metrics above.
+- The damping coefficient (0.3) and spoilage cut (0.4) are untuned first guesses.
+
+### Shippability
+The r41 criterion was "wall completion returns to ~8/24 with built still up". Met: 7/24 at
+p=1.0 vs baseline, built significantly up, no metric significantly worse, alive positive at
+t=2.03. Recommendation: ship roofs on by default as a real, non-harmful construction behaviour
+with plausible benefits; revisit the coefficients once there's a cheaper way to measure the
+dry-storage channel. Decision is Dyl's.
