@@ -6,7 +6,8 @@
 # smaller than ~2.9 colonists, which is larger than the mean.
 #
 # Usage:  python3 -u tests/noise/ab.py [ticks] [out.json] [flagsB]
-#   flagsB defaults to "roof:1"; arm A is always the plain build with no flags.
+#   flagsB defaults to "noroof:1"; arm A is always the plain build with no flags.
+#   (r43: roofs are default-on, so the plain arm has roofs and "noroof:1" is the old baseline.)
 import asyncio, json, sys, time, math, statistics as st
 from playwright.async_api import async_playwright
 
@@ -70,7 +71,7 @@ def paired(A, B, key):
 async def main():
     ticks = int(sys.argv[1]) if len(sys.argv) > 1 else 6000
     out = sys.argv[2] if len(sys.argv) > 2 else '/tmp/mar/ab.json'
-    flagsB = sys.argv[3] if len(sys.argv) > 3 else 'roof:1'
+    flagsB = sys.argv[3] if len(sys.argv) > 3 else 'noroof:1'
     print(f"paired A/B, {len(PANEL)} worlds, {ticks} ticks.  A = baseline, B = {flagsB}\n")
     A = await arm(ticks, '', 'A')
     B = await arm(ticks, flagsB, 'B')

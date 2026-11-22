@@ -2931,7 +2931,7 @@ function campCov(g) {
 function campTodo(built) {
   const wq = [], left = {};
   for (const k of CAMPW0) { const [x, y] = k.split(',').map(Number), g = campGrp(x, y); if (!(g && g.slice(0, 4) === 'room' && CAMPON[g])) continue; if (!built.has(k)) { wq.push(k); left[g] = (left[g] || 0) + 1; } }
-  if (!(window.AGON_P || {}).roof) return wq;
+  if ((window.AGON_P || {}).noroof) return wq;
   // r42: no roof anywhere until every wall is up. Gating per room (r35) meant a pawn standing in a
   // finished room kept roofing it instead of walking to the next room's walls, because the build act
   // takes the nearest queued tile — measured in r41 as wall completion halving, 8/24 to 4/24.
@@ -2995,7 +2995,7 @@ function applyCamp(st) {
   for (const k of CAMPW0) { if (tileOn(k) || wallRuin(k)) WALLS.add(k); else WALLS.delete(k); }
   for (const k of CAMPF0) { if (tileOn(k) || tileRuin(k)) FLOORS.add(k); else FLOORS.delete(k); }
   ROOF.clear();
-  if ((window.AGON_P || {}).roof) for (const k of campRoof0()) { const [x, y] = k.split(',').map(Number), g = campGrp(x, y); if (g && on[g] && (full || BUILT.has(k))) ROOF.add(k); }
+  if (!(window.AGON_P || {}).noroof) for (const k of campRoof0()) { const [x, y] = k.split(',').map(Number), g = campGrp(x, y); if (g && on[g] && (full || BUILT.has(k))) ROOF.add(k); }
   for (const k of CAMPK) { const [x, y] = k.split(',').map(Number); if (x >= 0 && y >= 0 && x < W && y < H) TILESX[y * W + x] = tileOn(k) ? TILES[y * W + x] : TILES0[y * W + x]; }
   DOORS.length = 0; for (const d of DOORS_ALL) { const k = key(d.x, d.y); if (!CAMPK.has(k) || (ANXDK.has(k) ? on.annex : tileOn(k))) DOORS.push(d); }
   BEDS.length = 0; for (const b of BEDS_ALL) { const k = key(b[0], b[1]); if (ANXK.has(k) ? on.annex : on.bedding) BEDS.push(b); }
@@ -4719,11 +4719,12 @@ class Component extends DCLogic {
     // while sitting on stone and fiber it cannot use: five of the 24 panel worlds hold 7-362 fiber
     // and average 0.0-0.6 wood, and never build. AGON_P.fibre A/Bs costing wattle fiber instead.
     const BUILDMAT = { wattle: (window.AGON_P || {}).fibre ? 'fiber' : 'wood', timber: 'wood', stone: 'stone' }, BUILDKEEP = (window.AGON_P || {}).keep ?? 10;
-    // Roofs (AGON_P.roof). Without one, shelter is the floor tile itself, which is why a colony
-    // today gets full insulation with no wall standing. With roofs on: a roof over the tile is what
-    // keeps rain off and holds heat in, insulation scales with how much of the room is actually
-    // roofed, and walls alone still break the wind. Off, every expression below reduces to today's.
-    const ROOFON = !!(window.AGON_P || {}).roof;
+    // Roofs (default ON since r43; AGON_P.noroof is the opt-out, used by A/Bs as the old baseline).
+    // Without one, shelter is the floor tile itself, which is why a colony gets full insulation with
+    // no wall standing. With roofs on: a roof over the tile is what keeps rain off and holds heat in,
+    // insulation scales with how much of the room is actually roofed, and walls alone still break the
+    // wind (the wallShield below is part of this same flag). Off, everything reduces to the pre-roof sim.
+    const ROOFON = !(window.AGON_P || {}).noroof;
     // r41: shelter is the floor again, in BOTH arms. r40 measured the alternative and it killed
     // colonies: making the roof the gate meant insulation fell to zero and wind chill switched on
     // the moment roofs were enabled, so a colony lost the shelter it already had exactly while it
@@ -6172,7 +6173,7 @@ class Component extends DCLogic {
     if (builtAdded) store.built = [...BUILTS];
     // perishables: stored food, packs, carcasses and corpses all age at the temperature of the day (see A.PERISH for shelf lives)
     {
-      const ambT = seasonTemp(tick) + BIOME.t + 6 * Math.cos(2 * Math.PI * ((tick % 50) - 12.5) / 50), pr = A.spoilRate(ambT), roofFrac = ((window.AGON_P || {}).roof && this.E.campRoof0 && this.E.campRoof0().size) ? this.E.ROOF.size / this.E.campRoof0().size : 0, prF = pr * Math.max(0.3, 1 - A.techFx(techs, 'keep')) * (1 - 0.4 * roofFrac), spoilNote = {};
+      const ambT = seasonTemp(tick) + BIOME.t + 6 * Math.cos(2 * Math.PI * ((tick % 50) - 12.5) / 50), pr = A.spoilRate(ambT), roofFrac = (!(window.AGON_P || {}).noroof && this.E.campRoof0 && this.E.campRoof0().size) ? this.E.ROOF.size / this.E.campRoof0().size : 0, prF = pr * Math.max(0.3, 1 - A.techFx(techs, 'keep')) * (1 - 0.4 * roofFrac), spoilNote = {};
       for (const a of agents) {
         if (!a.alive && a.dtick >= 0 && !(a.dec >= 1)) a.dec = Math.min(1, (a.dec || 0) + pr / A.DECAY_TICKS);
         if (a.carry) a.carry = { ...a.carry, sp: Math.min(1, (a.carry.sp || 0) + prF / (A.PERISH.meat.days * A.DAY_TICKS)) };

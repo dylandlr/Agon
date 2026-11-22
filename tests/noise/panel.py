@@ -39,11 +39,12 @@ RUN = r"""
     let todo = -1, wallTodo = -1;
     try { todo = __agon.E.campTodo(new Set((store.built) || [])).length; } catch (e) {}
     // r41: campTodo's queue includes roof tiles when roofs are on, so `todo` is not comparable
-    // across roof arms. campTodo reads the flag at call time, so clearing it briefly gives the
+    // across roof arms. campTodo reads the flag at call time, so forcing noroof briefly gives the
     // wall-only count that IS comparable. Quote wallTodo, not todo, when comparing arms.
-    try { const sv = window.AGON_P.roof; window.AGON_P.roof = false;
+    // (r43: roofs are default-on; AGON_P.noroof is the opt-out.)
+    try { const sv = window.AGON_P.noroof; window.AGON_P.noroof = true;
           wallTodo = __agon.E.campTodo(new Set((store.built) || [])).length;
-          window.AGON_P.roof = sv; } catch (e) {}
+          window.AGON_P.noroof = sv; } catch (e) {}
     res({
       tick: s.tick,
       todo,
