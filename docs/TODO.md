@@ -1416,3 +1416,48 @@ Only after that is the graded-coverage question worth revisiting.
   blocked on materials; r37-r39 vernacular materials fixed it and became the default.
 - Walls now reach 8/24 finished and only 3/24 never start, against 5/24 and 8/24 before.
 - Roofs remain unshipped: evaluable at last, and measured as harmful as designed.
+
+## r41 — additive roofs: the r40 harm is gone, roofs get built, survival unmoved, and a new bug
+
+Roofs still off by default. One more fix identified before they are worth shipping.
+
+### The r40 harm is fixed
+Shelter is the floor again in both arms; a roof adds up to half the floor's insulation again, in
+proportion to coverage, so it can only ever improve a colony. Verified inert with roofs off —
+highlands s3, alpine s3 and temperate s21 reproduce r40's arm A exactly on built, alive and techs.
+The worlds r40 killed now live: highlands s3 alive 0 -> 4, alpine s3 0 -> 8 against a baseline of 5.
+
+### Paired A/B, 24 worlds, 6000 ticks. A = vern default, B = +roof.
+| metric | A | B | B-A | t | rho |
+|---|---|---|---|---|---|
+| survived | 5064.08 | 4914.29 | -149.79 | -1.05 | 0.85 |
+| alive | 2.17 | 2.25 | +0.08 | 0.22 | 0.76 |
+| peak | 13.29 | 13.33 | +0.04 | 0.57 | 0.95 |
+| built | 29.08 | 43.71 | **+14.62** | **3.12** | 0.81 |
+| techs | 9.88 | 9.79 | -0.08 | -0.27 | 0.96 |
+
+- **built t=3.12 clears even Bonferroni for five metrics** (needs |t|>2.81). Roofs genuinely get
+  built now — this is the strongest result in the whole sequence.
+- **Survival is unmoved**: alive +0.08, extinct 12/24 -> 13/24, McNemar 2 saved / 3 killed,
+  survived -150 (ns). Roofs neither help nor hurt. rho is high (0.76-0.96), so the pairing is
+  tight and these nulls are real nulls, not wide error bars.
+
+### New bug: roof work cannibalises wall completion
+With the wall-only metric (now comparable across arms), **finished walls fall 8/24 -> 4/24**,
+gained 1 and lost 5, exact p=0.22. Nine of 24 worlds raised roof tiles while wall tiles were still
+owed: temperate s3/s21, forest s3, grassland s3, desert s3, alpine s3, savanna s3/s21, jungle s3.
+
+Cause: campTodo queues a room's roof once THAT room's walls stand, and the build act takes the
+nearest tile in the queue, so a pawn standing in a finished room keeps roofing it rather than
+walking to the next room's walls. Per-room gating was my choice in r35 and it is wrong.
+
+### Next: gate roofs globally, then re-measure
+Queue roof tiles only when NO wall tiles remain anywhere, not per room. One condition in campTodo.
+Colonies then enclose the whole camp before roofing any of it, which is also the sensible order
+for a group that has to survive the next storm. After that, re-run this A/B: if wall completion
+returns to 8/24 and built stays up, roofs are shippable as a neutral-but-real feature, and the
+graded-coverage and roof-bonus numbers become worth tuning.
+
+The honest position on roofs as they stand: they are a visible, working construction behaviour
+that costs labour and returns no measurable survival. That may be acceptable for an observation
+game about emergent technology, but it should be a deliberate choice rather than an accident.
