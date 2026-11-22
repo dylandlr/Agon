@@ -36,11 +36,18 @@ RUN = r"""
     const h = (x) => { let n = 5381; for (let i = 0; i < x.length; i++) { n = ((n * 33) ^ x.charCodeAt(i)) >>> 0; } return n.toString(36); };
     // wall tiles still owed in enabled rooms: tells us whether a colony ever finishes a room,
     // which decides whether gating shelter on a finished roof would strand it
-    let todo = -1;
+    let todo = -1, wallTodo = -1;
     try { todo = __agon.E.campTodo(new Set((store.built) || [])).length; } catch (e) {}
+    // r41: campTodo's queue includes roof tiles when roofs are on, so `todo` is not comparable
+    // across roof arms. campTodo reads the flag at call time, so clearing it briefly gives the
+    // wall-only count that IS comparable. Quote wallTodo, not todo, when comparing arms.
+    try { const sv = window.AGON_P.roof; window.AGON_P.roof = false;
+          wallTodo = __agon.E.campTodo(new Set((store.built) || [])).length;
+          window.AGON_P.roof = sv; } catch (e) {}
     res({
       tick: s.tick,
       todo,
+      wallTodo,
       deathTick,            // -1 if the colony was still alive at the end
       survived: deathTick < 0 ? ticks : deathTick,
       peak,
