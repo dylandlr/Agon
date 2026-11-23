@@ -57,6 +57,7 @@ RUN = r"""
       built: (store.built || []).length,
       techs: (store.techs || []).length,
       food: Math.round((store.food || 0) * 100) / 100,
+      spoiled: store.spoiled || 0,   // cumulative food lost to spoilage: the dry-storage channel
       hash: h(JSON.stringify(A) + '|' + JSON.stringify(store)),
       BS: window.__BS || null,
       biome: s.biome, wseed: s.wseed

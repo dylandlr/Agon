@@ -4725,6 +4725,12 @@ class Component extends DCLogic {
     // insulation scales with how much of the room is actually roofed, and walls alone still break the
     // wind (the wallShield below is part of this same flag). Off, everything reduces to the pre-roof sim.
     const ROOFON = !(window.AGON_P || {}).noroof;
+    // r44 experiment (AGON_P.realins): physically honest insulation. Dry stone is laid without
+    // mortar — drafty and thermally conductive, the WORST insulator of the three, not the best;
+    // daubed wattle (mud plaster) is decent; solid timber is the warmest. Stone keeps hp 4 and
+    // burn 0, which is why people built in it anyway — the trade-off becomes real instead of
+    // stone being strictly best. Off, the shipped ordering (8/10/12) is untouched.
+    const REALINS = (window.AGON_P || {}).realins ? { wattle: 9, timber: 10, stone: 7 } : null;
     // r41: shelter is the floor again, in BOTH arms. r40 measured the alternative and it killed
     // colonies: making the roof the gate meant insulation fell to zero and wind chill switched on
     // the moment roofs were enabled, so a colony lost the shelter it already had exactly while it
@@ -5592,7 +5598,7 @@ class Component extends DCLogic {
         const amb = seasonTemp(tick) + BIOME.t + 6 * Math.cos(2 * Math.PI * (tphA - 12.5) / 50) + (wthA === 'cold snap' ? -9 : wthA === 'heat wave' ? 10 : 0);
         const inBed = a.act === 'sleep' && a.bed >= 0 && BEDS[a.bed] && BEDS[a.bed][0] === a.x && BEDS[a.bed][1] === a.y, huddle = agents.reduce((n, b) => n + (b !== a && b.alive && cheb(a, b) <= 1 ? 1 : 0), 0), leeK = key(a.x, a.y - 1), lee = BOUL.has(leeK) || WALLS.has(leeK) || terAt(a.x, a.y - 1) === 5 || terAt(a.x, a.y - 1) === 12, tentNear = (s.tents || []).some((q) => q.t > tick && cheb(a, q) <= 1),
           rcov = (FLOORS.has(key(a.x, a.y)) ? 1 : 0),
-          warmth = rcov * (a.fac ? 6 : this.E.WALLMATS[store.wallMat || 'wattle'].ins) + (inBed ? 5 : 0) + (terAt(a.x, a.y) >= 6 ? 6 : 0) + (cheb(a, { x: HEARTH[0], y: HEARTH[1] }) <= 4 && techs.includes('firecraft') ? 10 : 0) + (a.fac && a.home && cheb(a, { x: a.home[0], y: a.home[1] }) <= 3 ? 10 : 0) + Math.min(6, 2 * huddle) + (lee ? 3 : 0) + (tentNear ? 8 : 0); // bodies close together share heat (+2 each, up to 3), a rock or wall to windward breaks the wind, a hide windbreak keeps most of it off
+          warmth = rcov * (a.fac ? 6 : (REALINS ? REALINS[store.wallMat || 'wattle'] : this.E.WALLMATS[store.wallMat || 'wattle'].ins)) + (inBed ? 5 : 0) + (terAt(a.x, a.y) >= 6 ? 6 : 0) + (cheb(a, { x: HEARTH[0], y: HEARTH[1] }) <= 4 && techs.includes('firecraft') ? 10 : 0) + (a.fac && a.home && cheb(a, { x: a.home[0], y: a.home[1] }) <= 3 ? 10 : 0) + Math.min(6, 2 * huddle) + (lee ? 3 : 0) + (tentNear ? 8 : 0); // bodies close together share heat (+2 each, up to 3), a rock or wall to windward breaks the wind, a hide windbreak keeps most of it off
         if (!a.sub && a.alive) { applyMut(a, 0.004, r); if (a.sub) { a.sz = Math.min(1.45, a.sz); if (a.build !== 'child') a.height = Math.round(168 * a.sz * (0.96 + 0.04 * a.g.strength) * (0.9 + 0.1 * a.g.frame)); log.push({ t: tick, text: a.id + ' was altered by ' + SUBST[a.sub].label.toLowerCase() + ' (' + SUBST[a.sub].eff + ')', kind: 'warn' }); } }
         const outd = !shelt(a.x, a.y) && terAt(a.x, a.y) < 6, wv = windAt(a.x, a.y, tick);
         // standing walls break the wind even before the roof goes on, so building pays off at once

@@ -79,7 +79,7 @@ async def main():
 
     print(f"\n{'metric':9s} {'A':>7s} {'B':>7s} {'B-A':>7s} {'sd_d':>7s} {'SE':>6s} "
           f"{'t':>6s} {'rho':>6s} {'MDE':>6s}   B better/worse/same")
-    for k in ('survived', 'alive', 'peak', 'built', 'techs'):
+    for k in ('survived', 'alive', 'peak', 'built', 'techs', 'spoiled'):
         s = paired(A, B, k)
         print(f"{s['metric']:9s} {s['mean_a']:7.2f} {s['mean_b']:7.2f} {s['mean_diff']:7.2f} "
               f"{s['sd_d']:7.2f} {s['se']:6.2f} {s['t']:6.2f} {s['rho']:6.2f} {s['mde']:6.2f}   "
