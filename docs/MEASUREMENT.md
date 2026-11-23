@@ -290,12 +290,18 @@ capacity ruled out (train R² 0.995). What is left is optimization, and `value.e
 on a live run is still the number that quantifies it — read against the scale in §5d, not against 1.
 
 The candidates are in **§5d**, re-ranked after the λ probe: **C** (auxiliary prediction heads) is
-now first, D second, A demoted after being measured against, B last. None is applied. Capacity is
-still not among them.
+first, D second, A demoted after being measured against, B last. Capacity is still not among them.
+
+**C is now implemented and off by default** (`97e65aa`, `code_version` `cbb6f706e03f`): a supervised
+`dies within k ticks` head behind `--hazard-coef`, with the label shape chosen by measurement
+(held-out AUC 0.896) rather than by argument. What stays open is whether it moves
+`value.explained_variance`, which only a GPU run at `--hazard-coef > 0` against an unflagged
+baseline can say. **D's premise — gradient interference in `feat_dense` — is still unmeasured.**
 
 **The λ experiment is the cautionary one.** It was the best-argued candidate here and the argument
-was wrong — a whole-life return identity applied to a windowed mid-life target. Before writing code
-for C, measure its premise the way A's was measured.
+was wrong — a whole-life return identity applied to a windowed mid-life target. That is why C's
+premise *and* C's label shape were both measured before any code was written, and why the obvious
+label (`fraction of life elapsed`, R² −2.424) was not the one shipped.
 
 ---
 
@@ -743,7 +749,7 @@ Only worth doing **after** A, and only if A's measurement shows the window has b
 constraint. Memory scales linearly in `--steps`, and the Colab profile already OOMs at 128 with
 `--agent-chunk 8`, so this is the expensive candidate on current hardware.
 
-### C. Auxiliary prediction heads — now the leading candidate
+### C. Auxiliary prediction heads — **implemented, off by default** (`97e65aa`)
 
 Predict needs at longer horizons, or remaining lifetime, as a supervised head. Labels are free from
 the rollout. This is the proposal's own §5 "consequence models", and in the literature it is UNREAL
@@ -787,8 +793,56 @@ labels generalize across held-out lifetimes (§0), and the answer reshapes the c
    and it is the thing `V` actually needs. That — not a longer horizon on the needs head — is what
    C should be.
 
-- **Why it is still not applied.** It now has a measured premise and a shape, but a coefficient to
-  tune and two files to change. The spec is the next artifact; the code is not.
+#### As implemented (`97e65aa`)
+
+The label is **`dies within k ticks`**, a binary hazard, chosen by `scripts/probe_label_form.py`
+over four candidate formulations. It won on two criteria at once: held-out **AUC 0.896** at k=48
+from a frozen random trunk — the strongest of the four — and the only one computable inside a
+176-tick rollout window at all. `fraction of life elapsed` scored **R² −2.424**, which is the level
+problem of point 1 above resurfacing in the obvious-looking choice; the two formulations that do
+score well (within-centred remaining life, 0.522) need the whole life's mean and so cannot be built
+from a window.
+
+| what | where |
+|---|---|
+| head (`haz_hidden` 64 → `haz_out` 1, orthogonal 0.01) | `lifesim/policy.py`, `hazard_of` |
+| labels + validity mask (one reverse `lax.scan` over `died`) | `lifesim/ppo_multi.py`, `hazard_labels` |
+| flags | `--hazard-coef` (0.0), `--hazard-k` (48), on `train_phase2.py`; `--hazard-coef` on `experiment.py` |
+| metrics | `hazard.loss`, `hazard.rate`, `hazard.acc`, written only when `--hazard-coef > 0` |
+| cost | +4,225 params when on; `hazard=False` is bit-identical at 195,051 |
+| `code_version` | **`cbb6f706e03f`** (was `0683ec2d7a1c`); no run existed at the old value, so nothing was invalidated |
+
+Off by default and field-comparable: with `--hazard-coef 0` the parameters are never created and the
+history row has no `hazard` key, so an unflagged run stays comparable to the Nov 7 baseline field
+for field.
+
+**Two traps, both of which cost time once already.**
+
+1. **A head reachable only from `learn_terms` never gets parameters.** Flax `init` runs `__call__`,
+   so the head must be computed in `trace` (which `__call__` reaches) or `net.init` returns a
+   parameter tree without it and `apply` fails on a missing key. The world-model heads escape this
+   only by accident of `trace` → `imagine` using them. The hazard head is therefore computed in
+   `trace` and merely *read* in `learn_terms`.
+2. **`k` larger than the window makes all three metrics read `0.0`, and that is correct.** The
+   validity mask only supervises a tick whose outcome the window settles. At the default k=48 inside
+   a 16-tick smoke run, nothing is settled, nothing is supervised, and `hazard_rate` is 0 — which
+   looks exactly like a broken head. Supervision was confirmed by rerunning at `k=8`: loss starts at
+   **0.69272** (= ln 2, an untrained logit-0 head), falls, and accuracy goes to 1.0. Do not read the
+   zeros in a short run as a bug; shrink `k` instead.
+
+`__call__` still returns a 3-tuple, so `ppo_multi`, `continuous_world`, `diagnose` and the probes
+needed no change — `tests/test_hazard_head.py` pins that, along with the hand-computed label cases.
+
+**Test evidence.** 12 new tests in `tests/test_hazard_head.py`; then 55 passed (25:14) across the
+ten files most able to falsify the change (`test_shared_trunk`, `test_world_model`, `test_sleep`,
+`test_sleep_memory`, `test_truncation`, `test_tick_scale`, `test_sharing`, `test_social`,
+`test_society`, `test_skills`) and 68 passed (1:52:56) across the unrelated remainder — zero
+failures. Note the second batch nearly hit the 2-hour background cap: split this suite by risk, do
+not launch all 365 as one job.
+
+**What has not been measured.** Whether the head moves `value.explained_variance`. That needs a GPU
+run at `--hazard-coef > 0` against an unflagged baseline, and EV should be read against the scale
+below (the target itself carries only R² 0.27 at sd 0.58), not against 1.
 
 ### D. A critic input path not shared with the 532 language dimensions
 
@@ -825,8 +879,12 @@ must not be presented as the fix. **B** still waits on A.
 
 One change at a time, or the result cannot be attributed — which is the whole reason the diagnosis
 took this long. And the reason A was demoted is worth keeping in view: it was the best-argued
-candidate on this list and the argument was wrong. Measure the premise of C before writing its
-coefficient, not after.
+candidate on this list and the argument was wrong.
+
+C's premise and C's label shape were both measured before its code was written, and C is now
+implemented behind `--hazard-coef` (above). The next step is a run, not another candidate: one
+baseline, one `--hazard-coef > 0`, separate `--root`s, judged on `value.explained_variance`. D stays
+second and still owes its own measurement before it owes an implementation.
 
 ---
 
