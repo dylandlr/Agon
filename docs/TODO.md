@@ -1655,3 +1655,26 @@ answers the question the design hinges on: in the worlds that die unfed, does fo
 reach (migration rescues them) or are the maps barren (migration is a depletion-dynamics
 mechanic and the blocked worlds need a different fix)? Probe: forage by distance ring from camp
 (<=10 / 11-22 / >22), water distance, death causes, 6 starving worlds.
+
+## M1a probe results — the "food/water-blocked" worlds are mostly HEAT-blocked
+Probe of 6 extinct worlds (/tmp/mar/m1a_probe.json): forage by distance ring from camp, water
+distance, death causes.
+- **Heat-blocked (4/6)**: desert s3 (16 heat deaths), desert s21 (18), volcanic s3 (17) — food
+  abundant in the near ring throughout, water 0-7 tiles. jungle s21 also mostly heat (12).
+  Migration cannot rescue these; the kill mechanism is thermal.
+- **Cold-blocked (1/6)**: alpine s21 (13 cold deaths by t=3000) with 62-119 food at 11-22 tiles.
+- **Reach/depletion-blocked (2/6, overlapping)**: jungles. jungle s3: near-ring forage stripped
+  to 0.0 by t=3000 while the far ring held 48-75 — 6 starvation deaths beside a full map. The
+  one clean case where migration/satellite camps rescue.
+- **New systematic finding**: shelter terms are additive warmth, so floors and caves (+6) make
+  hot-biome colonists HOTTER — the r44/r45 backwards-model family on the hot side. A cave in a
+  desert should cool; shade is neutral.
+
+### Revised next-round order (pending go)
+1. **Shelter-never-overheats**: cap shelter warmth (floor ins, cave, tent, lee — not the hearth)
+   so it cannot push eff past comfort; optionally caves damp toward 22 like roofs. One flag,
+   targets 51 heat deaths across deserts/volcanic/jungle s21, leaves the cold bootstrap intact.
+2. **M1 scoped as satellite forage camps** (tents + a forage range extension) targeting the
+   jungle depletion pattern — far lighter than full camp re-anchoring (see scoping note above).
+   Full re-anchoring stays on the roadmap for nomadism proper, justified by depletion dynamics
+   rather than rescue.
