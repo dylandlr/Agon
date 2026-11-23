@@ -291,6 +291,51 @@ The two coincide whenever every slot is alive, which is why only `tests/test_sha
 when the default flips: `mix_reward` is called only when `alpha` or `alpha_heritable` is set, and
 every other test trains at `alpha = 0`.
 
+## 5c. Two experiments, two configs
+
+`core` and the emergence track measure different things and need different configs. This is not
+about the Oct 2026 proposal being authoritative — it is dated and the system has moved past it
+deliberately. It is that an 8-agent cooperation measurement and a 64-slot multi-generation run
+cannot share one config without conflating them.
+
+| | `core` (cooperation) | emergence (`validate`, Master's track) |
+|---|---|---|
+| Agents | 8 fixed | 64 slots, 8 founders, reproduction |
+| Episode | 1 year, 1,920 ticks | 25 years, 48,000 ticks |
+| Why | its 7 metrics need no birth | a founder is fertile at 15 bio years x 40 days = **600 days**, so one generation needs ~15 years |
+| Denominator | every slot (`1/N`) | `--share-living` |
+| Peak update memory | ~1.5 GiB | ~12 GiB, needs `--agent-chunk` |
+| Steps per learner at 1e8 | 12.5M | 1.56M |
+
+`core` pins `--agents 8 --founders 8 --episode-years 1` per item. Running it on the emergence config
+produced three failures at once: the Colab OOM (64 copies of a 404,971-parameter network, ~12 GiB),
+sample starvation (1e8 spread over 64 learners, not 8), and objective saturation (gamma 0.997 gives a
+333-tick horizon against a 48,000-tick episode).
+
+**The emergence config is the harder and more interesting one, and its problems are real, not
+artifacts.** Saturation at 48,000 ticks is a property of that track and has to be solved there, not
+configured away — see §3 for the derivation.
+
+### Current spec versus the proposal
+
+The proposal is from Oct 2026. Everything below grew on purpose; the table exists so the writeup can
+state the current system accurately, not as a list of debt.
+
+| Item | Proposal | Now |
+|---|---|---|
+| Observation | 3,098 (11×11×24 + 194) | **8,668** (11×11×64 + 668 + 256 map) |
+| Vocabulary | 16 symbols, ≤3/tick | 32 symbols, `MSG_LEN` 4, plus written inscriptions |
+| Actions | 42 | **84** primitives × 60 aim × 32⁸ symbols |
+| Heritable traits | 14 (6 moral) | 27 |
+| Cognitive map | — | `8×8×4`, two decay rates |
+| Episodes | 1 compressed year | 25 years (reproduction needs it) |
+
+On the observation, the growth is not uniformly expensive: conv weights are shared over space, so the
+window's +4,840 numbers cost only **+5,760** parameters (`3·3·24·16 → 3·3·64·16`), while the body's
++730 numbers cost **+46,720** (`194·64 → 924·64`) by landing in a dense layer. 11% of the network,
+not 180%. The live question is that 532 of `feat_dense`'s 924 inputs are heard/read symbols sharing a
+64-unit bottleneck with the 8 scalars that determine reward.
+
 ## 6. Spaces, for reference
 
 - **Observation** `ℝ^8668` = `11×11×64` egocentric window (7744) ⊕ 668 body/social/heard/read

@@ -126,12 +126,21 @@ def items(kind, args=None):
         return [(k, [s]) for k, s in STRESS]
     if kind == "inheritance":
         return [(f"{mode}_s{seed}", [mode, str(seed)]) for mode in ("parent", "innate") for seed in (21, 22, 23)]
+    # The proposal's core experiment is a COOPERATION experiment, not the emergence one: 8 agents per
+    # 32 x 32 world, one compressed year (1,920 ticks), no generations. None of its seven metrics
+    # (large-prey kills, deterrence, huddling, sharing, violence, lifespan, hunting Gini) needs a birth.
+    # The society30 preset is the emergence config -- 64 slots, 8 founders, 25-year episodes, because a
+    # founder only reaches fertile age at 15 biological years x 40 days = 600 days. Inheriting that here
+    # would run 64 agent-copies of the network (~12 GiB, the Colab OOM), give each learner 1/8 the data
+    # the proposal budgeted (100M / 8 agents, not / 64), and stretch the episode 25x past the horizon
+    # gamma = 0.997 was chosen for. So pin the proposal's numbers per item.
+    spec = ["--agents", "8", "--founders", "8", "--episode-years", "1"]
     out = []
     for alpha in (0.0, 0.5, 1.0):
         for food in (1.0, 0.4):
             for seed in (0, 1, 2):
                 out.append((f"a{alpha}_f{food}_s{seed}",
-                            ["--alpha", str(alpha), "--scarcity", str(food), "--seed", str(seed)]))
+                            ["--alpha", str(alpha), "--scarcity", str(food), "--seed", str(seed), *spec]))
     return out
 
 
