@@ -1538,3 +1538,37 @@ scratchpad, not /tmp/mar.
 Food/water-blocked worlds (5); temperate s3 build inefficiency; _culture dead code; mockDecide
 Math.random; stone>wattle insulation ordering backwards; damping 0.3 / spoilage 0.4 untuned;
 dry-storage channel unmeasured directly; origin URL still points at the old repo name.
+
+## r44 — realins experiment: NOT shipped; spoilage channel measured; r43 reconfirmed 24/24
+Code in 40e6bf7: AGON_P.realins (wattle 9 / timber 10 / stone 7) and `spoiled` (cumulative
+store.spoiled) recorded by panel.py and paired by ab.py. Two panel A/Bs, 6000 ticks
+(/tmp/mar/ab_realins.json, /tmp/mar/ab_noroof.json).
+
+### realins: kill. Extinctions 10 -> 15 (2 saved / 7 killed, p=0.18)
+survived -298 (t=-0.92), alive -0.83 (t=-1.14) — ns by t, but every discordant points the
+same way and the mechanisms are legible:
+- **Heat worlds died of the wattle +1**: volcanic s21 went from 5 alive at 6000 to extinct at
+  t=898; savanna s3 and s21 both 4 -> 0. `warmth` is ADDITIVE heat (eff = amb + warmth - chill,
+  heatGap = max(0, eff-28) drains hydration), so floor shelter already adds +8 eff in a desert
+  and "better insulation" cooks the colony. 0/24 worlds byte-identical because insulation does
+  not require walls (rcov is floor-based, the r35 wart) — the +1 touched every world.
+- **Cold stone worlds died of the stone -5**: tundra s3 7 -> 0 (died 3782), alpine s3 4 -> 0,
+  badlands s21 died ~2000 ticks earlier. (Both smoke worlds and most of the panel pick stone
+  under vern — stone-rich maps dominate.)
+- Finished walls ROSE 7 -> 10; the failure is purely thermal, not construction.
+
+### The real finding: the insulation model is backwards, like pre-r42 roofs were
+The wall-ins term is an unconditional heater. The roof damping (eff -> eff + (22-eff)*0.3*cov)
+is the physically right shape: insulation should pull eff TOWARD comfort from both sides,
+scaled by actual wall coverage (covAt().wall, cached since r42), not add heat on a floor with
+zero walls standing. Until that restructure, any ins-value reordering just redistributes
+deaths between hot and cold biomes. realins stays in the code as the experiment record, OFF.
+-> r45 candidate: insulation-as-damping, one structural change behind a flag, panel A/B.
+
+### noroof A/B: r43 reconfirmed and the dry-storage channel read
+- **Reproduction 24/24 both ways, byte-exact**: default == r42 arm B, noroof:1 == r42 arm A,
+  over the whole panel. The r43 flip is fully confirmed.
+- **spoiled: noroof +2.42 over roofs (right sign), t=0.84, MDE 8.45** — the dry-storage cut
+  exists but is under this panel's resolution, and per-world diffs are divergence-dominated
+  (wetland s21 -56 for roofs, badlands s3 +22 against). Not worth tuning the 0.4 coefficient
+  until something needs it; the metric is now standing panel equipment.
