@@ -1765,3 +1765,56 @@ satellite camps) is the structure that honest knowledge NEEDS: fix the epistemic
 together or not at all. That pairs fresh with the heavy re-anchoring work scoped under "M1
 scoping note" above — a deliberate, larger round, not a quick flag. Heat remains the other open
 front (exertion/canopy for jungles; desert s21 + volcanic s3 still die of heat with shade on).
+
+## r52a — live camp anchor (reanchorCamp): the M1 keystone refactor, byte-exact
+Commit 6adb106. Founding site OX/OY stays permanent for worldgen (lakes, vegetation, plots,
+ramps); a live anchor CAX/CAY now drives everything colonial (inCamp, campDist, blueprints,
+doors, rooms, furniture, hearth, beds). reanchorCamp(nx,ny) rebuilds the blueprint sets at the
+new site and drops the caches; keys leaving the blueprint stop being managed, so the old camp
+is left standing as free permanent ruins. Inertness 3/3 byte-exact (no flag — pure refactor,
+must be invisible until something calls it). Direct-call smoke: temperate s21 moved (44,0) ->
+(58,6), 52 walls rebuilt in 1500 ticks, 55 old walls as ruins, no errors. Known cosmetic debt:
+minimap ox() still reads founding OX, so the viewport rectangle drifts after a relocation.
+
+## r52b — migration (AGON_P.mig): v1 killed by instrumentation, v2 distress-driven
+Three bugs on the way in, all mine:
+- The first smoke "hang" was diagnosed as unreachable-site pathfinding and "fixed" (067c873,
+  BFS reachability gate on candidate sites). Wrong diagnosis — the gate is kept as a guard, but
+  the actual cause was:
+- a TDZ crash: the trigger read `store.shelterT` ~85 lines before `const store` (8ed6d7a). The
+  smoke harness advances inside a setTimeout callback, where a throw rejects nothing — the
+  promise just never resolves. Both "hangs" were this one ReferenceError at tick 500.
+- The gate probe's first run set biome/seed via AGON_P, which the app ignores — four identical
+  "worlds". setWorld() is the only way; worth remembering before trusting any probe output.
+
+### v1 (gather-distance trigger) — 0 fires in 48 probed windows, killed
+Trigger was "successful gathers average >14 cheb from camp, n>=10 per 500-tick window". Both
+gates are structurally starved: colony-wide gather successes run 0-13 per window, and their
+distance samples the survivable radius, not the need (agents who range far mostly fail or die
+— survivorship bias). The two gates never passed together in any window of jungle 3/21,
+desert 21, temperate 21. Same trigger-starvation family as r49/r50 scout.
+
+### The roadmap's own premise is false
+M1 assumed blocked worlds die because "known resources within reach are exhausted". The camp
+knowledge pool says otherwise: 13-29 known-true bushes within cheb 12 of camp in every dying
+world, the whole time it dies (fresh:1, so busts are recorded). Colonies do not die out of
+local depletion in the knowledge map — they die of heat, with thirst/starvation downstream.
+Migration-as-food-following has no honest signal to fire on.
+
+### v2 (distress trigger, da0595a) — fires exactly where colonies die
+On >=2 deaths to the land (starvation/thirst/heat) per 500-tick window — which the probe shows
+happens only in dying worlds (temperate's worst window: 1) — aim migSite at the centroid of
+known food beyond cheb 12 (>=2 entries required), take the best water-scored reachable site,
+cooldown 2000, shelter established. Deterministic, no RNG. Smoke: inertness MATCH 4/4, moves
+fire at t=1000 in jungle s3 + desert s21, quiet in temperate; **desert s21 goes 0 -> 5 alive**
+(the colony breaks camp at t=1000 and lives). Jungle s3 moves twice and still dies of heat.
+
+### Panel, arm B = fresh:1,mig:1 — null overall, but the attribution splits cleanly
+alive -0.25 (t=-0.40), walls -6.5 (t=-1.48, fresh's construction collapse again), extinctions
+7 -> 8, discordants 2 saved / 3 killed (exact p=1.0). The identities tell the real story: all
+3 kills (desert s3, tundra s21, volcanic s21) are on r51's fresh kill list; the 2 saves are
+badlands s21 (fresh's save in r51) and **desert s21 — mig's save, matching the smoke**; and
+forest s21, which fresh alone killed, is no longer killed with mig present. Within the limits
+of cross-panel comparison: mig looks mildly protective, fresh remains the liability, and the
+r52 pairing hypothesis dissolved when the trigger became distress-driven (v2 needs no belief
+hygiene). mig:1-alone panel running — that is the ship/park arm.
