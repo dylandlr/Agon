@@ -166,16 +166,69 @@ crosses **1.3**. `gae_lambda` is given per 30-minute tick and raised to `tick_sc
 far is at the 30-minute calibration, so `tick_scale` is 1.0 and the effective λ is the configured
 one. `--gae-lambda` now exposes it, defaulting to 0.95 so nothing changed silently.
 
+### Raising λ removes signal from the critic's target rather than adding it
+
+**This refutes the reasoning this document gave for candidate A.** Measured by
+`scripts/probe_target_info.py --seeds 8`: roll a random policy until every agent dies, record the
+real reward and the real network's value each tick, compute GAE over the true 176-tick windows
+bootstrapping from `V` at each cut, and ask how much of the resulting target is explained by
+remaining lifetime. The network is freshly initialised on purpose — the trained critic is
+near-constant, so a near-constant `V` is the regime the run is stuck in, and the probe reports its
+own `V` spread (0.0928) to check that rather than assume it.
+
+| `gae_lambda` | R² target↔lifetime | R² target↔Φ | sd(target) |
+|---|---|---|---|
+| **0.95 (shipped)** | **0.2692** | 0.2364 | 0.5812 |
+| 0.99 | 0.2587 | 0.1905 | 1.0051 |
+| 0.995 | 0.2285 | 0.1611 | 1.1223 |
+| 1.0 | 0.1795 | 0.1209 | 1.2811 |
+
+Monotone, and not seed noise: paired over 8 seeds, λ=0.95 minus λ=1.0 is **+0.0897** (t = 2.90,
+df 7, p = 0.023; Wilcoxon p = 0.039; Spearman λ↔R² ρ = −0.44, p = 0.012), 6 of 8 seeds favouring
+0.95. Meanwhile `sd(target)` rises 2.2×. **Raising λ buys variance, not signal.**
+
+The mechanism is the shaping term. `R²(target, Φ)` falls with λ on the same monotone curve, and the
+per-step reward contains `γΦ(s′) − Φ(s)` — which is why the verified return identity ends in `−Φ₀`:
+it telescopes. Φ is a hand-designed function of the eight body scalars, i.e. a proxy for nearness to
+death, and it is inherently a one-step quantity. Averaging over 176 ticks dilutes it into the noise
+of a longer sum. 49% of agent-windows do contain the agent's death, so "most windows have no death
+to carry" is *not* the explanation, and was checked.
+
+Where the earlier argument went wrong: the return identity is proven for a **whole-life** return
+from reset, with Φ₀ the initial potential. A windowed **mid-life** GAE target also carries `Φ(s_t)`
+and a `γ^k·V(cut)` bootstrap, so it is not affine in remaining lifetime and "MC variance is lifetime
+variance" does not transfer to it.
+
+What this does **not** establish: that λ=1.0 fails in training. The probe measures the target at
+initialisation. As `V` becomes informative its bootstrap carries real information, and that could
+reverse the ordering. One random policy, one untrained critic, 8 agents, 8 seeds.
+
+### The target is not empty, and the critic still does not fit it
+
+At the shipped λ the target already carries R² 0.27 of remaining lifetime, yet `value.
+explained_variance` is ~0 in training (−0.4334 at update 1 of a local CPU run). So some signal *is*
+delivered and the critic is not extracting it. That sharpens the root cause: the failure is not
+only in what credit assignment delivers, it is in the critic fitting a noisy target — sd 0.58 with
+roughly a quarter of it structured. Representational capacity stays ruled out (train R² 0.995), so
+what is left is optimization: one gradient step per sleep, weighted by consolidation, against a
+target whose signal-to-noise is about 1:3.
+
 ### Still open
 
-**Root cause: credit assignment, confirmed with a mechanism** (above), not merely by elimination.
-What remains is quantitative, and `value.explained_variance` on a live run supplies it: how close to
-zero the critic's explained variance actually is during training, rather than inferred from a
-near-constant value probe after the fact. That number also becomes the metric any fix is judged on.
+**Root cause: the critic, confirmed with a mechanism** (above), not merely by elimination — but the
+mechanism is narrower than "credit assignment" as this section first put it. The target handed to
+the critic is not empty: it carries R² 0.27 of remaining lifetime at the shipped λ, and no λ
+improves that. So the failure is the critic not fitting a noisy target, with representational
+capacity ruled out (train R² 0.995). What is left is optimization, and `value.explained_variance`
+on a live run is still the number that quantifies it — read against the scale in §5d, not against 1.
 
-The fix is specified in **§5d**, with the four candidates ranked and the measurement each is judged
-on. It is not yet chosen or applied. Capacity is NOT among the candidates: the architecture fits
-remaining lifetime to train R² 0.995.
+The candidates are in **§5d**, re-ranked after the λ probe: **C** (auxiliary prediction heads) is
+now first, D second, A demoted after being measured against, B last. None is applied. Capacity is
+still not among them.
+
+**The λ experiment is the cautionary one.** It was the best-argued candidate here and the argument
+was wrong — a whole-life return identity applied to a windowed mid-life target. Before writing code
+for C, measure its premise the way A's was measured.
 
 ---
 
@@ -551,29 +604,42 @@ and the policy can only learn a state-independent habit. They differ in how they
 state-dependent signal into `V`. None is applied yet.
 
 All four are judged on the same number: **`value.explained_variance`** in `history.json`, now
-logged every update. A fix that does not move it off ~0 has not worked, whatever else it changes.
-The behavioural confirmations are the second gate — a policy that drinks 2.9× more when full than
-when thirsty, and flees predators less than random, must reverse — because explained variance can
-rise on a critic that predicts lifetime without the policy using it.
+logged every update. **Judge it against the right scale.** Explained variance is
+`1 − E[(target−V)²]/Var(target)`, and the target is noisy: at the shipped λ it carries R² 0.27 of
+remaining lifetime at sd 0.58 (§0). Lifetime is only one function of state, so 0.27 is a lower
+bound on what a perfect critic could reach, not a ceiling — but it is nowhere near 1, and an
+earlier version of this section implied a fix should drive explained variance near 1. It should not.
+A working fix moves it clearly and durably above 0. The behavioural confirmations are the second
+gate — a policy that drinks 2.9× more when full than when thirsty, and flees predators less than
+random, must reverse — because explained variance can rise on a critic that predicts lifetime
+without the policy using it.
 
-### A. Raise `gae_lambda` — recommended first, alone
+### A. Raise `gae_lambda` — ~~recommended first~~ **measured against, demoted**
 
-One number. Credit reach goes from 12.8 ticks to 176 (§0), so a thirst death 230 ticks after the
-last drink crosses 1.3 windows instead of 18.
+This was recommended first. `scripts/probe_target_info.py` then measured what raising λ does to the
+critic's target, and it is the opposite of what the recommendation assumed: R²(target, lifetime)
+falls monotonically from 0.269 at λ=0.95 to 0.179 at λ=1.0 (paired p = 0.023) while `sd(target)`
+rises 2.2×. λ buys variance, not signal. §0 has the table, the mechanism (the one-step shaping term
+`γΦ(s′) − Φ(s)` is what carries the state-dependent content, and a long λ dilutes it) and the error
+in the original argument (the return identity is a whole-life result and does not transfer to a
+windowed mid-life target).
 
-The standard objection to λ→1 is variance, and it does not apply with its usual force here. The
-return identity is **verified exact**: `G = c_a/(1−γ)·(1−γ^(T−1)) − c_d·γ^(T−1) − Φ₀`. The return is
-an affine function of lifetime, so the variance of the Monte-Carlo return is the variance of
-lifetime — which is precisely the quantity `V` exists to predict, and precisely what the
-architecture already fits to train R² 0.995. In a normal task MC variance is reward and transition
-noise; here it is the signal.
+What survives is only the arithmetic: at λ=0.95 the credit half-life is 12.8 ticks inside a 176-tick
+window, so a consequence 230 ticks away reaches `V` through 18 windows of chained bootstrapping.
+That is still true, still bad, and no longer evidence that raising λ is the remedy — a longer credit
+path is worth nothing if what travels down it is noise.
+
+**Do not run A on the old grounds.** It stays on the list because the probe sees only
+initialisation: it cannot say what happens once `V` is informative enough for its bootstrap to
+carry real information, and that is exactly the regime a long λ is supposed to exploit. If it is
+run, it is as a cheap one-number experiment with an explicit prior that it may well do nothing, not
+as the targeted fix. `--gae-lambda` and the paired-root machinery are in place either way.
 
 - **Cost**: zero. The flag exists; no new parameters, no new compute, no new loss term.
 - **Blast radius**: learning dynamics of every run. Nothing structural. Fully reversible.
 - **Residual risk**: at λ=1 the *policy* advantage also becomes Monte-Carlo, which does raise
-  policy-gradient variance for real. If that bites, the next step is separate λ for critic and
-  actor — but that is a second change and must not be bundled with this one.
-- **Suggested value**: 1.0, because it is the only value where the 176-tick window rather than λ is
+  policy-gradient variance for real — and the probe now measures that rise directly.
+- **If run anyway**: 1.0, because it is the only value where the 176-tick window rather than λ is
   the binding truncation, and 0.995 still discards half of it. If 1.0 destabilizes the policy, 0.99
   is the fallback and still a 4× improvement.
 
@@ -610,17 +676,22 @@ Only worth doing **after** A, and only if A's measurement shows the window has b
 constraint. Memory scales linearly in `--steps`, and the Colab profile already OOMs at 128 with
 `--agent-chunk 8`, so this is the expensive candidate on current hardware.
 
-### C. Auxiliary prediction heads
+### C. Auxiliary prediction heads — now the leading candidate
 
 Predict needs at longer horizons, or remaining lifetime, as a supervised head. Labels are free from
 the rollout. This is the proposal's own §5 "consequence models", and in the literature it is UNREAL
 / general value functions (Sutton & Barto ch17, auxiliary tasks).
 
 - **Cost**: a head, a loss term, a coefficient to tune. Changes `policy.py` and `ppo_multi.py`.
-- **Why not first**: it shapes the *representation*; it does not change the critic's *target*. With
-  the target still reaching 12.8 ticks back, a better representation has nothing to regress onto.
-  C without A is likely insufficient. A without C may be sufficient. If A moves explained variance
-  but behaviour does not follow, C is the next change.
+- **Why it moved up.** This section used to say C "shapes the representation; it does not change the
+  critic's target", and that C without A was likely insufficient. The first half is still true and
+  is now the argument *for* it. The probe showed the credit path is not what puts lifetime
+  information into the target — no λ does — so there is no version of A that supplies the signal C
+  would supply. A supervised head bypasses the credit path, the bootstrap and the noise in one step:
+  the label is what actually happened, at R² 0.995 fit by this architecture already.
+- **Why it is still not yet applied.** It is the one candidate whose premise has been measured
+  (capacity 0.995, labels free, signal absent from the target at every λ), but it is also the one
+  with a real coefficient to tune and two files to change. It needs a spec before code.
 
 ### D. A critic input path not shared with the 532 language dimensions
 
@@ -631,13 +702,34 @@ the rollout. This is the proposal's own §5 "consequence models", and in the lit
 34/128, condition number 1.3e3). Interference is unmeasured, so this candidate rests on a
 hypothesis nothing in §0 supports. It needs its own measurement before it needs an implementation.
 
+### E. Φ is carrying the signal — so the Φ experiment points the other way
+
+Not a fix, but the measurement reorders a decision already on the list. `R²(target, Φ)` is 0.236 at
+the shipped λ and falls with λ on the same curve as lifetime, so the one-step shaping term is the
+main state-dependent content of the critic's target. Potential-based shaping provably leaves the
+optimal policy unchanged and telescopes out of the full return (Ng, Harada & Russell 1999) — it is
+affecting learning dynamics only, and right now it is most of what the critic has to go on.
+
+An earlier decision was to keep Φ and "measure it separately", with the implied experiment being to
+disable it. That experiment now has a predicted answer and it is the uninteresting direction:
+removing the main source of state-dependent signal should make things worse. The informative
+experiment is the opposite one — whether Φ can be made a *better* proxy for nearness to death, or
+whether C's supervised head makes Φ redundant. Neither is specified.
+
 ### Why this order
 
-A is one number, costs nothing, targets the measured defect at its mechanism, and has a
-justification specific to this environment's verified return identity. B, C and D all cost real
-code or real memory and all become easier to judge once A has moved the baseline. Changing more
-than one at a time forfeits the ability to attribute the result — which is the whole reason the
-diagnosis took this long.
+**C first**, because it is the only candidate whose premise is measured rather than argued: the
+signal is absent from the target at every λ, the labels are free, and the architecture already fits
+them to R² 0.995. **D second**, because the sharpened root cause — signal present at R² 0.27,
+explained variance ~0, capacity ruled out — now points at optimization and interference, which is
+exactly D's hypothesis; it needs its own measurement first, and it is no longer "nothing in §0
+supports it". **A** is cheap enough to run as a side experiment but has been measured against and
+must not be presented as the fix. **B** still waits on A.
+
+One change at a time, or the result cannot be attributed — which is the whole reason the diagnosis
+took this long. And the reason A was demoted is worth keeping in view: it was the best-argued
+candidate on this list and the argument was wrong. Measure the premise of C before writing its
+coefficient, not after.
 
 ---
 
