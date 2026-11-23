@@ -271,6 +271,26 @@ the table below applies.
 
 ---
 
+## 5b. The group-mean denominator
+
+`mix_reward`'s `living` argument picks what the group mean divides by, and the two answer different
+questions.
+
+**Default: every slot.** `(1 - alpha) r_i + alpha (1/N) sum_j r_j` over all N, the proposal's
+formula. Dead and unborn slots carry reward 0 and so dilute the mean. Keep this for the alpha
+experiment: hypothesis H2 says a fully shared reward suffers from credit assignment, and that `1/N`
+dilution *is* the effect H2 predicts. Dividing by the living instead weakens it and biases the
+experiment toward refuting its own hypothesis.
+
+**`--share-living`: the agents alive at the start of the tick.** Right where slots far outnumber the
+living — 64 slots seeded with 8 founders — because there the shared share of the signal would
+otherwise shrink with the population for a reason the design never intended. A declared deviation
+from the proposal, not a default.
+
+The two coincide whenever every slot is alive, which is why only `tests/test_sharing.py` changes
+when the default flips: `mix_reward` is called only when `alpha` or `alpha_heritable` is set, and
+every other test trains at `alpha = 0`.
+
 ## 6. Spaces, for reference
 
 - **Observation** `ℝ^8668` = `11×11×64` egocentric window (7744) ⊕ 668 body/social/heard/read

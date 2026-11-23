@@ -512,6 +512,7 @@ def main():
         lcfg = MAConfig(num_worlds=1, num_minibatches=1, num_steps=args.learn_every, hidden=args.hidden,
                         encoder=encoder, gamma=hist.get("gamma", 0.997), alpha=hist.get("alpha", 0.0),
                         alpha_heritable=bool(hist.get("alpha_heritable", False)), share_radius=hist.get("share_radius", 0),
+                        share_living=bool(hist.get("share_living", False)),
                         imitation_coef=args.imitation if args.imitation is not None else hist.get("imitation", 0.5),
                         imitation_bias=hist.get("imitation_bias", "success"),
                         imitate_positive_only=not hist.get("imitate_all", False),
@@ -716,7 +717,7 @@ def main():
                 if hist.get("alpha") or hist.get("alpha_heritable"):
                     r = mix_reward(reward[None], prev.alive[None], prev.pos[None],
                                    prev.genotype.sharing[None] if hist.get("alpha_heritable") else hist["alpha"],
-                                   hist.get("share_radius", 0))[0]
+                                   hist.get("share_radius", 0), hist.get("share_living", False))[0]
                 else:
                     r = reward
                 col = lambda x: jnp.asarray(x)[:, None]

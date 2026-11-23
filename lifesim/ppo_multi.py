@@ -79,6 +79,9 @@ class MAConfig:
     # within this many cells (Chebyshev); 0 = everyone alive in the world.
     alpha_heritable: bool = False
     share_radius: int = 0
+    # The group-mean denominator: False = every slot (the proposal's 1/N), True = the living only.
+    # See mix_reward. Keep False for the alpha experiment.
+    share_living: bool = False
     # Off by default: with them on, speech more than doubled over 614k steps (133 vs 309 per
     # 1,000 agent-ticks) with no other benefit; talkers got copied, so talking spread.
     # Keep them as an experimental condition for language, not a default.
@@ -203,15 +206,25 @@ def consolidation_plan(done, died, sleep_q, stage, consolidation_ticks, span):
     return weight, finalized, consolidated, next_stage
 
 
-def mix_reward(reward, alive0, pos, alpha, radius):
+def mix_reward(reward, alive0, pos, alpha, radius, living=False):
     """Each agent's training reward: (1 - alpha) * own + alpha * the mean reward of its group.
 
     reward, alive0 (B, N); pos (B, N, 2); alpha a scalar or (B, N); radius 0 = the whole world, else the
-    agents within `radius` cells. The group is the agents ALIVE at the start of the tick, the agent itself
-    included: dead and unborn slots carry no reward and must not dilute the mean (they did before this was
-    written, so the shared share of the signal fell as the population did). An agent that was not alive
-    keeps its own reward unchanged."""
-    w = alive0.astype(reward.dtype)
+    agents within `radius` cells. An agent that was not alive keeps its own reward unchanged.
+
+    `living` picks the denominator, and the two answer different questions:
+
+    False (the default) divides by every SLOT in the group, so dead and unborn slots -- which carry
+    reward 0 -- dilute the mean. This is the proposal's formula, (1 - alpha) r_i + alpha (1/N) sum_j r_j,
+    and it is the faithful one for the alpha experiment: hypothesis H2 says a fully shared reward
+    suffers from credit assignment, and this 1/N dilution IS that effect. Removing it would bias the
+    experiment toward refuting its own hypothesis.
+
+    True divides by the agents ALIVE at the start of the tick. Use it where slots greatly outnumber
+    living agents -- 64 slots seeded with 8 founders, say -- because there the shared share of the
+    signal would otherwise shrink with the population for a reason the design never intended. It is a
+    declared deviation from the proposal, not the default."""
+    w = alive0.astype(reward.dtype) if living else jnp.ones_like(reward)
     if radius and radius > 0:
         near = (jnp.abs(pos[:, :, None, :] - pos[:, None, :, :]).max(-1) <= radius).astype(reward.dtype)
         wij = near * w[:, None, :]                                           # (B, N, N): j in i's group, alive
@@ -455,7 +468,7 @@ def make_train(env_cfg: EnvConfig, cfg: MAConfig):
             # Prosociality weight alpha: each agent's training reward mixes in the group mean
             a_vec = states.genotype.sharing if cfg.alpha_heritable else cfg.alpha
             if cfg.alpha_heritable or cfg.alpha:
-                reward = mix_reward(reward, states.alive, states.pos, a_vec, cfg.share_radius)
+                reward = mix_reward(reward, states.alive, states.pos, a_vec, cfg.share_radius, cfg.share_living)
             idx = jax.random.randint(k_pick, (b,), 0, b)
             fresh = jax.tree_util.tree_map(lambda x: x[idx], pool)
             fresh = fresh._replace(key=jax.vmap(lambda k: jax.random.fold_in(k, 1))(fresh.key))

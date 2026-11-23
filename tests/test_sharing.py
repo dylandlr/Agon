@@ -1,4 +1,5 @@
-"""Shared AND selfish reward: per-agent heritable alpha, a local group, and a mean over the living only."""
+"""Shared AND selfish reward: per-agent heritable alpha, a local group, and which agents the group
+mean divides by -- every slot (the proposal's 1/N, the default) or the living only (opt-in)."""
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -15,11 +16,18 @@ def _args(reward, alive, pos=None):
     return r, a, p
 
 
-def test_mean_is_over_the_living_not_every_slot():
+def test_the_denominator_is_every_slot_by_default_and_the_living_only_when_asked():
+    """The default is the proposal's (1/N) over all N slots. That 1/N dilution is the
+    credit-assignment effect hypothesis H2 predicts, so the alpha experiment must keep it."""
     r, a, p = _args([1.0, 3.0, 0.0, 0.0], [True, True, False, False])
-    out = np.asarray(mix_reward(r, a, p, 1.0, 0))[0]
-    assert np.allclose(out[:2], 2.0)                         # (1 + 3) / 2, not (1 + 3) / 4 = 1
+
+    out = np.asarray(mix_reward(r, a, p, 1.0, 0))[0]                   # default: every slot
+    assert np.allclose(out[:2], 1.0)                         # (1 + 3) / 4, the two dead slots dilute
     assert np.allclose(out[2:], 0.0)                         # the dead keep their own (zero) reward
+
+    out = np.asarray(mix_reward(r, a, p, 1.0, 0, living=True))[0]      # opt in: the living only
+    assert np.allclose(out[:2], 2.0)                         # (1 + 3) / 2
+    assert np.allclose(out[2:], 0.0)
 
 
 def test_alpha_zero_is_selfish_alpha_one_is_the_group_and_alpha_can_differ_per_agent():
@@ -39,9 +47,13 @@ def test_local_group_only_shares_with_those_nearby():
     assert np.allclose(out, [14 / 3] * 3)                    # the whole world: everyone gets the same mean
 
 
-def test_a_dead_neighbour_is_not_part_of_the_group():
+def test_a_dead_neighbour_dilutes_the_local_group_unless_living_is_set():
+    # 99.0 is the dead slot's stale reward; a dead slot really carries 0, so this only pins the weight
     r, a, p = _args([1.0, 3.0, 99.0], [True, True, False], [[0, 0], [0, 1], [0, 1]])
-    assert np.allclose(np.asarray(mix_reward(r, a, p, 1.0, 6))[0][:2], [2.0, 2.0])
+    out = np.asarray(mix_reward(r, a, p, 1.0, 6, living=True))[0]
+    assert np.allclose(out[:2], [2.0, 2.0])                  # the dead one is not in the group
+    out = np.asarray(mix_reward(r, a, p, 1.0, 6))[0]
+    assert np.allclose(out[:2], [(1 + 3 + 99) / 3] * 2)      # by default every slot in range counts
 
 
 def test_adding_the_sharing_gene_did_not_change_any_other_trait_of_a_seed():

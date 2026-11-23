@@ -70,7 +70,12 @@ def main():
     ap.add_argument("--alpha-heritable", action="store_true",
                     help="each agent's alpha is its own heritable `sharing` gene (founders uniform 0..1); --alpha is then unused")
     ap.add_argument("--share-radius", type=int, default=0,
-                    help="the group an agent shares reward with: the agents alive within this many cells (0 = the whole world)")
+                    help="the group an agent shares reward with: those within this many cells (0 = the whole world)")
+    ap.add_argument("--share-living", action="store_true",
+                    help="divide the group mean by the agents alive, not by every slot. Off by default: the "
+                         "proposal's formula is (1/N) over all N, and that 1/N dilution is the credit-assignment "
+                         "effect hypothesis H2 is about, so removing it biases the alpha experiment. Turn it on "
+                         "where slots far outnumber the living (64 slots, 8 founders) and declare it")
     ap.add_argument("--imitation", type=float, default=0.5, help="social learning weight; 0 = off")
     ap.add_argument("--imitation-bias", choices=["uniform", "success", "kin"], default="success")
     ap.add_argument("--imitate-all", action="store_true",
@@ -209,6 +214,7 @@ def main():
                    num_minibatches=min(4, args.worlds), imitation_coef=args.imitation,
                    imitation_bias=args.imitation_bias, imitate_positive_only=not args.imitate_all,
                    alpha=args.alpha, alpha_heritable=args.alpha_heritable, share_radius=args.share_radius,
+                   share_living=args.share_living,
                    msg_ent_coef=args.msg_ent_coef, ent_coef=args.ent_coef,
                    speech_attention=args.speech_attention, teach_bonus=args.teach_bonus,
                    sleep_learning=not args.no_sleep_learning, world_model=args.world_model,
