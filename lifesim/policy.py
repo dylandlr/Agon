@@ -94,6 +94,9 @@ class ActorCritic(nn.Module):
     # small network from the raw observation (a control: no memory, no shared features).
     msg_net: str = "branch"
     world_model: bool = False
+    # Candidate C's auxiliary head: a supervised "dies within hazard_k ticks" logit off the shared
+    # trunk. Off by default, so a network without it is byte-identical to before.
+    hazard: bool = False
     imagine_k: int = 6        # actions considered per decision
     imagine_h: int = 6        # ticks imagined for each
     imagine_gamma: float = 0.97
@@ -128,6 +131,9 @@ class ActorCritic(nn.Module):
                                      bias_init=silence_bias)
         self.val_hidden = nn.Dense(self.hidden)
         self.val_out = nn.Dense(1, kernel_init=nn.initializers.orthogonal(1.0))
+        if self.hazard:
+            self.haz_hidden = nn.Dense(64)
+            self.haz_out = nn.Dense(1, kernel_init=nn.initializers.orthogonal(0.01))
         if self.world_model:
             self.dyn1 = nn.Dense(self.hidden)
             self.dyn2 = nn.Dense(self.hidden, kernel_init=nn.initializers.orthogonal(0.1))
@@ -173,6 +179,20 @@ class ActorCritic(nn.Module):
     def value_of(self, h):
         return self.val_out(nn.relu(self.val_hidden(h))).squeeze(-1)
 
+    def hazard_of(self, h):
+        """Logit of "this agent dies within the next `hazard_k` ticks" -- candidate C's auxiliary
+        head (docs/MEASUREMENT.md 5d).
+
+        It is supervised from what actually happened, so it bypasses the credit path, the bootstrap
+        and the noise in the critic's GAE target. The label shape was chosen by measurement, not by
+        argument (`scripts/probe_label_form.py`): from a FROZEN RANDOM trunk this label reaches
+        held-out AUC 0.896 at k=48, where `fraction of life elapsed` scores R^2 -2.424 and the
+        formulations that do score well (within-centred remaining life, 0.522) cannot be built from
+        a rollout window at all -- they need the whole life's mean. Hazard needs only a reverse scan
+        over `died`, and is bounded, level-free and exactly the "nearness to death" the critic needs.
+        """
+        return self.haz_out(nn.relu(self.haz_hidden(h))).squeeze(-1)
+
     def dyn(self, h, a):
         """Next belief from a belief and an action index (residual)."""
         x = jnp.concatenate([h, jax.nn.one_hot(a, self.n_actions)], axis=-1)
@@ -213,6 +233,11 @@ class ActorCritic(nn.Module):
         carry, h = self.gru(carry, (self.encode(obs), resets))
         prior = jnp.where(mask, self.policy_logits(h, obs), MASK_VALUE)
         out = {"h": h, "prior": prior, "value": self.value_of(h)}
+        if self.hazard:
+            # computed here, not only in learn_terms, so `init` (which runs __call__) creates the
+            # head's parameters. The world-model heads get created because trace -> imagine uses
+            # them; a head reachable only from learn_terms would never be initialised.
+            out["hazard"] = self.hazard_of(h)
         logits = prior
         if self.world_model:
             cand, q = self.imagine(h, prior, mask)
@@ -245,6 +270,8 @@ class ActorCritic(nn.Module):
         beliefs, the predicted next beliefs, expected rewards and expected own state."""
         carry, out = self.trace(carry, x)
         res = {"logits": out["logits"], "value": out["value"]}
+        if self.hazard:
+            res["hazard"] = out["hazard"]
         if self.world_model:
             z = self.dyn(out["h"], actions)
             res.update(h=out["h"], z=z, r=self.reward_of(z), own=self.decode(z))
@@ -279,7 +306,7 @@ class ActorCritic(nn.Module):
 
 def make_network(env_cfg, hidden: int = 128, encoder: str = "conv",
                  conv_impl: str = "auto", messages: bool = False, world_model: bool = False,
-                 msg_net: str = "branch") -> ActorCritic:
+                 msg_net: str = "branch", hazard: bool = False) -> ActorCritic:
     """messages=True adds the aim and the symbols said and written after the action logits
     (env.EXTRA_LOGITS; split_logits, sample_outputs); the mask passed in must then cover them too
     (all True). conv_impl "auto" picks native convolutions
@@ -292,7 +319,7 @@ def make_network(env_cfg, hidden: int = 128, encoder: str = "conv",
                        view_size=env_cfg.view_size, channels=E.N_OBS_CHANNELS,
                        conv_impl=conv_impl,
                        msg_out=E.OUT_LOGITS if messages else 0, aim_out=E.N_HOW if messages else 0,
-                       msg_net=msg_net, world_model=world_model)
+                       msg_net=msg_net, world_model=world_model, hazard=hazard)
 
 
 def split_logits(logits):

@@ -50,6 +50,16 @@ def main():
     ap.add_argument("--scarcity", type=float, default=1.0, help="plant abundance: scales starting stock and regrowth (1 = normal)")
     ap.add_argument("--encoder", choices=["conv", "mlp"], default="conv")
     ap.add_argument("--gamma", type=float, default=0.997)
+    ap.add_argument("--hazard-coef", type=float, default=0.0,
+                    help="candidate C (docs/MEASUREMENT.md 5d): weight on a supervised 'dies within "
+                         "--hazard-k ticks' head off the shared trunk, to give the critic "
+                         "state-dependent signal its GAE target lacks. 0 = off, and off creates no "
+                         "head at all. Try 0.5 first; judge on value.explained_variance, not on "
+                         "hazard_loss")
+    ap.add_argument("--hazard-k", type=int, default=48,
+                    help="horizon for that label, in ticks; 48 is one game day. Chosen by "
+                         "measurement (scripts/probe_label_form.py): held-out AUC 0.896 from a "
+                         "frozen random trunk, and flat from k=12 to k=48")
     ap.add_argument("--gae-lambda", type=float, default=0.95,
                     help="GAE lambda, given per 30-minute tick and converted by tick_scale like gamma. Credit "
                          "decays as (gamma*lambda)^k, so this sets how far back a consequence reaches: 0.95 is a "
@@ -216,6 +226,7 @@ def main():
                    msg_net=args.msg_net, msg_frozen=args.msg_frozen,
                    consolidation_ticks=args.consolidation_ticks, retention_coef=args.retention_coef,
                    encoder=args.encoder, gamma=args.gamma, trait_gamma=args.trait_gamma, gae_lambda=args.gae_lambda,
+                   hazard_coef=args.hazard_coef, hazard_k=args.hazard_k,
                    per_agent_lr=not args.no_agent_lr, seed=args.seed,
                    num_minibatches=min(4, args.worlds), imitation_coef=args.imitation,
                    imitation_bias=args.imitation_bias, imitate_positive_only=not args.imitate_all,
@@ -343,6 +354,12 @@ def main():
                 "value": {"explained_variance": round(float(m["value_ev"]), 4),
                           "rmse": round(float(m["value_rmse"]), 5),
                           "target_sd": round(float(m["target_sd"]), 5)},
+                # Candidate C's head. Absent from the row when --hazard-coef is 0, so an old run
+                # and an unflagged new one stay comparable field for field. Read acc against rate:
+                # a base rate of 0.2 means 0.8 accuracy is what predicting "never" already gets.
+                **({"hazard": {"loss": round(float(m["hazard_loss"]), 5),
+                               "rate": round(float(m["hazard_rate"]), 4),
+                               "acc": round(float(m["hazard_acc"]), 4)}} if args.hazard_coef > 0 else {}),
                 # Per output (action, aim, said, written): share of updates clipped, and the KL moved
                 "per_output": {name: {"clip_fraction": round(float(m["clip_fraction"][j]), 4),
                                       "approx_kl": round(float(m["approx_kl"][j]), 5)}

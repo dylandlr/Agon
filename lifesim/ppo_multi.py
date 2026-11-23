@@ -40,6 +40,14 @@ class MAConfig:
     trait_gamma: bool = False       # use each agent's patience gene as its discount
     per_agent_lr: bool = True       # scale updates by the lr_scale gene
     gae_lambda: float = 0.95
+    # Candidate C (docs/MEASUREMENT.md 5d): a supervised "dies within hazard_k ticks" head off the
+    # shared trunk, to supply state-dependent signal the critic's GAE target lacks. 0 = off, and
+    # off is byte-identical to before (the head's parameters are not even created). hazard_k = 48
+    # is one game day, chosen by measurement: from a frozen random trunk this label reaches
+    # held-out AUC 0.896, where `fraction of life elapsed` scores R^2 -2.424 and the formulations
+    # that do score well need the whole life's mean and so cannot be built inside a rollout window.
+    hazard_coef: float = 0.0
+    hazard_k: int = 48
     clip_eps: float = 0.2
     ent_coef: float = 0.005
     # An entropy floor (0 = off): the entropy bonus grows as a policy's entropy falls under the
@@ -234,6 +242,34 @@ def mix_reward(reward, alive0, pos, alpha, radius, living=False):
     return jnp.where(alive0, (1 - alpha) * reward + alpha * group, reward)
 
 
+def hazard_labels(died, k):
+    """(label, valid) for "this agent dies within the next k ticks", over a (T, ...) died array.
+
+    `nxt[t]` is the number of ticks from t until the next death in that slot: 0 on the tick the
+    agent dies, else 1 + nxt[t+1], and left unknown past the end of the window. The label is
+    `nxt < k`, matching the probe's `remaining < k`.
+
+    A label is VALID only where the window settles it: either the death falls inside the next k
+    ticks, or there are k whole ticks of window left to prove it does not. Without that mask the
+    last k-1 ticks of every window would be taught "does not die", which is not what the data says.
+
+    A slot refilled by a birth mid-window is handled by the recursion itself: the first death at or
+    after t belongs to whoever occupies the slot at t, because a death is what ends an occupancy.
+    """
+    T = died.shape[0]
+    unknown = float(T + k + 1)
+
+    def step(c, d):
+        nxt = jnp.where(d > 0, 0.0, c + 1.0)
+        return nxt, nxt
+
+    _, nxt = jax.lax.scan(step, jnp.full(died.shape[1:], unknown), died.astype(jnp.float32),
+                          reverse=True)
+    label = (nxt < k).astype(jnp.float32)
+    room = (jnp.arange(T) <= T - k).reshape((T,) + (1,) * (died.ndim - 1))
+    return label, (nxt < k) | jnp.broadcast_to(room, died.shape)
+
+
 def gae(reward, value, done, boot, last_val, gam, lam):
     """Generalized advantage estimates over (T, ...) arrays. done ends a life or a world; boot is
     the value to continue from when it ended by the clock rather than by death (0 otherwise)."""
@@ -319,6 +355,7 @@ def _swap_axes_nb(x):
 def make_train(env_cfg: EnvConfig, cfg: MAConfig):
     n, b = env_cfg.n_agents, cfg.num_worlds
     net = make_network(env_cfg, cfg.hidden, cfg.encoder, messages=True, world_model=cfg.world_model,
+                       hazard=cfg.hazard_coef > 0,
                        msg_net=cfg.msg_net)
     A, M, L, V = E.N_ACTIONS, E.EXTRA_LOGITS, E.MSG_LEN, E.VOCAB
     n_win = env_cfg.view_size ** 2 * E.N_OBS_CHANNELS
@@ -723,12 +760,25 @@ def make_train(env_cfg: EnvConfig, cfg: MAConfig):
                 rew = (terms["r"] - tr.reward) ** 2
                 wm = ((lat * pair).sum() / np_, (rew * w).sum() / denom, (own * pair).sum() / np_)
                 loss = loss + cfg.wm_coef * (wm[0] + wm[1] + wm[2])
+            haz = jnp.zeros(3)
+            if cfg.hazard_coef > 0:
+                # Supervised from what happened, so it needs neither the credit path nor the
+                # bootstrap -- the two things the lambda probe showed carry no lifetime signal.
+                y, hv = hazard_labels(tr.died, cfg.hazard_k)
+                hw = w * hv.astype(jnp.float32)
+                hsum = jnp.maximum(hw.sum(), 1e-8)
+                z = terms["hazard"]
+                bce = optax.sigmoid_binary_cross_entropy(z, y)
+                loss = loss + cfg.hazard_coef * (bce * hw).sum() / denom
+                acc = (((z > 0) == (y > 0.5)).astype(jnp.float32) * hw).sum() / hsum
+                haz = jnp.stack([(bce * hw).sum() / hsum, (y * hw).sum() / hsum, acc])
             ret = retention(p, rs)
             loss = loss + cfg.retention_coef * ret
             # entropy and its bonus are logged as the mean over the steps that were learned (w), not over the new
             # steps (denom): w carries the share learned after sleep, so dividing by denom under-reported both
             # by that share (about a tenth). The loss still divides by denom on purpose (see above).
-            return loss, ((ent * w).sum() / wsum, imit, wm, ret, clipfrac, approx_kl, (ec * w).sum() / wsum)
+            return loss, ((ent * w).sum() / wsum, imit, wm, ret, clipfrac, approx_kl,
+                          (ec * w).sum() / wsum, haz)
 
         def total_loss(params, ic, tr, adv, tg, d_obs, d_act, d_mask, d_msg, d_w):
             # Agent axis is 0 for params/ic/genes/the store, 1 for (T, N, B, ...) data
@@ -736,13 +786,13 @@ def make_train(env_cfg: EnvConfig, cfg: MAConfig):
                 lead = lambda x: jnp.moveaxis(x, 1, 0)
                 xs = (params, ic) + tuple(jax.tree_util.tree_map(lead, v)
                                           for v in (tr, adv, tg, d_obs, d_act, d_mask, d_msg, d_w)) + (social_w, res)
-                losses, (ents, imits, wm, ret, cf, kl, ecs) = jax.lax.map(lambda a: jax.checkpoint(agent_loss)(*a), xs,
+                losses, (ents, imits, wm, ret, cf, kl, ecs, haz) = jax.lax.map(lambda a: jax.checkpoint(agent_loss)(*a), xs,
                                                                      batch_size=cfg.agent_chunk)
             else:
-                losses, (ents, imits, wm, ret, cf, kl, ecs) = jax.vmap(agent_loss, in_axes=(0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0))(
+                losses, (ents, imits, wm, ret, cf, kl, ecs, haz) = jax.vmap(agent_loss, in_axes=(0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0))(
                     params, ic, tr, adv, tg, d_obs, d_act, d_mask, d_msg, d_w, social_w, res)
             return losses.sum(), (ents.mean(), imits.mean(), tuple(x.mean() for x in wm), ret.mean(),
-                                  cf.mean(0), kl.mean(0), ecs.mean())
+                                  cf.mean(0), kl.mean(0), ecs.mean(), haz.mean(0))
 
         lrs = lrs_of(pop)
 
@@ -816,7 +866,12 @@ def make_train(env_cfg: EnvConfig, cfg: MAConfig):
             (params, opt_state, key), ents = jax.lax.scan(epoch, (params, opt_state, key), None,
                                                           cfg.update_epochs)
         fin = finalized.astype(jnp.float32) * valid_f
-        metrics = {"entropy": ents[0].mean(), "entropy_coef": ents[6].mean(), "imitation_loss": ents[1].mean(),
+        # Candidate C's head, when on: the cross-entropy it is paying, the share of valid labels
+        # that are positive (the base rate, so accuracy can be read against it), and accuracy at
+        # logit 0. All three read 0 when hazard_coef is 0, because the head does not exist.
+        haz = ents[7].reshape(-1, 3).mean(0)
+        metrics = {"hazard_loss": haz[0], "hazard_rate": haz[1], "hazard_acc": haz[2],
+                   "entropy": ents[0].mean(), "entropy_coef": ents[6].mean(), "imitation_loss": ents[1].mean(),
                    "watched_fraction": (demo_w > 0).mean(),
                    # Of the steps whose fate was settled this update, the share learned (the rest
                    # was forgotten for want of sleep); and the share of new steps still waiting
