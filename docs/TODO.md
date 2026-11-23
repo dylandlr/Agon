@@ -1610,3 +1610,31 @@ in store), measured on its own first. Until then the shipped additive model stay
 1. "Cold motivates building" behavior drive (prerequisite for any honest insulation model;
    plausibly helps the shipped model too — build completion is the panel's known bottleneck).
 2. Leave thermals; attack the 5 food/water-blocked worlds (no construction change reaches them).
+
+## r46 — workwarm (cold colonists build instead of hearth-idling): measured, recommend shipping
+Code in db8ba09, behind AGON_P.workwarm. A merely-cold colonist (temp > -0.75) with a wall
+queued, mats above BUILDKEEP and food/water skips the warm-seek/warm-idle pair (dropping the
+wrmM hearth lock) and falls through to pickWork, whose first work pick is already 'build';
+building itself adds +4 warmth (hard labour keeps the builder warm). Freezing colonists
+(temp <= -0.75) still go to the hearth. Flag-off byte-exact vs r42 arm B (3-world spot check
+post-rebuild; conditions verbatim when off).
+
+### Panel A/B (6000 ticks, /tmp/mar/ab_workwarm.json)
+- **Finished walls A 7/24 -> B 11/24** — discordants 5 gained / 1 lost (p=0.219), the biggest
+  move in the arc's bottleneck metric since it stalled at 7-8 in r36. built +5.3 (t=1.04),
+  survived +127 (t=0.85), alive -0.17 (t=-0.33), techs +0.1 — nothing significant either way.
+- **Extinctions dead even 10 <-> 10** (saved forest s21 and wetland s3 — both finished walls
+  and revived; killed badlands s3 and savanna s21; exact p=1.0).
+- Mechanistically clean per-world wins: alpine s3 4 -> 10 alive with walls completed (44 -> 82
+  built), tundra s3 builds 17 -> 38, forest s21 extinct -> alive at 6000 with 65 built.
+  Adverse swings exist (temperate s3 6 -> 2, temperate s21 9 -> 4) but net alive is noise.
+- Honest statement: the completion gain is directionally consistent with a legible mechanism
+  but NOT statistically resolved (6 discordants); the shipping case is "no significant harm +
+  best-ever bottleneck movement + ecological plausibility", the same standard roofs met in r42.
+
+### Recommendation
+Ship workwarm on by default (flip to AGON_P.noworkwarm opt-out, r43 procedure: flip, byte-exact
+inertness both ways on a spot panel, determinism acceptance). It is also the prerequisite that
+makes honest insulation physics (r45's parked insdamp) worth retesting later: with a workforce
+that builds when cold, the bootstrap gap that killed insdamp v1/v2 should narrow — a joint
+workwarm+insdamp A/B is the natural follow-up experiment after shipping.
