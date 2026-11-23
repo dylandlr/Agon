@@ -1678,3 +1678,14 @@ distance, death causes.
    jungle depletion pattern — far lighter than full camp re-anchoring (see scoping note above).
    Full re-anchoring stays on the roadmap for nomadism proper, justified by depletion dynamics
    rather than rescue.
+
+## r48 — shade shipped on by default (verified)
+AGON_P.shade measured (70d314e), flipped to noshade opt-out (e08a551). Panel A/B: **alive +1.83,
+t=3.48 — the first statistically significant survival improvement of the arc**; techs +2.0
+(t=2.41); extinctions 10 -> 7 (3 saved / 0 killed: desert s3 first-ever survival, tundra s21
+back via cave warmth-holding, badlands s3 revived with 100 built); survived +259, built +7.8;
+nothing significantly worse (worst swings: alpine s3 10 -> 7, tundra s3 8 -> 7). Verified:
+inertness both ways byte-exact 12/12 (default == r48 arm B, noshade == arm A), determinism 4/4.
+Shipped baseline is now: vern + roofs + global build order + workwarm + shade.
+Remaining extinct in arm B (7): desert s21, volcanic s3, alpine s21, badlands s21, savanna s21,
+jungle s3, jungle s21 — the jungles are the proven depletion-and-reach class (M1's target).
