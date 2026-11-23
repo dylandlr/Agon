@@ -1713,3 +1713,25 @@ AGON_P.scout went through 8 variants (4fdfb57 + this commit). The honest finding
   exists to catch. The whole block is now unreachable when off (verified MATCH post-strip).
 - The v8 pop-counting trigger stays in the code behind the flag as the experiment record;
   it is inert off and nearly inert on (11 evaluations), shipped nowhere.
+
+## r50/M1 second attempt — reflex placement also starved; M1 is blocked on the KNOWLEDGE layer
+v9 put the outward walk in the needE reflex's stuck-wander (per r49's directive), v10 added a
+rolling-window persistence gate after v9 flooded (ungated, transiently hungry agents marched out
+and temperate s21's construction collapsed 115 -> 0 in smoke). v10 is clean (flag-off byte-exact
+4/4, floods gone) but instrumentation shows the branch can't matter: in 6000 jungle-s3 ticks only
+3 of 17 colonists EVER hit the stuck state, max streak 3 against a gate of 20.
+
+**The decisive finding: the terminal state of a starving colony is not "stuck" — it is the ghost
+treadmill.** moveTo always has a remembered target because stale shared knowledge never dies:
+ghost-busts (bush re-seen bare within 7) are INDIVIDUAL, while hopes are SHARED — tellKnow gossip
+and the _K.camp pool recirculate food:true entries for stripped bushes back to agents who had
+already busted them. The colony is structurally incapable of collectively concluding "this land
+is bare", so no behavioral trigger downstream of knowledge can fire.
+
+**M1's real prerequisite is belief hygiene** (a knowledge round of its own):
+- knowledge entries carry a last-seen tick; a fresher sighting (true or false) beats a staler one
+  in tellKnow merges and the camp-pool sync, so busts propagate instead of being resurrected;
+- optionally, unvisited food:true entries decay after ~a season.
+This is also ecologically rich (rumor dynamics, collective memory) and likely matters well
+beyond migration. Scout v10 stays in the reflex behind AGON_P.scout as the experiment record —
+inert off, nearly unreachable on — shipped nowhere.

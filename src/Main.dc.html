@@ -5695,41 +5695,7 @@ class Component extends DCLogic {
         // food security: when the colony holds less than ~5 meals a head (8 in autumn, laying in for winter) (shelf plus what everyone carries), gathering and hauling berries to the table come first for everyone, ahead of crafting, taming and wandering
         { const alive = agents.filter((q) => q.alive && !q.fac).length || 1, held = store.food + agents.reduce((n, q) => n + (q.alive && !q.fac ? q.inv.berries : 0), 0);
           if (!a.fac && held / alive < (Math.floor(tick / 500) % 4 === 2 ? ((window.AGON_P || {}).secAut ?? 8) : ((window.AGON_P || {}).secGrow ?? 5)) && kbW(a).some((b) => b.food >= 1)) { if (a.inv.berries >= 3 && store.food < storeCapN) return 'haul'; if (a.inv.berries < 5) return 'gather'; }
-          // M1 (scout): larder near empty and the known world eaten bare — strike out for new ground.
-          // v2: the v1 panel showed the whole village fanning out on transient dips (forest s21
-          // built 120 -> 5; wetland s3 alive 4 -> 1), so two gates: the emptiness must be SUSTAINED
-          // (60 consecutive eligible ticks) and at most 2 colonists scout at a time — send scouts,
-          // not the village. Everyone else keeps to normal work.
-          if (SCOUT && !a.fac) {
-            // v2 note: the whole block must be unreachable when the flag is off — even a scoutT = 0
-            // write would add a key to the serialized agent and break byte-exact inertness.
-            // v4: no scout cap. v1's rescue WAS the mass excursion — the hungry village relocating
-            // its foraging footprint, each walker learning and eating on-site; capping it to 2
-            // scouts kept the discovery and lost the colony (jungle s3 rescue vanished under v2/v3).
-            // The transient-dip harm (forest s21, wetland s3) is handled by the accrual gate alone:
-            // brief kbW-empty windows decay away and never reach 25.
-            // The pressure signal must be the one that is PERSISTENT in the depleted worlds and
-            // transient elsewhere, or +1/-1 flutter freezes the counter below any threshold: the
-            // agent's satiety flutters (v4 bug) and the larder flutters around 2/head as foragers'
-            // pocket berries cycle (v5 bug). What stays true in a stripped world is that the agent
-            // KNOWS of no food — accrue on that alone; larder and satiety only gate the departure.
-            // v7: the kbW-empty gate (v1-v6) almost never opens — fog memory returns remembered
-            // bushes with food:1 forced, so a stripped world still "knows of food" and the colony
-            // chases ghosts forever (instrumented: 11 eligible calls in 6000 jungle-s3 ticks; v1's
-            // apparent rescue was divergence luck through those moments, not the mechanism). The
-            // honest signal is the agent's own foraging outcome: walking to a remembered bush and
-            // finding it bare is a confirmed strike (+6); standing on real food resets. Five
-            // strikes without a find (> 30) and a fed colonist strikes out for new ground.
-            // v8: the agent never actually stands on a bare remembered bush — the knowledge pass
-            // busts ghosts at range 7 and the agent retargets mid-walk (v7's strike never fired:
-            // instrumented maxT 0). The observable event is the POP: a bush leaving the agent's
-            // known-food list without a successful gather. Pops accrue; a real gather resets.
-            const scKn = kbW(a).length, scGw = (a.work && a.work.gather) || 0;
-            if (scGw > (a.gN ?? -1)) a.scoutT = 0;
-            else if (a.kbN !== undefined && scKn < a.kbN) a.scoutT = (a.scoutT || 0) + 6;
-            a.gN = scGw; a.kbN = scKn;
-            if ((a.scoutT || 0) > 30 && held / alive < 4 && a.sat > 0.3 && a.hyd > 0.3) return 'scout';
-          } }
+        }
         if (w.hunt > 0 && (a.gear.weapon || a.sat < 0.7) && animals.some((q) => !q.dead && !q.own && AK[q.k].role === 'prey' && cheb(a, q) <= 10)) c.push(['hunt', w.hunt]);
         if (!a.fac && farmOK && w.gather > 0 && Math.floor(tick / 500) % 4 !== 3 && plots.some((q) => tillable(q, a))) c.push(['farm', w.gather]);
         if (w.gather > 0 && a.inv.berries < 4 && kbW(a).some((b) => b.food >= 1)) c.push(['gather', w.gather]);
@@ -5951,7 +5917,31 @@ class Component extends DCLogic {
           if (res === 'stuck') { a.tblStuck = tick + 15; if (!kbW(a).some((b) => b.food >= 1)) act = stepBy(a, Math.sign(TABLE[0][0] - a.x), Math.sign(TABLE[0][1] - a.y)) ? 'move' : (wander(a) ? 'move' : 'idle'); }
         }
         else { if (s.fog) { const kn2 = knw(a); let fg = false; for (const b of bushes) if (b.food < 1 && cheb(a, b) <= 2 && kn2.get(key(b.x, b.y))) { kn2.delete(key(b.x, b.y)); fg = true; } if (fg) this._KC[a.id] = null; }
-          const res = moveTo(a, (x, y) => kbW(a).some((b) => b.x === x && b.y === y && b.food >= 1) || (!a.fac && plots.some((q) => q.x === x && q.y === y && q.g >= 1))); act = res === 'moved' ? 'move' : 'idle'; if (res === 'stuck' && s.fog && wander(a)) act = 'move'; }
+          const res = moveTo(a, (x, y) => kbW(a).some((b) => b.x === x && b.y === y && b.food >= 1) || (!a.fac && plots.some((q) => q.x === x && q.y === y && q.g >= 1)));
+          act = res === 'moved' ? 'move' : 'idle';
+          if (res === 'stuck' && s.fog) {
+            // v9 (AGON_P.scout, reflex placement): this stuck-wander is the TERMINAL state of a
+            // starving colonist — hungry, nothing edible known, nowhere to walk — and in a stripped
+            // world they spin here for their last thousand ticks. In behavior-net terms (Jain ch02,
+            // Maes): foraging is environment-activated, and when the environment offers no target
+            // the hunger DRIVE should source a directed excursion, not a 1-tile stagger. Each agent
+            // holds a fixed bearing from camp (the hungry fan out radially, learning ground within
+            // 7 as they walk); past scoutR they quarter at random rather than march off the map.
+            if (SCOUT && !a.fac) {
+              // v10 persistence gate: ungated, transiently hungry agents with thin early-game
+              // knowledge marched out constantly and colonies stopped building (smoke: temperate
+              // s21 built 115 -> 0, wetland s3 killed). The excursion must be earned by a SUSTAINED
+              // stuck-hungry state: 20 hits inside a rolling 40-tick window; any longer gap (they
+              // ate, gathered, worked) resets the count and the ordinary local wander applies.
+              if (tick - (a.scLast || -99) > 40) a.scW = 0;
+              a.scW = (a.scW || 0) + 1; a.scLast = tick;
+              if (a.scW > 20) {
+                const sn = (parseInt(a.id.slice(1), 10) || 0), sang = 2 * Math.PI * (sn % 8) / 8 + (Math.PI / 8) * ((sn >> 3) % 2);
+                if (cheb(a, { x: CAMPC[0], y: CAMPC[1] }) > ((window.AGON_P || {}).scoutR ?? 34)) { if (wander(a)) act = 'move'; }
+                else { const sx = Math.sign(Math.round(Math.cos(sang) * 2)), sy = Math.sign(Math.round(Math.sin(sang) * 2)); if (stepBy(a, sx, sy) || stepBy(a, sx, 0) || stepBy(a, 0, sy) || wander(a)) act = 'move'; }
+              } else if (wander(a)) act = 'move';
+            } else if (wander(a)) act = 'move';
+          } }
       } else if (G === 'goto') {
         const gx = ordr.x, gy = ordr.y;
         if (a.x === gx && a.y === gy) { a.order = null; act = 'idle'; log.push({ t: tick, text: a.id + ' arrives', kind: 'info' }); }
@@ -5968,13 +5958,6 @@ class Component extends DCLogic {
       } else if (G === 'socialize') {
         const f = agents.filter((b) => b !== a && b.alive).sort((x, y) => cheb(a, x) - cheb(a, y))[0];
         if (f && cheb(a, f) > 1) act = stepBy(a, Math.sign(f.x - a.x), Math.sign(f.y - a.y)) ? 'move' : 'idle'; else { act = 'idle'; if (f && s.learn && !a.fac && !f.fac && tick % 4 === 0) teach(a, f); }
-      } else if (G === 'scout' && !a.fac && SCOUT) {
-        // each scout holds a fixed bearing from camp (spread by id so the party fans out radially);
-        // past scoutR they quarter the ground at random instead of marching off the map edge
-        const sn = (parseInt(a.id.slice(1), 10) || 0), sang = 2 * Math.PI * (sn % 8) / 8 + (Math.PI / 8) * ((sn >> 3) % 2), sd = cheb(a, { x: CAMPC[0], y: CAMPC[1] });
-        if (sd > ((window.AGON_P || {}).scoutR ?? 34)) { act = wander(a) ? 'move' : 'idle'; }
-        else { const sx = Math.sign(Math.round(Math.cos(sang) * 2)), sy = Math.sign(Math.round(Math.sin(sang) * 2)); act = (stepBy(a, sx, sy) || stepBy(a, sx, 0) || stepBy(a, 0, sy) || wander(a)) ? 'move' : 'idle'; }
-        if (act === 'move') { a.bub = 'gather'; a.bubT = 2; }
       } else if (G === 'rest') { act = 'idle';
       } else if (G === 'gather' && !bushes.some((b) => b.x === a.x && b.y === a.y && b.food >= 1 && okFood(a, b)) && a.inv.berries < 6 && kbW(a).some((b) => b.food >= 1)) { const res = moveTo(a, (x, y) => kbW(a).some((b) => b.x === x && b.y === y && b.food >= 1)); act = res === 'moved' ? 'move' : 'idle';
       } else if ((!G || G === 'gather') && bushes.some((b) => b.x === a.x && b.y === a.y && b.food >= 1 && okFood(a, b)) && a.inv.berries < 6 && r() < 0.6) {
