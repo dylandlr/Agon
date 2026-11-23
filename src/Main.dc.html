@@ -4780,16 +4780,25 @@ class Component extends DCLogic {
     const BUILTS = new Set((s.store && s.store.built) || []);
     let builtAdded = false;
     const BUILDQ = campTodo(BUILTS);
-    // r52b (AGON_P.mig): migration. Once per 500-tick window, if the colony's successful gathers
-    // averaged far from camp (the food front has moved out from under it), move the camp toward
-    // the gather centroid. Gated on shelter being known, a 2000-tick cooldown, and >= 10 gathers
-    // in the window (a quiet window says nothing). The site scan (E.migSite) is deterministic and
-    // draws no RNG; flag off, nothing here runs or writes.
-    if ((window.AGON_P || {}).mig && tick > 0 && tick % 500 === 0 && this._mig) {
-      const M = this._mig; this._mig = null;
-      if ((s.store || {}).shelterT != null && tick - (this._migT || -1e9) > 2000 && M.n >= 10 && M.fd / M.n > 14) {
-        const gx = Math.round(M.sx / M.n), gy = Math.round(M.sy / M.n), site = this.E.migSite(gx, gy);
-        if (site) { this.E.reanchorCamp(site[0], site[1]); this._migT = tick; s.log.push({ t: tick, text: 'the colony breaks camp and moves toward better ground', kind: 'event' }); }
+    // r52b v2 (AGON_P.mig): migration. v1 fired on "successful gathers average far from camp" and
+    // never fired anywhere: far gathers mostly don't happen (the agents who range die or fail), so
+    // the signal samples the survivable radius, not the need — 0 fires in 48 probed windows. The
+    // knowledge-exhaustion gate died the same way: the pooled map shows 13-29 food bushes within 12
+    // of camp in every dying world, the whole time it dies. What does discriminate is distress: >= 2
+    // deaths to the land (starvation, thirst, heat) in a 500-tick window happens only in the dying
+    // worlds (temperate's worst window is 1). So: on distress, move toward the centroid of food the
+    // colony knows beyond its home radius — migSite then scores water adjacency around that aim
+    // point. Cooldown 2000, shelter established, and >= 2 far entries (nothing known = nowhere to
+    // go). Deterministic, no RNG; flag off, nothing here runs or writes.
+    if ((window.AGON_P || {}).mig && tick > 0 && tick % 500 === 0 && (s.store || {}).shelterT != null && tick - (this._migT || -1e9) > 2000 && (this._K || {}).camp) {
+      let died = 0; for (const q of s.agents) if (!q.alive && !q.fac && q.dtick > tick - 500 && (q.cause === 'starvation' || q.cause === 'thirst' || q.cause === 'heat')) died++;
+      if (died >= 2) {
+        let fx = 0, fy = 0, fn = 0;
+        for (const [k, v] of this._K.camp) { if (!v) continue; const i = k.indexOf(','), bx = +k.slice(0, i), by = +k.slice(i + 1); if (Math.max(Math.abs(bx - CAMPC[0]), Math.abs(by - CAMPC[1])) > 12) { fx += bx; fy += by; fn++; } }
+        if (fn >= 2) {
+          const site = this.E.migSite(Math.round(fx / fn), Math.round(fy / fn));
+          if (site) { this.E.reanchorCamp(site[0], site[1]); this._migT = tick; s.log.push({ t: tick, text: 'the colony breaks camp and moves toward better ground', kind: 'event' }); }
+        }
       }
     }
     // BUILDKEEP is the material a colony refuses to spend on walls, so clothing and tools still have
@@ -5952,9 +5961,7 @@ class Component extends DCLogic {
       else if (!(window.AGON_P || {}).noPack && !a.fac && a.pkT > tick && a.inv.berries < (((window.AGON_P || {}).packN) || 3) && a.hyd > 0.3 && bushes.some((b) => b.x === a.x && b.y === a.y && b.food >= 1 && okFood(a, b) && !(KIND[b.k || 'berry'].tox))) {
         // having just eaten at a good bush, top up the pack before walking away, so the next meals cost no trip
         const gb = bushes.find((b) => b.x === a.x && b.y === a.y && b.food >= 1 && okFood(a, b)), tk = gb.food >= 2 ? 2 : 1, nu = KIND[gb.k || 'berry'].nut * tk, gn = Math.floor(nu) + (r() < nu - Math.floor(nu) ? 1 : 0);
-        gb.food -= tk; a.inv.berries += gn; { const fd = FDROP[gb.k || 'berry']; if (fd && r() < 0.2 && matCount(a.mats) < carryCap) a.mats[fd] = (a.mats[fd] || 0) + 1; } if (gn > 0) a.inv.lk = gb.k || 'berry'; a.pkT = tick + 2; a.work.gather += 1; act = 'gather'; a.bub = 'gather'; a.bubT = 2;
-        if ((window.AGON_P || {}).mig && !a.fac) { const M = this._mig || (this._mig = { n: 0, sx: 0, sy: 0, fd: 0 }); M.n++; M.sx += a.x; M.sy += a.y; M.fd += cheb(a, { x: CAMPC[0], y: CAMPC[1] }); }   // r52b: where the colony's food actually comes from
-      }
+        gb.food -= tk; a.inv.berries += gn; { const fd = FDROP[gb.k || 'berry']; if (fd && r() < 0.2 && matCount(a.mats) < carryCap) a.mats[fd] = (a.mats[fd] || 0) + 1; } if (gn > 0) a.inv.lk = gb.k || 'berry'; a.pkT = tick + 2; a.work.gather += 1; act = 'gather'; a.bub = 'gather'; a.bubT = 2;      }
       else if (!a.fac && !sleepy && !G && a.sat < (winterNow ? 0.2 : 0.6) && a.hyd > 0.3 && ((this.E.waterN > 0 && fishHow(a) && fishTotal() >= 3) || (this.E.seaN > 0 && marTotal(fishHow(a)) >= 1)) && store.food < 2 && !(a.inv.berries > 0)) { // in winter only real hunger sends anyone to a far bank
         // hungry with nothing to eat and a tool that can fish: go to the bank and fish
         const fw = this.E.waterN > 0 && fishHow(a) && fishTotal() >= 3, sw = this.E.seaN > 0 && marTotal(fishHow(a)) >= 1;
