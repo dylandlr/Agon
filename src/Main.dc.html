@@ -1212,6 +1212,11 @@ const TILE = GP.tile || [W, H], GRID = GP.grid || [1, 1];
 const TORDER = (() => { const r = mulberry(SEED * 6151 + W * 7 + H * 3 + 55), a = []; for (let j = 0; j < GRID[1]; j++) for (let i = 0; i < GRID[0]; i++) a.push([i, j]); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; })();
 const SITE = (() => { const r = mulberry(SEED * 7919 + W * 31 + H * 17 + 101), tx = TORDER[0][0] * TILE[0], ty = TORDER[0][1] * TILE[1], cx = tx + Math.floor((TILE[0] - 30) / 2), cy = ty + Math.floor((TILE[1] - 19) / 2), hx = tx + Math.max(0, TILE[0] - 27), hy = ty + Math.max(0, TILE[1] - 17), pick = (c, lo, hi, n) => Math.max(lo, Math.min(hi, Math.round(c + (r() * 2 - 1) * 0.42 * n))); return [pick(cx, tx, hx, TILE[0]), pick(cy, ty, hy, TILE[1])]; })();
 const OX = SITE[0], OY = SITE[1];
+// r52: the camp's LIVE anchor. OX/OY stay the FOUNDING site — terrain, lakes, rivers, vegetation
+// and crop plots were generated around it and never move. Everything the colony itself lays out
+// (blueprint, furniture, doors, clearing checks) reads CAX/CAY, so the camp can relocate
+// (reanchorCamp, defined with the camp machinery and exported on the engine).
+let CAX = OX, CAY = OY;
 const rs = mulberry(11 + W * 7 + H + SEED * 131);
 const CAMP = (() => {
   const legacy = () => {
@@ -1302,8 +1307,8 @@ const CAMP = (() => {
 const CAMPBOX = (() => { const pts = [].concat(CAMP.F, CAMP.W, CAMP.annex ? CAMP.annex.W : [], CAMP.table, CAMP.crates, CAMP.stools, CAMP.shelves, CAMP.bench, CAMP.barrels, CAMP.rug, [CAMP.hearth]); let a0 = 99, a1 = -99, b0 = 99, b1 = -99; for (const [x, y] of pts) { if (x < a0) a0 = x; if (x > a1) a1 = x; if (y < b0) b0 = y; if (y > b1) b1 = y; } return [a0 - 1, a1 + 1, b0 - 1, b1 + 1]; })();
 const CAMPSH = (() => { const rb = mulberry(SEED * 131 + W * 5 + H * 3 + 777), q = () => rb(); return { rx: 6 + q() * 2.2, ry: 4 + q() * 1.5, p: 2 + q() * 1.8, a: [0.1 + q() * 0.14, 0.08 + q() * 0.12, 0.05 + q() * 0.1], ph: [q() * 6.283, q() * 6.283, q() * 6.283] }; })();
 const inCamp = (x, y) => {
-  if (!(x >= 7 + OX && x <= 23 + OX && y >= 3 + OY && y <= 15 + OY)) return false;
-  const lx = x - OX, ly = y - OY; if (lx >= CAMPBOX[0] && lx <= CAMPBOX[1] && ly >= CAMPBOX[2] && ly <= CAMPBOX[3]) return true;
+  if (!(x >= 7 + CAX && x <= 23 + CAX && y >= 3 + CAY && y <= 15 + CAY)) return false;
+  const lx = x - CAX, ly = y - CAY; if (lx >= CAMPBOX[0] && lx <= CAMPBOX[1] && ly >= CAMPBOX[2] && ly <= CAMPBOX[3]) return true;
   const dx = lx - 15, dy = ly - 8, S = CAMPSH, g = Math.atan2(dy * S.rx / S.ry, dx), w = 1 + S.a[0] * Math.sin(2 * g + S.ph[0]) + S.a[1] * Math.sin(3 * g + S.ph[1]) + S.a[2] * Math.sin(5 * g + S.ph[2]);
   return Math.pow(Math.pow(Math.abs(dx) / S.rx, S.p) + Math.pow(Math.abs(dy) / S.ry, S.p), 1 / S.p) <= w;
 };
@@ -1321,7 +1326,7 @@ const campDist = (x, y) => {
     CAMPDIST = new Map();
     for (let yy = 0; yy < H; yy++) for (let xx = 0; xx < W; xx++) {
       if (!inCamp(xx, yy)) continue;
-      const ax = xx - OX, ay = yy - OY;
+      const ax = xx - CAX, ay = yy - CAY;
       let best = 1e9;
       for (const [px, py] of CAMPPTS) { const d = Math.hypot(ax - px, ay - py); if (d < best) best = d; }
       CAMPDIST.set(xx + ',' + yy, best);
@@ -2900,6 +2905,37 @@ for (const k of [...CAMPK, ...RUG]) { const [x, y] = k.split(',').map(Number); i
 const CAMPON = { fire: true, shelter: true, bedding: true, storage: true, carpentry: true, annex: true, preannex: false }; for (let i = 0; i < NROOM; i++) CAMPON['room' + i] = true;
 const BUILD_T = (window.AGON_P && window.AGON_P.buildT) || 120, TILESX = TILES.slice(); // ticks per room of building once shelter is known
 const DOORS_ALL = DOORS.slice(), BEDS_ALL = BEDS.slice(), FURN_BLK = { fire: [HEARTH], storage: [...CRATES, ...SHELVES, ...BARRELS], carpentry: [...TABLE, ...STOOLS, ...BENCH] };
+// r52: move the colony's camp to a new anchor. Worldgen stays where it was (terrain, lakes,
+// plots, cleared ground, ramps); what moves is the colony's own layout — blueprint sets,
+// furniture, doors, windows, beds — rebuilt in place around (nx, ny) so every closure that
+// captured these containers keeps working. Keys that leave the blueprint stop being managed by
+// applyCamp, so whatever stood BUILT at the old site simply remains standing: ruins for free.
+// Site choice (open, buildable ground) is the caller's job. Never called = byte-identical sim.
+function reanchorCamp(nx, ny) {
+  const ck2 = ([x, y]) => key(x + nx, y + ny), ckOld = ([x, y]) => key(x + CAX, y + CAY);
+  const rivalDoors = DOORS_ALL.filter((d) => !CAMPK.has(key(d.x, d.y)));
+  for (const g in FURN_BLK) for (const [x, y] of FURN_BLK[g]) BLOCK.delete(key(x, y));
+  for (const t of CAMP.D) doors.delete(ckOld(t)); if (ANX) for (const t of ANX.D) doors.delete(ckOld(t));
+  CAX = nx; CAY = ny; CAMPC[0] = 15 + nx; CAMPC[1] = 8 + ny;
+  for (const t of CAMP.D) doors.add(ck2(t)); if (ANX) for (const t of ANX.D) doors.add(ck2(t));
+  CAMPW0.clear(); for (const t of CAMP.W) CAMPW0.add(ck2(t)); if (ANX) for (const t of ANX.W) CAMPW0.add(ck2(t));
+  CAMPF0.clear(); for (const t of CAMP.F) CAMPF0.add(ck2(t)); if (ANX) for (const t of ANX.F) CAMPF0.add(ck2(t));
+  CAMPK.clear(); for (const k of CAMPW0) CAMPK.add(k); for (const k of CAMPF0) CAMPK.add(k);
+  for (const t of CAMP.D) CAMPK.add(ck2(t)); if (ANX) for (const t of ANX.D) CAMPK.add(ck2(t));
+  ANXK.clear(); ANXDK.clear(); if (ANX) { for (const t of [...ANX.W, ...ANX.F]) ANXK.add(ck2(t)); for (const t of ANX.D) ANXDK.add(ck2(t)); }
+  ROOMX.length = 0; for (const [a, b] of CAMP.rooms) ROOMX.push([a + nx, b + nx]);
+  const re2 = (dst, src) => { dst.length = 0; for (const [x, y] of src) dst.push([x + nx, y + ny]); };
+  re2(TABLE, CAMP.table); re2(CRATES, CAMP.crates); re2(STOOLS, CAMP.stools); re2(SHELVES, CAMP.shelves); re2(BENCH, CAMP.bench); re2(BARRELS, CAMP.barrels);
+  HEARTH[0] = CAMP.hearth[0] + nx; HEARTH[1] = CAMP.hearth[1] + ny;
+  RUG.clear(); for (const t of CAMP.rug) RUG.add(ck2(t));
+  WINDOWS.clear(); for (const t of CAMP.windows) WINDOWS.add(ck2(t)); if (ANX) for (const t of ANX.windows) WINDOWS.add(ck2(t)); for (const k of RIVAL_WIN) WINDOWS.add(k);
+  BEDS_ALL.length = 0; { let nb = 0; for (const [x, y] of CAMP.beds) if (nb++ < 10) BEDS_ALL.push([x + nx, y + ny]); if (ANX && ANX.beds) for (const [x, y] of ANX.beds) if (nb++ < 10) BEDS_ALL.push([x + nx, y + ny]); }
+  DOORS_ALL.length = 0;
+  for (const t of [...CAMP.D, ...(ANX ? ANX.D : [])]) { const k = ck2(t), [x, y] = k.split(',').map(Number); DOORS_ALL.push({ x, y, axis: CAMPW0.has(key(x, y - 1)) && CAMPW0.has(key(x, y + 1)) ? 'v' : 'h' }); }
+  for (const d of rivalDoors) DOORS_ALL.push(d);
+  FURN_BLK.fire = [HEARTH]; FURN_BLK.storage = [...CRATES, ...SHELVES, ...BARRELS]; FURN_BLK.carpentry = [...TABLE, ...STOOLS, ...BENCH];
+  CAMPDIST = null; CAMPR0 = null; campSig = '';   // force the caches and applyCamp to resync at the new site
+}
 let campSig = '';
 // What there is to build right now: a tile of an opened room that nobody has raised yet.
 // Walls first -- a room with its floor down and no walls keeps nothing out.
@@ -3590,7 +3626,7 @@ const NOTILE = { style: 'visibility: hidden' };
     for (const i of out) TER[i] = 1; grassN += out.length; if (out.length) _TG = null; return out;
   };
   const applyGrass = (list) => { let n = 0; for (const i of list || []) if (TER[i] === 0) { TER[i] = 1; n++; } grassN += n; if (n) _TG = null; return n; };
-  return { campTodo, ROOF, campCov, campRoof0, grassSpread, applyGrass, FLOWER, WALLMATS, wallMatFor, TILESX, campSig: () => campSig, campGrp, ANX, NROOM, TERSW: () => [SOILB[0], GRASSB[0], FORESTC, '#7b7164', '#3d7292', '#8c8174', '#2a211a', '#2a211a', '#d9461a', '#2a1f3a', SANDC, '#e4eef4', '#6d6256', '#0d0907', '#bfe3f2', '#8a7c68'], doorParts, RAMPS, seaBed, seaFloorInner, SEATM, isSea, seaAdj, seaDepth, nearSea, hasSea: () => !!SEAM, LITH, CAVE_AT, DOORS, CAMPON, applyCamp, TILES0, syncNames, coatBg, LOWLIGHT: (MAC ? MAC.temp : 11 + 1.6 * B.t) < 9, poolOf: () => { faunaW(); return POOL; }, fish0: () => { const o = {}; for (const q of AMB.fish) o[q.k] = (o[q.k] || 0) + 2.5; return o; }, waterN: (() => { let n = 0; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (terAt(x, y) === 4 && !isSea(x, y)) n++; return n; })(), seaN: (() => { let n = 0; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (isSea(x, y)) n++; return n; })(), mar0: () => marInit(), zoneN: () => ZONEN, waterAt: (x, y) => terAt(x, y) === 4, kindSuit, BIOMEK, SC, EDGE, faunaPickW, faunaPick, faunaTile, MINI_COL, SANDF: (x, y) => SANDF(x, y), SNOWF: (x, y) => SNOWF(x, y), OX, OY, CAMP, SCENERY, TILE, TORDER, GRID, COVB, GTH, FTH, FERTN, FRICH, FGRAV, MWAT, veilUri, CRUB, CSND: CAVES.CSND, CDEPTH: CAVES.CDEPTH, CAVE_AT, CAVE_IN, caveUri, NOTILE, terrGroups, waterTile, MUT, SUBST, applyMut, GEN_DEFAULT, GP, WIND, windF, windAt, terrInner, waterMaskInner, shoreMaskInner, BIOME, RIVER, FORDS, OASES, STONES, RIVALS, RIVAL_PROPS, OX, OY, rs, inCamp, CAMPC, LAKES, isLake, MASS, HILLS, ELEV, elevAt, bandAt, elevM, TER, terAt, CAVES, BOUL, WALLS, FLOORS, BLOCK, BEDS, doors, sh2, TABLE, CRATES, HEARTH, STOOLS, SHELVES, BENCH, BARRELS, RUG, WINDOWS, DOORS, doorOpen, blocked, waterAdj, bfs, stepGrade, STEPT, hull, LAMP, shadowPath, occLayers, svgUri, darker, svgBg, CI, lobesOf, canopy, star, poly, pineSvg, deadSvg, bushSvg, rockSvg, BIRD, bflySvg, FISH, spr, SPRITE_CSS, OBJS, addObj, SCENERY, TREE, bgCss, fl, doorParts, GLYPH, statusesOf, injuriesOf, fightTag, msgKeyOf, pfx, fxOf, EMBERS, bedParts, SHADOWS, shapeSt, FLOWER, inB, nearWater, TILES, BANDC, topoInner, TERN, gradeOf, tileLines, inPoly, ANK, ASZ, LHT, ALH, PLH, DLH, CANOPY_LH, ABB, AFT, pawnBox, animalBox, bushBox, dynTargets, groundTarget, resolveT, findTarget, hitTest, AMB, makeWorld, WPX, HPX, MINI_COL, MINI_URI, W, H, FORM, mkAnimal, mkAgent, mkChild, MTN };
+  return { campTodo, ROOF, campCov, campRoof0, reanchorCamp, anchor: () => [CAX, CAY], grassSpread, applyGrass, FLOWER, WALLMATS, wallMatFor, TILESX, campSig: () => campSig, campGrp, ANX, NROOM, TERSW: () => [SOILB[0], GRASSB[0], FORESTC, '#7b7164', '#3d7292', '#8c8174', '#2a211a', '#2a211a', '#d9461a', '#2a1f3a', SANDC, '#e4eef4', '#6d6256', '#0d0907', '#bfe3f2', '#8a7c68'], doorParts, RAMPS, seaBed, seaFloorInner, SEATM, isSea, seaAdj, seaDepth, nearSea, hasSea: () => !!SEAM, LITH, CAVE_AT, DOORS, CAMPON, applyCamp, TILES0, syncNames, coatBg, LOWLIGHT: (MAC ? MAC.temp : 11 + 1.6 * B.t) < 9, poolOf: () => { faunaW(); return POOL; }, fish0: () => { const o = {}; for (const q of AMB.fish) o[q.k] = (o[q.k] || 0) + 2.5; return o; }, waterN: (() => { let n = 0; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (terAt(x, y) === 4 && !isSea(x, y)) n++; return n; })(), seaN: (() => { let n = 0; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (isSea(x, y)) n++; return n; })(), mar0: () => marInit(), zoneN: () => ZONEN, waterAt: (x, y) => terAt(x, y) === 4, kindSuit, BIOMEK, SC, EDGE, faunaPickW, faunaPick, faunaTile, MINI_COL, SANDF: (x, y) => SANDF(x, y), SNOWF: (x, y) => SNOWF(x, y), OX, OY, CAMP, SCENERY, TILE, TORDER, GRID, COVB, GTH, FTH, FERTN, FRICH, FGRAV, MWAT, veilUri, CRUB, CSND: CAVES.CSND, CDEPTH: CAVES.CDEPTH, CAVE_AT, CAVE_IN, caveUri, NOTILE, terrGroups, waterTile, MUT, SUBST, applyMut, GEN_DEFAULT, GP, WIND, windF, windAt, terrInner, waterMaskInner, shoreMaskInner, BIOME, RIVER, FORDS, OASES, STONES, RIVALS, RIVAL_PROPS, OX, OY, rs, inCamp, CAMPC, LAKES, isLake, MASS, HILLS, ELEV, elevAt, bandAt, elevM, TER, terAt, CAVES, BOUL, WALLS, FLOORS, BLOCK, BEDS, doors, sh2, TABLE, CRATES, HEARTH, STOOLS, SHELVES, BENCH, BARRELS, RUG, WINDOWS, DOORS, doorOpen, blocked, waterAdj, bfs, stepGrade, STEPT, hull, LAMP, shadowPath, occLayers, svgUri, darker, svgBg, CI, lobesOf, canopy, star, poly, pineSvg, deadSvg, bushSvg, rockSvg, BIRD, bflySvg, FISH, spr, SPRITE_CSS, OBJS, addObj, SCENERY, TREE, bgCss, fl, doorParts, GLYPH, statusesOf, injuriesOf, fightTag, msgKeyOf, pfx, fxOf, EMBERS, bedParts, SHADOWS, shapeSt, FLOWER, inB, nearWater, TILES, BANDC, topoInner, TERN, gradeOf, tileLines, inPoly, ANK, ASZ, LHT, ALH, PLH, DLH, CANOPY_LH, ABB, AFT, pawnBox, animalBox, bushBox, dynTargets, groundTarget, resolveT, findTarget, hitTest, AMB, makeWorld, WPX, HPX, MINI_COL, MINI_URI, W, H, FORM, mkAnimal, mkAgent, mkChild, MTN };
 }
 // ---- tier link: planet cell -> region map -> local window. Each tier is generated from the one above it.
 const PLANETS = {}, MACROS = {};
