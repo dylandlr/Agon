@@ -570,6 +570,21 @@ noise; here it is the signal.
   the binding truncation, and 0.995 still discards half of it. If 1.0 destabilizes the policy, 0.99
   is the fallback and still a 4× improvement.
 
+#### Running A without destroying the comparison
+
+`--gae-lambda` is forwarded by `experiment.py` to `train_phase2.py`, and a design's own `extra`
+overrides it because `extra` comes last on the command line.
+
+A run's λ is **not** part of `--root` and **not** part of `code_version` (which hashes
+`lifesim/*.py`, `train_phase2.py` and `continuous_world.py`, not the arguments). So the baseline and
+the λ run land in the same `<root>/validate/<design>/` folder and the second silently resumes or
+overwrites the first — and `experiment.py`'s existing guard will not catch it, because that guard
+only refuses to mix *code versions* in one root. **Use a separate `--root` per λ.** In the notebook
+that means appending a suffix to `ROOT` in cell 12 for the λ run, not just editing the flag.
+
+Making the guard refuse to mix λ in one root would turn that silent collision into an error. It is
+a reasonable small addition and is deliberately not bundled with the fix.
+
 ### B. Lengthen the rollout window (`--steps`)
 
 Raises the ceiling that A would then bind against: 176 → 304 at `--steps 256`.

@@ -228,6 +228,7 @@ def do_item(name, extra, args, kind):
     if not (out / "params.msgpack").exists():
         cmd = [sys.executable, str(HERE / "train_phase2.py"), "--preset", PRESET, "--worlds", str(args.worlds),
                "--ticks", str(ticks), "--log-every", str(args.log_every),
+               "--gae-lambda", str(args.gae_lambda),
                "--ckpt-every", str(args.ckpt_every), "--out", str(out), "--resume",
                *(["--agent-chunk", str(args.agent_chunk)] if getattr(args, "agent_chunk", 0) else []), *extra]
         if run(cmd, f"{out}.log") != 0:
@@ -493,6 +494,15 @@ def main():
     # history.json is written every row, the curves survive a crash regardless.
     ap.add_argument("--ckpt-every", type=int, default=10,
                     help="updates between checkpoints; resume granularity vs write cost")
+    # The credit path's binding truncation (docs/MEASUREMENT.md 0 and 5d). 0.95 is a 12.8-tick
+    # half-life inside a 176-tick window, so it discards 93% of the window the run already pays
+    # for; thirst kills ~230 ticks after the last drink. Forwarded to train_phase2.py, and a
+    # design's own `extra` overrides it because extra comes last on the command line.
+    # A run's lambda is NOT part of --root or of code_version, so two values of it in one --root
+    # collide silently in the same design folder. Use a separate --root per lambda.
+    ap.add_argument("--gae-lambda", type=float, default=0.95,
+                    help="GAE lambda: 0.95 (shipped) reaches 12.8 ticks back, 1.0 reaches the whole "
+                         "176-tick window. Use a separate --root per value")
     ap.add_argument("--only", type=int, default=None, help="run just item K (HPRC array task)")
     ap.add_argument("--playback-days", type=float, default=None,
                     help="days kept in each continuous-world playback page (probe default 0.25: at 1-minute "

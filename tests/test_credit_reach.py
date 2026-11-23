@@ -74,6 +74,41 @@ def test_the_trainer_exposes_gae_lambda_and_still_defaults_to_the_shipped_value(
     assert re.search(r"gae_lambda=args\.gae_lambda", src), "the flag is parsed but never reaches MAConfig"
 
 
+def test_experiment_py_forwards_gae_lambda_to_the_trainer():
+    """The Colab and HPRC paths both go through experiment.py, so a flag it does not forward is
+    unreachable from the only places runs actually happen."""
+    src = (Path(__file__).resolve().parents[1] / "scripts" / "experiment.py").read_text()
+    flag = re.search(r'add_argument\("--gae-lambda",\s*type=float,\s*default=([0-9.]+)', src)
+    assert flag, "experiment.py does not expose --gae-lambda"
+    assert float(flag.group(1)) == 0.95
+    assert re.search(r'"--gae-lambda",\s*str\(args\.gae_lambda\)', src), \
+        "experiment.py parses --gae-lambda but never passes it to train_phase2.py"
+
+
+def test_every_default_agrees_so_an_unflagged_run_matches_every_run_so_far():
+    """Three places carry the default. If they drift, a run without the flag silently stops being
+    comparable to the Nov 7 baseline, which is the only thing the fix will be measured against."""
+    root = Path(__file__).resolve().parents[1] / "scripts"
+    defaults = {"MAConfig": MAConfig().gae_lambda}
+    for script in ("train_phase2.py", "experiment.py"):
+        m = re.search(r'add_argument\("--gae-lambda",\s*type=float,\s*default=([0-9.]+)',
+                      (root / script).read_text())
+        defaults[script] = float(m.group(1))
+    assert set(defaults.values()) == {0.95}, defaults
+
+
+def test_the_experiment_parser_still_builds():
+    """A regex over the source cannot catch a duplicate registration; building the parser can."""
+    import subprocess
+    import sys
+    root = Path(__file__).resolve().parents[1]
+    p = subprocess.run([sys.executable, str(root / "scripts" / "experiment.py"), "--help"],
+                       capture_output=True, text=True, cwd=root, timeout=600,
+                       env={**__import__("os").environ, "PYTHONPATH": str(root)})
+    assert p.returncode == 0, p.stderr[-2000:]
+    assert "--gae-lambda" in p.stdout
+
+
 def test_tick_scale_converts_lambda_like_gamma():
     """`gae_lambda` is given per 30-minute tick; the learner raises it to tick_scale, as for gamma.
 
