@@ -4787,7 +4787,7 @@ class Component extends DCLogic {
     // draws no RNG; flag off, nothing here runs or writes.
     if ((window.AGON_P || {}).mig && tick > 0 && tick % 500 === 0 && this._mig) {
       const M = this._mig; this._mig = null;
-      if (store.shelterT != null && tick - (this._migT || -1e9) > 2000 && M.n >= 10 && M.fd / M.n > 14) {
+      if ((s.store || {}).shelterT != null && tick - (this._migT || -1e9) > 2000 && M.n >= 10 && M.fd / M.n > 14) {
         const gx = Math.round(M.sx / M.n), gy = Math.round(M.sy / M.n), site = this.E.migSite(gx, gy);
         if (site) { this.E.reanchorCamp(site[0], site[1]); this._migT = tick; s.log.push({ t: tick, text: 'the colony breaks camp and moves toward better ground', kind: 'event' }); }
       }
