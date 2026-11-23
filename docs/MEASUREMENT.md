@@ -103,11 +103,53 @@ A random split leaks, because consecutive agent-ticks are near-identical observa
 near-identical labels — it inflated the raw-observation reference from a true **−553** to a fake
 **+0.914**. Split by whole agent-lifetime.
 
+### The policy is a habit, not a contingency — and that follows from the constant critic
+
+From `decision_check.json` in the same run. Each rule is `times_taken / opportunities`:
+
+| behaviour | random | untrained | **trained** |
+|---|---|---|---|
+| drink **when thirsty** | 0.061 | 0.048 | **0.082** |
+| drink **when full** | 0.076 | 0.052 | **0.234** |
+| eat when full | 0.000 | 0.015 | **0.115** |
+| flee from predator | 0.037 | 0.044 | **0.020** |
+| get away from predator | 0.167 | 0.165 | **0.067** |
+| alive share at end | 0.208 | 0.292 | 0.500 |
+
+The trained policy is **2.9x more likely to drink when full than when thirsty** (0.234 vs 0.082):
+its drinking is anti-correlated with need. It flees predators **less than random** and gets away
+from them 2.5x worse than random. Training made lookahead behaviour actively worse.
+
+**The mechanism.** With `V(s)` constant at about -1.4 (measured: 0.2% movement across the full cold
+sweep), the advantage collapses:
+
+```
+A(s,a) = r + gamma*V(s') - V(s)  ~=  r + (gamma-1)*V  =  r + const
+```
+
+So the advantage carries **no state information**, and the policy can only learn a
+state-independent ranking over actions — a habit. That predicts every row above. Drinking and
+eating carry immediate `Phi` gain averaged over states, so they are reinforced unconditionally.
+Fleeing has no immediate reward; its whole value is a future cost avoided, which needs `V` to see
+the predator, so it decays below random. `alive_share_end` still rises to 0.50 because drinking a
+lot helps on average: the agent survives better while being less intelligent.
+
+Three independent measurements fit one mechanism: a near-constant critic, a habit-shaped policy,
+and specifically degraded lookahead. The October proposal already noted the compulsive drinking and
+attributed it to episode noise. It is not noise.
+
 ### Still open
 
-Why the critic is blind. Capacity is eliminated, so credit assignment leads — but by elimination,
-not by direct evidence. The instrument that settles it is `value.explained_variance` from a real run
-on the emergence config; offline CPU probing has reached its limit.
+**Root cause: credit assignment, confirmed with a mechanism** (above), not merely by elimination.
+What remains is quantitative, and `value.explained_variance` on a live run supplies it: how close to
+zero the critic's explained variance actually is during training, rather than inferred from a
+near-constant value probe after the fact. That number also becomes the metric any fix is judged on.
+
+The fix is not specified yet and must not be guessed. The candidates all target the same thing --
+getting state-dependent signal into `V` -- and differ in how: auxiliary prediction heads that
+supply the signal directly, a longer effective credit path, or a critic input path that is not
+shared with 532 language dimensions. Capacity is NOT among them: the architecture fits remaining
+lifetime to train R^2 0.995.
 
 ---
 
