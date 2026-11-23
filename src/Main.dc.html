@@ -4741,6 +4741,10 @@ class Component extends DCLogic {
     // Rival camps (a.fac) keep their legacy additive 6: they are not campGrp rooms, so covAt is null
     // there. Off, everything reduces to the shipped model bit for bit.
     const INSDAMP = !!(window.AGON_P || {}).insdamp;
+    // r46 experiment (AGON_P.workwarm): cold colonists build instead of hearth-idling when a wall
+    // is queued and materials are in store, and heavy work generates body heat. See the warm-seek
+    // guard and the warmth sum's build term. Off, both sites reduce to the shipped code bit for bit.
+    const WORKWARM = !!(window.AGON_P || {}).workwarm;
     // r41: shelter is the floor again, in BOTH arms. r40 measured the alternative and it killed
     // colonies: making the roof the gate meant insulation fell to zero and wind chill switched on
     // the moment roofs were enabled, so a colony lost the shelter it already had exactly while it
@@ -5612,7 +5616,7 @@ class Component extends DCLogic {
           // cold-trap killed 6 worlds at p=0.031: with no floor warmth at all, cold colonists froze
           // instead of building the walls that would have warmed them. The material term stays in
           // the damping; only this flat bootstrap survives as additive heat.
-          warmth = rcov * (a.fac ? 6 : (INSDAMP ? 3 : (REALINS ? REALINS[store.wallMat || 'wattle'] : this.E.WALLMATS[store.wallMat || 'wattle'].ins))) + (inBed ? 5 : 0) + (terAt(a.x, a.y) >= 6 ? 6 : 0) + (cheb(a, { x: HEARTH[0], y: HEARTH[1] }) <= 4 && techs.includes('firecraft') ? 10 : 0) + (a.fac && a.home && cheb(a, { x: a.home[0], y: a.home[1] }) <= 3 ? 10 : 0) + Math.min(6, 2 * huddle) + (lee ? 3 : 0) + (tentNear ? 8 : 0); // bodies close together share heat (+2 each, up to 3), a rock or wall to windward breaks the wind, a hide windbreak keeps most of it off
+          warmth = rcov * (a.fac ? 6 : (INSDAMP ? 3 : (REALINS ? REALINS[store.wallMat || 'wattle'] : this.E.WALLMATS[store.wallMat || 'wattle'].ins))) + (inBed ? 5 : 0) + (terAt(a.x, a.y) >= 6 ? 6 : 0) + (cheb(a, { x: HEARTH[0], y: HEARTH[1] }) <= 4 && techs.includes('firecraft') ? 10 : 0) + (a.fac && a.home && cheb(a, { x: a.home[0], y: a.home[1] }) <= 3 ? 10 : 0) + Math.min(6, 2 * huddle) + (lee ? 3 : 0) + (tentNear ? 8 : 0) + ((WORKWARM && !a.fac && a.act === 'build') ? 4 : 0); // bodies close together share heat (+2 each, up to 3), a rock or wall to windward breaks the wind, a hide windbreak keeps most of it off; under workwarm, hard labour itself keeps the builder warm
         if (!a.sub && a.alive) { applyMut(a, 0.004, r); if (a.sub) { a.sz = Math.min(1.45, a.sz); if (a.build !== 'child') a.height = Math.round(168 * a.sz * (0.96 + 0.04 * a.g.strength) * (0.9 + 0.1 * a.g.frame)); log.push({ t: tick, text: a.id + ' was altered by ' + SUBST[a.sub].label.toLowerCase() + ' (' + SUBST[a.sub].eff + ')', kind: 'warn' }); } }
         const outd = !shelt(a.x, a.y) && terAt(a.x, a.y) < 6, wv = windAt(a.x, a.y, tick);
         // standing walls break the wind even before the roof goes on, so building pays off at once
@@ -5805,8 +5809,14 @@ class Component extends DCLogic {
         // cold and alone: move in beside the nearest colonist who is resting within a few tiles, to share warmth
         const near = agents.filter((b) => b !== a && b.alive && !b.fac && cheb(a, b) <= 5 && (b.act === 'sleep' || b.act === 'idle' || b.act === 'shelter')).sort((p, q) => cheb(a, p) - cheb(a, q))[0];
         if (!near) return false; const res = moveTo(a, (x, y) => cheb({ x, y }, near) <= 1 && !at.has(key(x, y))); if (res === 'stuck') return false; act = res === 'moved' ? 'move' : 'idle'; if (act === 'move') { a.bub = 'cold'; a.bubT = 2; } return true; })()) { }
-      else if (!(a.wrmCool > tick) && (G === 'warm' || duskHome || a.temp < -0.45 + 0.15 * coldFear || (a.wrmM && a.temp < -0.1)) && a.hyd > WGD && a.sat > WGS && !warmHere(a, a.x, a.y) && (a.wrmM = true)) { const hz = ((window.AGON_P || {}).hearthFirst ?? (s.disc === 'emergent')) && !a.fac && techs.includes('firecraft'); const res = moveTo(a, hz ? (x, y) => cheb({ x, y }, { x: HEARTH[0], y: HEARTH[1] }) <= 2 : (x, y) => warmHere(a, x, y)); act = res === 'moved' ? 'move' : 'idle'; }
-      else if (((a.wrmM && a.temp < -0.1) || (G === 'warm' && a.temp < 0.05)) && a.hyd > WGD && a.sat > WGS) { act = 'idle'; }
+      // r46 (AGON_P.workwarm): work to get warm. A merely-cold colonist (temp > -0.75, so not
+      // freezing) with a wall queued, materials above BUILDKEEP and food/water in them skips the
+      // hearth loop and falls through to pickWork, whose first work pick is 'build'. The matching
+      // body-heat term is in the warmth sum (+4 while the last act was build: swinging timber
+      // keeps the blood moving). An explicit llm goal of 'warm' is respected. Off, bldW is false
+      // and both conditions below are verbatim the shipped ones.
+      else if (!((WORKWARM && G !== 'warm' && !a.fac && a.temp > -0.75 && BUILDQ.length && (store.mats[BUILDMAT[store.wallMat || 'wattle']] || 0) > BUILDKEEP && a.sat > 0.45 && a.hyd > 0.4) && (a.wrmM = false, true)) && !(a.wrmCool > tick) && (G === 'warm' || duskHome || a.temp < -0.45 + 0.15 * coldFear || (a.wrmM && a.temp < -0.1)) && a.hyd > WGD && a.sat > WGS && !warmHere(a, a.x, a.y) && (a.wrmM = true)) { const hz = ((window.AGON_P || {}).hearthFirst ?? (s.disc === 'emergent')) && !a.fac && techs.includes('firecraft'); const res = moveTo(a, hz ? (x, y) => cheb({ x, y }, { x: HEARTH[0], y: HEARTH[1] }) <= 2 : (x, y) => warmHere(a, x, y)); act = res === 'moved' ? 'move' : 'idle'; }
+      else if (!(WORKWARM && G !== 'warm' && !a.fac && a.temp > -0.75 && BUILDQ.length && (store.mats[BUILDMAT[store.wallMat || 'wattle']] || 0) > BUILDKEEP && a.sat > 0.45 && a.hyd > 0.4) && ((a.wrmM && a.temp < -0.1) || (G === 'warm' && a.temp < 0.05)) && a.hyd > WGD && a.sat > WGS) { act = 'idle'; }
       else if (((window.AGON_P || {}).topUp ?? true) && !a.fac && a.build !== 'child' && !G && ((a.hyd < 0.8 && waterAdj(a.x, a.y)) || (a.sat < 0.7 && bushes.some((b) => b.x === a.x && b.y === a.y && b.food >= 1 && okFood(a, b) && !KIND[b.k || 'berry'].tox)))) {
         // already standing at water or on a good bush and running moderately low: use the visit (one trip serves two needs over time)
         if (a.hyd < 0.8 && waterAdj(a.x, a.y)) { a.hyd = Math.min(1, a.hyd + 0.5); a.inv.water = 1; act = 'drink'; a.bub = 'drink'; a.bubT = 2; if (a.sat < 0.85) fishTry(a, fishHow(a) || 'bare'); }
