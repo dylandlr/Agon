@@ -203,6 +203,49 @@ What this does **not** establish: that λ=1.0 fails in training. The probe measu
 initialisation. As `V` becomes informative its bootstrap carries real information, and that could
 reverse the ordering. One random policy, one untrained critic, 8 agents, 8 seeds.
 
+### Candidate C's labels: the trunk learns the trend, never the level
+
+Measured by `scripts/probe_aux_tasks.py --seeds 6`. C would extend the world model's existing
+`decode` head, which predicts the change in the eight own-state features at `DECODE_INDEX` one step
+ahead. So the question is which labels survive a split that holds out **whole agent-lifetimes**.
+Instrument: the GRU state `h_t` carried properly through a random-policy roll — a 128-dim random
+nonlinear map of the agent's whole history, i.e. a reservoir — ridge-regressed with the penalty
+tuned inside train, averaged over 5 fixed splits that every label shares.
+
+| label | between-life var | R² all | R² within-life | R² from current needs |
+|---|---|---|---|---|
+| remaining lifetime | 0.19 | −2.139 ±0.31 | **+0.479 ±0.11** | −1.741 ±0.31 |
+| needs change, h=1 (mean of 8) | 0.01 | 0.120 | **0.218** | 0.001 |
+| needs change, h=24 | 0.05 | −0.335 | 0.180 | −0.215 |
+| needs change, h=48 | 0.13 | −0.718 | 0.108 | −0.471 |
+| needs change, h=200 | 0.53 | −1.699 | 0.076 | −1.881 |
+
+Three things, all of which change what C should be:
+
+**The level never generalizes; the trend does.** Overall R² is negative everywhere while within-life
+R² is solidly positive. The trunk tracks an agent's *progression* and cannot place its *absolute
+level* on a lifetime it has not seen. That is a complete explanation of the earlier probe's train
+R² 0.995 against held-out R² below 0.3: it was fitting a per-lifetime offset that no per-tick
+observation supplies. An MSE head on an absolute label chases that offset, which is pure gradient
+noise — it is *how* a head memorizes.
+
+**Longer horizons are monotonically worse**, 0.218 → 0.180 → 0.108 → 0.076. C was specified as the
+existing head "at a longer horizon"; h=1, the horizon already implemented, is the best of the four.
+The horizon extension is contraindicated.
+
+**Per-scalar at h=24, the choice of feature matters more than the horizon.** `body_temp` reaches
+within-life 0.528 where the current needs give −0.082, so the trunk supplies something real and
+non-trivial. `energy` (0.374) and `sleepiness` (0.281) are beaten or matched by the current needs
+alone (0.958, 0.484), so a head on them teaches the trunk nothing. And `hydration` is **0.024** —
+the cause of 42% of deaths is the label that does not work. An earlier unpaired-split version of
+this probe put hydration at 0.193; every label then got a different split, and fixing that moved it
+to 0.024. The figures above are paired.
+
+Limits: a random policy, so death timing is largely exogenous and lifetime predictability is
+understated relative to a trained agent; a frozen random trunk, so these are lower bounds; 48
+lifetimes from 6 seeds; and within-life R² uses each held-out lifetime's own mean, so it measures
+within-life predictability rather than a predictor that could be deployed as-is.
+
 ### The target is not empty, and the critic still does not fit it
 
 At the shipped λ the target already carries R² 0.27 of remaining lifetime, yet `value.
@@ -687,11 +730,33 @@ the rollout. This is the proposal's own §5 "consequence models", and in the lit
   critic's target", and that C without A was likely insufficient. The first half is still true and
   is now the argument *for* it. The probe showed the credit path is not what puts lifetime
   information into the target — no λ does — so there is no version of A that supplies the signal C
-  would supply. A supervised head bypasses the credit path, the bootstrap and the noise in one step:
-  the label is what actually happened, at R² 0.995 fit by this architecture already.
-- **Why it is still not yet applied.** It is the one candidate whose premise has been measured
-  (capacity 0.995, labels free, signal absent from the target at every λ), but it is also the one
-  with a real coefficient to tune and two files to change. It needs a spec before code.
+  would supply. A supervised head bypasses the credit path, the bootstrap and the noise in one step.
+
+**C survives its premise check, but not as specified.** `scripts/probe_aux_tasks.py` measured which
+labels generalize across held-out lifetimes (§0), and the answer reshapes the candidate:
+
+1. **Predict a level-free target.** Within-life R² is positive everywhere and overall R² is negative
+   everywhere: the trunk learns an agent's progression and cannot place the absolute level on an
+   unseen lifetime. A head on an absolute label chases a per-lifetime offset no observation
+   supplies, which is how the earlier probe got train R² 0.995 and held out below 0.3. Center within
+   the life, or predict a difference or a monotone progress fraction — the label is known in
+   hindsight on a completed rollout, which is all a supervised head needs.
+2. **Do not extend the horizon.** Within-life R² falls monotonically with h: 0.218 at h=1, down to
+   0.076 at h=200. C was specified as the existing `decode` head at a longer horizon. That is the
+   wrong direction, and h=1 is already implemented.
+3. **Pick the feature on the measurement, not on intuition.** `body_temp` is the one own-state
+   feature where the trunk clearly beats the current needs (within-life 0.528 against −0.082).
+   `energy` and `sleepiness` are matched or beaten by the current needs alone, so a head on them
+   adds no pressure. **`hydration` scores 0.024** — the cause of 42% of deaths is not learnable
+   here, which is the most uncomfortable number in this section and should be re-measured under a
+   trained policy before it is treated as settled.
+4. **The label worth adding is progression toward death** (within-life R² 0.479, against −1.741 from
+   the current needs). It is the strongest signal measured, the existing head does not predict it,
+   and it is the thing `V` actually needs. That — not a longer horizon on the needs head — is what
+   C should be.
+
+- **Why it is still not applied.** It now has a measured premise and a shape, but a coefficient to
+  tune and two files to change. The spec is the next artifact; the code is not.
 
 ### D. A critic input path not shared with the 532 language dimensions
 
