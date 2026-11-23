@@ -1514,3 +1514,27 @@ p=1.0 vs baseline, built significantly up, no metric significantly worse, alive 
 t=2.03. Recommendation: ship roofs on by default as a real, non-harmful construction behaviour
 with plausible benefits; revisit the coefficients once there's a cheaper way to measure the
 dry-storage channel. Decision is Dyl's.
+
+## r43 — roofs shipped on by default (verified)
+The flag flipped from opt-in (`AGON_P.roof`) to opt-out (`AGON_P.noroof`) in 3100f44: four read
+sites in Main.dc.html, plus panel.py's wall-only probe (now forces noroof) and ab.py's default
+arm B (now `noroof:1`). Note this flag carries the whole r42 package, including the r35 wall
+wind-shield — arm A never had it; what shipped is exactly what arm B measured.
+
+### Verified
+- **Inertness, both directions, byte-exact (12/12)**: the new default reproduces r42 arm B's
+  hashes and `noroof:1` reproduces arm A's, on a 6-world spot panel spanning both divergence
+  classes (tundra s3, volcanic s21 identical-class; temperate s21, highlands s3, jungle s21,
+  desert s3 diverged-class). /tmp/mar/r43_inert.txt.
+- **Determinism acceptance 3 pages x 4 configs: all exact**. Default world with roofs now ends
+  built=113, alive 5 at 6000 / 7 at 9000 (pre-roof: built=50, alive 6/6).
+
+### Tooling note
+The first inertness run crashed on import: old r33 hunt scripts in /tmp/mar (bisect.py)
+shadow stdlib modules for any script placed there. One-off scripts now go in the session
+scratchpad, not /tmp/mar.
+
+### Open (carried)
+Food/water-blocked worlds (5); temperate s3 build inefficiency; _culture dead code; mockDecide
+Math.random; stone>wattle insulation ordering backwards; damping 0.3 / spoilage 0.4 untuned;
+dry-storage channel unmeasured directly; origin URL still points at the old repo name.
