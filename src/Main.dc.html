@@ -4755,7 +4755,7 @@ class Component extends DCLogic {
     // in heat and holds warmth in cold). Heat sources (hearth, huddled bodies, labour) still heat
     // past comfort, as fire does. The cold bootstrap is untouched: below comfort the cap never
     // binds, so cold-world warmth is bit-identical. Off, everything reduces to the shipped model.
-    const SHADE = !!(window.AGON_P || {}).shade;
+    const SHADE = !(window.AGON_P || {}).noshade;   // default ON since r48 (alive +1.83, t=3.48); AGON_P.noshade is the opt-out baseline
     // r41: shelter is the floor again, in BOTH arms. r40 measured the alternative and it killed
     // colonies: making the roof the gate meant insulation fell to zero and wind chill switched on
     // the moment roofs were enabled, so a colony lost the shelter it already had exactly while it
