@@ -2940,13 +2940,25 @@ function reanchorCamp(nx, ny) {
 // A candidate anchor must fit the whole blueprint footprint on open, buildable ground; among the
 // fits, prefer water nearby and closeness to the food. Draws no RNG; ties resolve by scan order.
 function migSite(gx, gy) {
-  const walkT = (t) => t === 0 || t === 1 || t === 2 || t === 3 || t === 9 || t === 10 || t === 11;
+  const walkT = (t) => t === 0 || t === 1 || t === 2 || t === 3 || t === 9 || t === 10 || t === 11 || t === 15;
   const foot = [...CAMP.W, ...CAMP.F, ...(ANX ? [...ANX.W, ...ANX.F] : []), CAMP.hearth, ...CAMP.table, ...CAMP.crates];
+  // A site the colony cannot WALK to is worse than no site: agents would grind full-map
+  // pathfinding at an unreachable camp every tick (the first smoke hung exactly this way).
+  // One flood fill from the current camp marks everywhere actually reachable on foot.
+  const reach = new Set(); {
+    const q = [[15 + CAX, 8 + CAY]]; reach.add((15 + CAX) + ',' + (8 + CAY));
+    while (q.length) { const [x, y] = q.pop();
+      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const i = x + di, j = y + dj, k = i + ',' + j;
+        if (i < 1 || j < 1 || i >= W - 1 || j >= H - 1 || reach.has(k)) continue;
+        if (!walkT(terAt(i, j)) || isLake(i, j) || isSea(i, j) || BOUL.has(k) || (WALLS.has(k) && !doors.has(k))) continue;
+        reach.add(k); q.push([i, j]); } }
+  }
   let best = null, bs = -1e9;
   for (let dy = -8; dy <= 8; dy += 2) for (let dx = -8; dx <= 8; dx += 2) {
     const nx = gx - 15 + dx, ny = gy - 8 + dy;
     if (nx < 2 || ny < 2 || nx + 30 >= W || ny + 18 >= H) continue;
     if (Math.max(Math.abs(nx - CAX), Math.abs(ny - CAY)) < 8) continue;   // a move that goes nowhere is no move
+    if (!reach.has((15 + nx) + ',' + (8 + ny))) continue;                 // must be walkable from here
     let ok = true;
     for (const [lx, ly] of foot) { const x = lx + nx, y = ly + ny;
       if (!walkT(terAt(x, y)) || BOUL.has(key(x, y)) || isLake(x, y) || isSea(x, y) || BLOCK.has(key(x, y)) || WALLS.has(key(x, y))) { ok = false; break; } }
