@@ -4741,10 +4741,11 @@ class Component extends DCLogic {
     // Rival camps (a.fac) keep their legacy additive 6: they are not campGrp rooms, so covAt is null
     // there. Off, everything reduces to the shipped model bit for bit.
     const INSDAMP = !!(window.AGON_P || {}).insdamp;
-    // r46 experiment (AGON_P.workwarm): cold colonists build instead of hearth-idling when a wall
-    // is queued and materials are in store, and heavy work generates body heat. See the warm-seek
-    // guard and the warmth sum's build term. Off, both sites reduce to the shipped code bit for bit.
-    const WORKWARM = !!(window.AGON_P || {}).workwarm;
+    // Workwarm (default ON since r47; AGON_P.noworkwarm is the opt-out, used by A/Bs as the old
+    // baseline): cold colonists build instead of hearth-idling when a wall is queued and materials
+    // are in store, and heavy work generates body heat. See the warm-seek guard and the warmth
+    // sum's build term. Off, both sites reduce to the pre-r46 code bit for bit.
+    const WORKWARM = !(window.AGON_P || {}).noworkwarm;
     // r41: shelter is the floor again, in BOTH arms. r40 measured the alternative and it killed
     // colonies: making the roof the gate meant insulation fell to zero and wind chill switched on
     // the moment roofs were enabled, so a colony lost the shelter it already had exactly while it
