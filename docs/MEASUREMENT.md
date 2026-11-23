@@ -348,6 +348,14 @@ Note the shape of this failure: it costs ~5 minutes of compile per design before
 designs burn 20+ minutes of GPU and produce nothing. Run **one** design first and confirm
 `history.json` has rows before queueing the rest.
 
+**`benchmark.py` cannot size a chunked run.** It has no `--agent-chunk` flag, so it always measures
+the unchunked update — the configuration that OOMs. When you train with `--agent-chunk`, the
+benchmark's `RECOMMENDED --worlds` is measured under a different and much larger memory profile
+than the run will use, so treat it as a lower bound and set `WORLDS` yourself. Either add the flag
+to `benchmark.py` or skip it: on a config that has already OOMed, start from the same `--worlds`
+that failed, add `--agent-chunk`, confirm it trains, and raise `--worlds` only on the next run.
+Changing one thing at a time is what tells you the chunking is what fixed it.
+
 Do not reach for this explanation when the log is large and rows exist — then the run trained, and
 the table below applies.
 
