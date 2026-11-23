@@ -4114,7 +4114,7 @@ class Component extends DCLogic {
     if (!rec || rec.v !== 1 || !rec.st || !rec.world || !rec.st.agents) return false;
     const w = rec.world; if (!SIZES[w.size] || !BIOMES[w.biome]) return false;
     window.AGON_P = Object.assign(window.AGON_P || {}, rec.P || {});
-    this._Q = {}; this._K = {}; this._KC = {}; this._away = [];
+    this._Q = {}; this._K = {}; this._KC = {}; this._KT = {}; this._KTc = new Map(); this._away = [];
     const gg = w.gp || {}, ps = w.planetSeed || 1, pc = w.pcell, ecoR = pc && window.AgonMacro ? this.ecoFor(ps) : null;
     this.E = engineFor(w.size, w.form, w.biome, w.wseed, w.nRiv, ecoR ? Object.assign({}, gg, { pe: ecoWeights(ecoR, pc.y * ecoR.PL.PW + pc.x) }) : gg);
     if (this._sat) { this._sat.reset(); clearTimeout(this._satW); this._satW = setTimeout(() => { try { this._sat.prep(); } catch (e) { } }, 600); }
@@ -4533,7 +4533,7 @@ class Component extends DCLogic {
     // every per-world cache the tick reads must die with the world, or the new world inherits the old one's
     // learning, toxin rolls, burn clocks and provisioning roster: measured as a tick-1 divergence between two
     // runs of the same world in one page. _Q/_K/_KC/_away were reset here already; the other eight were not.
-    this._Q = {}; this._K = {}; this._KC = {}; this._away = [];
+    this._Q = {}; this._K = {}; this._KC = {}; this._KT = {}; this._KTc = new Map(); this._away = [];
     this._burnT = {}; this._TX = {}; this._PV = null; this._eco = null;
     this._busy = {}; this._dec = {}; this._calls = 0; this._culture = null;
     const st = this.state, kk = k || st.size, ff = f ?? st.form;
@@ -4765,6 +4765,15 @@ class Component extends DCLogic {
     // camp re-anchoring; satellite rest comes free from the existing cold-tent behavior. Off, no
     // branch is reachable and no RNG is drawn.
     const SCOUT = !!(window.AGON_P || {}).scout;
+    // r51 experiment (AGON_P.fresh): belief hygiene — fresher sighting wins. r50's diagnosis: a
+    // starving colony dies on the ghost treadmill because busts are individual while hopes are
+    // shared: fill-gaps gossip and the camp pool recirculate ancient food:true sightings, and the
+    // within-2 bust DELETES the entry, making the agent re-learnable with stale hope. Under the
+    // flag every ground-truth sighting is timestamped (a missing stamp reads as 0, "ancient", so
+    // seeds and the pool's t=0 beliefs lose to any real observation), merges go to the fresher
+    // entry in BOTH directions, and busts set false instead of deleting. Timestamps live beside
+    // the knowledge maps (component state, like the knowledge itself — never serialized).
+    const FRESH = !!(window.AGON_P || {}).fresh;
     // r41: shelter is the floor again, in BOTH arms. r40 measured the alternative and it killed
     // colonies: making the roof the gate meant insulation fell to zero and wind chill switched on
     // the moment roofs were enabled, so a colony lost the shelter it already had exactly while it
@@ -5350,6 +5359,8 @@ class Component extends DCLogic {
     // Colonists teach each other by talking: the better-off one passes its table to the other, and newcomers copy the best-off neighbour.
     // ---- shared knowledge: with fog on, a colonist only heads for berry bushes it has seen itself, been told about by someone it met, or that the camp talk has put on the common board
     this._K = this._K || {}; this._KC = this._KC || {}; this._TX = this._TX || {};
+    this._KT = this._KT || {}; this._KTc = this._KTc || new Map();   // r51: sighting timestamps per agent and for the camp pool
+    const KT = (q) => this._KT[q.id] || (this._KT[q.id] = new Map());
     // what colonists know about poisons: each carries a set of kinds it has learned are bad (some founders know a few from the start), and gets sick eating one it did not know
     const txOf = (a) => this._TX[a.id] || (this._TX[a.id] = new Set(Object.keys(KIND).filter((k) => KIND[k].tox && hh(parseInt(String(a.id).slice(1), 10) || 1, k.length * 7, 91) < 0.2)));
     const okFood = (a, b) => { const k = b.k || 'berry'; return !KIND[k].heal && !txOf(a).has(k); };
@@ -5363,7 +5374,12 @@ class Component extends DCLogic {
     const knw = (a) => this._K[a.id] || (this._K[a.id] = new Map(bushes.filter((b) => cheb(a, b) <= 10).map((b) => [key(b.x, b.y), b.food >= 1])));
     const kb = (a) => { const c = this._KC[a.id]; if (c && c.t === tick) return c.arr; let arr; if (!s.fog) arr = bushes.filter((b) => okFood(a, b)); else { const k = knw(a); arr = bushes.filter((b) => k.get(key(b.x, b.y)) && okFood(a, b)).map((b) => ({ ...b, food: 1 })); } this._KC[a.id] = { t: tick, arr }; return arr; };
     const winterNow = Math.floor(tick / 500) % 4 === 3, kbW = (a) => { const arr = kb(a); if (!winterNow || a.sat < 0.3) return arr; const c = { x: CAMPC[0], y: CAMPC[1] }; return arr.filter((b) => cheb(b, c) <= ((window.AGON_P || {}).winterR ?? 12)); };
-    const tellKnow = (a, b) => { const ka = knw(a), kc = knw(b); let n = 0; const ta = txOf(a), tb = txOf(b); for (const v of ta) if (!tb.has(v)) { tb.add(v); n++; } for (const v of tb) if (!ta.has(v)) { ta.add(v); n++; } for (const [v, f] of ka) if (!kc.has(v)) { kc.set(v, f); n++; } for (const [v, f] of kc) if (!ka.has(v)) { ka.set(v, f); n++; } return n; };
+    const tellKnow = (a, b) => { const ka = knw(a), kc = knw(b); let n = 0; const ta = txOf(a), tb = txOf(b); for (const v of ta) if (!tb.has(v)) { tb.add(v); n++; } for (const v of tb) if (!ta.has(v)) { ta.add(v); n++; }
+      if (FRESH) { const kta = KT(a), ktb = KT(b);
+        for (const [v, f] of ka) { const tv = kta.get(v) || 0; if (!kc.has(v)) { kc.set(v, f); ktb.set(v, tv); n++; } else if (tv > (ktb.get(v) || 0)) { kc.set(v, f); ktb.set(v, tv); } }
+        for (const [v, f] of kc) { const tv = ktb.get(v) || 0; if (!ka.has(v)) { ka.set(v, f); kta.set(v, tv); n++; } else if (tv > (kta.get(v) || 0)) { ka.set(v, f); kta.set(v, tv); } }
+      } else { for (const [v, f] of ka) if (!kc.has(v)) { kc.set(v, f); n++; } for (const [v, f] of kc) if (!ka.has(v)) { ka.set(v, f); n++; } }
+      return n; };
     if (s.fog) { this._K.camp = this._K.camp || new Map(bushes.filter((b) => inCamp(b.x, b.y) || cheb(b, { x: TABLE[0][0], y: TABLE[0][1] }) <= 12).map((b) => [key(b.x, b.y), true])); }
     const LOPT = ['gather', 'hunt', 'haul', 'farm', 'craft', 'wander', 'eat', 'drink', 'sleep', 'socialize', 'rest'];
     this._Q = this._Q || {};
@@ -5669,9 +5685,12 @@ class Component extends DCLogic {
       }
       let act = 'idle';
       if (s.fog && !a.fac) {
-        const kn = knw(a); if (tick % 2 === 0) for (const b of bushes) if (cheb(a, b) <= 7) kn.set(key(b.x, b.y), b.food >= 1);
+        const kn = knw(a); if (tick % 2 === 0) for (const b of bushes) if (cheb(a, b) <= 7) { kn.set(key(b.x, b.y), b.food >= 1); if (FRESH) KT(a).set(key(b.x, b.y), tick); }
         if (s.fog !== 'mute' && tick % 10 === (parseInt(a.id.slice(1), 10) || 0) % 10) {
-          const cm = this._K.camp; if (inCamp(a.x, a.y)) { for (const [v, f] of kn) cm.set(v, f); for (const [v, f] of cm) if (!kn.has(v)) kn.set(v, f); }
+          const cm = this._K.camp; if (inCamp(a.x, a.y)) { if (FRESH) { const ct = this._KTc, kt = KT(a);
+            for (const [v, f] of kn) { const tv = kt.get(v) || 0; if (tv >= (ct.get(v) || 0)) { cm.set(v, f); ct.set(v, tv); } }
+            for (const [v, f] of cm) { const tv = ct.get(v) || 0; if (!kn.has(v) || tv > (kt.get(v) || 0)) { kn.set(v, f); kt.set(v, tv); } }
+          } else { for (const [v, f] of kn) cm.set(v, f); for (const [v, f] of cm) if (!kn.has(v)) kn.set(v, f); } }
           const nb = agents.find((q) => q !== a && q.alive && !q.fac && cheb(a, q) <= 3); if (nb) { const n = tellKnow(a, nb); if (n > 0 && r() < 0.3) { a.bub = 'social'; a.bubT = 2; log.push({ t: tick, text: a.id + ' tells ' + nb.id + ' where the berries are', kind: 'info' }); } }
         }
       }
@@ -5739,7 +5758,7 @@ class Component extends DCLogic {
           if (pg && a.sat <= pg.sat + 0.01 && a.hyd <= pg.hyd + 0.01) { a.esc = tick + 24; a.tg = null; a.tblStuck = 0; a.drStuck = 0; a.huntBan = tick + 50; if (needE0 && needD0 && a.nc) { a.nc = a.nc === 'eat' ? 'drink' : 'eat'; a.ncT = tick + 30; } (window.AGON_STATS = window.AGON_STATS || { esc: 0, escFix: 0 }).esc++; (window.AGON_LOG = window.AGON_LOG || []).push({ t: tick, id: a.id, ev: 'escalate', act: a.act, sat: +a.sat.toFixed(2), hyd: +a.hyd.toFixed(2), x: a.x, y: a.y }); if (window.AGON_LOG.length > 400) window.AGON_LOG.shift(); if (!(a.escLog > tick - 60)) { a.escLog = tick; log.push({ t: tick, text: a.id + ' is getting nowhere and changes approach', kind: 'warn' }); } }
           a.pg = { t: tick, x: a.x, y: a.y, sat: a.sat, hyd: a.hyd };
         }
-        if (a.esc > tick) { const kn = knw(a); for (const b of bushes) if (b.food >= 1 && cheb(a, b) <= 12) kn.set(key(b.x, b.y), true); this._KC[a.id] = null; }
+        if (a.esc > tick) { const kn = knw(a); for (const b of bushes) if (b.food >= 1 && cheb(a, b) <= 12) { kn.set(key(b.x, b.y), true); if (FRESH) KT(a).set(key(b.x, b.y), tick); } this._KC[a.id] = null; }
       } else if (a.pg) { if (a.esc > tick) (window.AGON_STATS = window.AGON_STATS || { esc: 0, escFix: 0 }).escFix++; a.pg = null; a.esc = 0; }
       const G0 = ordr ? ordr.goal : (dec && dec.until > tick && !failing && !needE && !needD ? dec.goal : null);
       // sleep follows a two-process model: homeostatic pressure (1 - energy) plus a circadian drive whose phase is the colonist's own chronotype (set by temperament, age and a personal offset); there is no curfew, so owls stay up and larks turn in early, worry keeps people awake, and children sleep more
@@ -5916,7 +5935,7 @@ class Component extends DCLogic {
           // no route to the table (too far for the path search, or boxed in): remember that for a while and fall through to bushes next tick; with no known bush, head toward the camp in a straight line
           if (res === 'stuck') { a.tblStuck = tick + 15; if (!kbW(a).some((b) => b.food >= 1)) act = stepBy(a, Math.sign(TABLE[0][0] - a.x), Math.sign(TABLE[0][1] - a.y)) ? 'move' : (wander(a) ? 'move' : 'idle'); }
         }
-        else { if (s.fog) { const kn2 = knw(a); let fg = false; for (const b of bushes) if (b.food < 1 && cheb(a, b) <= 2 && kn2.get(key(b.x, b.y))) { kn2.delete(key(b.x, b.y)); fg = true; } if (fg) this._KC[a.id] = null; }
+        else { if (s.fog) { const kn2 = knw(a); let fg = false; for (const b of bushes) if (b.food < 1 && cheb(a, b) <= 2 && kn2.get(key(b.x, b.y))) { if (FRESH) { kn2.set(key(b.x, b.y), false); KT(a).set(key(b.x, b.y), tick); } else kn2.delete(key(b.x, b.y)); fg = true; } if (fg) this._KC[a.id] = null; }
           const res = moveTo(a, (x, y) => kbW(a).some((b) => b.x === x && b.y === y && b.food >= 1) || (!a.fac && plots.some((q) => q.x === x && q.y === y && q.g >= 1)));
           act = res === 'moved' ? 'move' : 'idle';
           if (res === 'stuck' && s.fog) {
