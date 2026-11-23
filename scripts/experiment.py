@@ -173,9 +173,22 @@ def version_of(run_dir: Path):
     return json.load(open(f))["args"].get("code_version") if f.exists() else None
 
 
+def lambda_of(run_dir: Path):
+    """A run's GAE lambda. Runs made before --gae-lambda existed have no such key and all used the
+    shipped 0.95, so that is the honest default rather than None."""
+    f = run_dir / "history.json"
+    return json.load(open(f))["args"].get("gae_lambda", 0.95) if f.exists() else None
+
+
 def stale(args, kind, todo):
-    """Runs this command would reuse or resume that were made by other code."""
+    """Runs this command would reuse or resume that were made by other code, or at another lambda.
+
+    Lambda is in neither code_version (which hashes code, not arguments) nor the run path, so
+    without this check a lambda run silently resumes the baseline's checkpoint in the same design
+    folder and the comparison the run exists to make is void -- with nothing in the output saying
+    so. docs/MEASUREMENT.md 5d."""
     now, bad = code_version(), []
+    want_lam = getattr(args, "gae_lambda", 0.95)
     dirs = [Path(args.root) / kind / name for name, _ in todo] if kind in ("validate", "core", "archetypes", "probe") \
         else [Path(args.root) / "validate" / "caveman"]
     for d in dirs:
@@ -183,6 +196,8 @@ def stale(args, kind, todo):
         if (d / "params.msgpack").exists() or (d / "checkpoint.pkl").exists():
             if v != now:
                 bad.append(f"{d} (code {v})")
+            elif (had := lambda_of(d)) != want_lam:
+                bad.append(f"{d} (gae_lambda {had}, this run wants {want_lam})")
     return bad
 
 
@@ -532,9 +547,11 @@ def main():
         todo = [todo[args.only]]
     bad = stale(args, args.kind, todo)
     if bad:
-        raise SystemExit("These runs were made by other code and would be reused or resumed:\n  "
-                         + "\n  ".join(bad) + f"\nUse a fresh --root for code {code_version()} "
-                         "(results from different code must not be mixed).")
+        raise SystemExit("These runs would be reused or resumed but were made by other code, or at "
+                         "another gae_lambda:\n  "
+                         + "\n  ".join(bad) + f"\nUse a fresh --root per code version (now "
+                         f"{code_version()}) and per gae_lambda (results from different settings "
+                         "must not be mixed).")
     if args.kind not in ("validate", "probe") and not args.skip_gate:
         ok, lines = gate(args.root)
         if not ok:
