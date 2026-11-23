@@ -4746,6 +4746,16 @@ class Component extends DCLogic {
     // are in store, and heavy work generates body heat. See the warm-seek guard and the warmth
     // sum's build term. Off, both sites reduce to the pre-r46 code bit for bit.
     const WORKWARM = !(window.AGON_P || {}).noworkwarm;
+    // r48 experiment (AGON_P.shade): shelter never overheats. The M1a probe showed the "blocked"
+    // worlds die of HEAT with food abundant: shelter terms are additive warmth, so a floor or cave
+    // in a desert makes a colonist HOTTER — backwards, same family as pre-r42 roofs and r44/r45
+    // insulation, on the hot side. Under the flag (player colonists only): shelter warmth (floor
+    // ins, bedding, windbreak, tent) fills only up to comfort (22) and adds nothing past it (shade
+    // is neutral); the cave term stops being +6 and becomes 0.5 damping toward 22 (deep rock cools
+    // in heat and holds warmth in cold). Heat sources (hearth, huddled bodies, labour) still heat
+    // past comfort, as fire does. The cold bootstrap is untouched: below comfort the cap never
+    // binds, so cold-world warmth is bit-identical. Off, everything reduces to the shipped model.
+    const SHADE = !!(window.AGON_P || {}).shade;
     // r41: shelter is the floor again, in BOTH arms. r40 measured the alternative and it killed
     // colonies: making the roof the gate meant insulation fell to zero and wind chill switched on
     // the moment roofs were enabled, so a colony lost the shelter it already had exactly while it
@@ -5624,7 +5634,12 @@ class Component extends DCLogic {
         const wallShield = (ROOFON && outd && FLOORS.has(key(a.x, a.y))) ? (covAt(a.x, a.y) || { wall: 0 }).wall : 0;
         const chill = outd ? Math.min(9, Math.max(0, wv.sp - 3.5) * 0.9 * (amb < 22 ? 1 : 0.3)) * (1 - 0.8 * wallShield) : 0;
         if (outd && wv.sp > 11) a.ene -= 0.0004 * (wv.sp - 11);
-        const eff0 = amb + warmth - chill, rfC = (ROOFON && ROOF.has(key(a.x, a.y))) ? (covAt(a.x, a.y) || { roof: 0 }).roof : 0,
+        // r48 (shade): heat sources vs shelter, split only for the flagged path; the flag-off eff0
+        // keeps the one-line sum verbatim (float addition is order-sensitive). Cave +6 is excluded
+        // from warmS under shade — it becomes damping in the eff line below.
+        const warmH = (cheb(a, { x: HEARTH[0], y: HEARTH[1] }) <= 4 && techs.includes('firecraft') ? 10 : 0) + Math.min(6, 2 * huddle) + ((WORKWARM && !a.fac && a.act === 'build') ? 4 : 0),
+          warmS = rcov * (INSDAMP ? 3 : (REALINS ? REALINS[store.wallMat || 'wattle'] : this.E.WALLMATS[store.wallMat || 'wattle'].ins)) + (inBed ? 5 : 0) + (lee ? 3 : 0) + (tentNear ? 8 : 0);
+        const eff0 = (SHADE && !a.fac) ? (amb + warmH - chill + Math.min(warmS, Math.max(0, 22 - (amb + warmH - chill)))) : amb + warmth - chill, rfC = (ROOFON && ROOF.has(key(a.x, a.y))) ? (covAt(a.x, a.y) || { roof: 0 }).roof : 0,
           // A roof does not simply add heat: it blocks the sun by day and holds warmth in at night.
           // Adding warmth was wrong in hot biomes, where heatGap above 28 costs water — a desert roof
           // made things worse. Damping toward comfort helps in both directions, which is what a roof
@@ -5634,7 +5649,7 @@ class Component extends DCLogic {
           kw = (INSDAMP && !a.fac && rcov) ? (covAt(a.x, a.y) || { wall: 0 }).wall * ((REALINS ? REALINS[store.wallMat || 'wattle'] : this.E.WALLMATS[store.wallMat || 'wattle'].ins) / 40) : 0,
           // the flag-off arm keeps the r42 expression verbatim: float multiplication is not
           // associative, so even an algebraically equal regrouping would break byte-exact inertness
-          eff = INSDAMP ? eff0 + (22 - eff0) * Math.min(0.85, 0.3 * rfC + kw) : eff0 + (22 - eff0) * 0.3 * rfC;
+          eff = (INSDAMP || (SHADE && !a.fac)) ? eff0 + (22 - eff0) * Math.min(0.85, 0.3 * rfC + kw + ((SHADE && !a.fac && terAt(a.x, a.y) >= 6) ? 0.5 : 0)) : eff0 + (22 - eff0) * 0.3 * rfC;
         const coldGap = Math.max(0, 10 - eff) / (0.5 + 0.5 * (a.g.insulation + gearIns(a))), heatGap = Math.max(0, eff - 28);
         const tgt = Math.max(-1, Math.min(1, (heatGap - coldGap) / 10));
         a.temp = (a.temp || 0) + (tgt - (a.temp || 0)) * 0.15;
