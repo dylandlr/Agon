@@ -1638,3 +1638,20 @@ inertness both ways on a spot panel, determinism acceptance). It is also the pre
 makes honest insulation physics (r45's parked insdamp) worth retesting later: with a workforce
 that builds when cold, the bootstrap gap that killed insdamp v1/v2 should narrow — a joint
 workwarm+insdamp A/B is the natural follow-up experiment after shipping.
+
+## r47 — workwarm shipped on by default (verified)
+Flag flipped to opt-out (AGON_P.noworkwarm) in dfe1358. Verified: inertness both ways byte-exact
+12/12 on a 6-world spot panel (default == r46 arm B, noworkwarm == r46 arm A; tundra s21,
+temperate s21, alpine s3, forest s21, badlands s3, jungle s3); determinism acceptance 4/4 exact
+(default world now built=78 at 6000 / 120 at 9000 under roofs+workwarm). The shipped baseline is
+now: vern walls + roofs + global build order + workwarm.
+
+## M1 (migration) — scoping note
+Full camp re-anchoring touches ~15 interlocked module-level structures (ck-baked OX/OY in
+campGrp/ANXK/ROOMX, CAMPDIST cache, TABLE/CRATES/HEARTH/STOOLS/SHELVES/BENCH/BARRELS/RUG/
+WINDOWS/DOORS/BLOCK, RAMPS cut at doors, LAKES placed relative to camp, worldgen tree clearing)
+— the riskiest change since the determinism hunt if done head-on. Before designing it, M1a
+answers the question the design hinges on: in the worlds that die unfed, does food exist BEYOND
+reach (migration rescues them) or are the maps barren (migration is a depletion-dynamics
+mechanic and the blocked worlds need a different fix)? Probe: forage by distance ring from camp
+(<=10 / 11-22 / >22), water distance, death causes, 6 starving worlds.
