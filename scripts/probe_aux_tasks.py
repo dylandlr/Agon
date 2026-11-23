@@ -71,7 +71,7 @@ def roll(seed):
     key = jax.random.PRNGKey(seed)
     s = E.reset(key, cfg)
     carry = jnp.zeros((N, HID))
-    H, F, S, AL = [], [], [], []
+    H, F, S, AL, ACT = [], [], [], [], []
     death = np.full(N, -1)
     for t in range(args.ticks):
         o, alive = obs_f(s), np.asarray(s.alive)
@@ -81,14 +81,17 @@ def roll(seed):
         H.append(np.asarray(carry))
         AL.append(alive)
         key, k = jax.random.split(key)
-        s, _, _, info = step(s, jax.random.randint(k, (N,), 0, E.N_ACTIONS))
+        act = jax.random.randint(k, (N,), 0, E.N_ACTIONS)
+        ACT.append(np.asarray(act))
+        s, _, _, info = step(s, act)
         d = np.asarray(info.died)
         for i in range(N):
             if d[i] and death[i] < 0:
                 death[i] = t
         if not np.asarray(s.alive).any():
             break
-    return np.asarray(H), np.asarray(F), np.asarray(S), np.asarray(AL), death, len(H)
+    return (np.asarray(H), np.asarray(F), np.asarray(S), np.asarray(AL),
+            np.asarray(ACT), death, len(H))
 
 
 def _one_split(X, y, grp, split):
@@ -133,9 +136,9 @@ def ridge_grouped(X, y, grp, splits=5):
     return (float(np.mean(v)), float(np.std(v))) if v else (float("nan"), float("nan"))
 
 
-HH, FF, SS, LEFT, GRP = [], [], [], [], []
+HH, FF, SS, LEFT, GRP, AA = [], [], [], [], [], []
 for seed in range(args.seeds):
-    H, Fe, S, AL, death, T = roll(seed)
+    H, Fe, S, AL, ACT, death, T = roll(seed)
     left = np.full((T, N), -1.0)
     for i in range(N):
         if death[i] >= 0:
@@ -147,10 +150,34 @@ for seed in range(args.seeds):
             continue
         HH.append(H[:T][m, i]); FF.append(Fe[:T][m, i]); SS.append(S[:T][m, i])
         LEFT.append(left[m, i]); GRP.append(np.full(int(m.sum()), seed * N + i))
+        AA.append(ACT[:T][m, i])
     print(f"  seed {seed}: {T} ticks, {int((death >= 0).sum())}/{N} died", flush=True)
 
 H = np.concatenate(HH); Fe = np.concatenate(FF); S = np.concatenate(SS)
 left = np.concatenate(LEFT); grp = np.concatenate(GRP)
+act = np.concatenate(AA)
+# one-hot the realized action, so a window's counts are a plain sum over it
+A1 = np.zeros((len(act), E.N_ACTIONS), np.float64)
+A1[np.arange(len(act)), act] = 1.0
+
+
+def action_counts(src, h, g):
+    """How many times each action was taken over [t, t+h), per source tick.
+
+    The world model's head is ACTION-CONDITIONED -- decode(dyn(z, a)) -- so predicting a needs
+    change without the actions asks a different and partly impossible question: hydration rises
+    when the agent drinks, and under a random policy the future action is noise. An earlier version
+    of this probe omitted them and recorded hydration as unlearnable.
+    """
+    out = np.zeros((len(src), E.N_ACTIONS), np.float64)
+    pos = {gg: np.flatnonzero(grp == gg) for gg in np.unique(g)}
+    cums = {gg: np.vstack([np.zeros(E.N_ACTIONS), np.cumsum(A1[idx], 0)]) for gg, idx in pos.items()}
+    for r, (i, gg) in enumerate(zip(src, g)):
+        idx = pos[gg]
+        off = int(np.flatnonzero(idx == i)[0])
+        out[r] = cums[gg][off + h] - cums[gg][off]
+    assert np.allclose(out.sum(1), h), "action counts must sum to the horizon"
+    return out
 print(f"\n{len(H)} agent-ticks from {len(np.unique(grp))} lifetimes, trunk {H.shape[1]}-dim\n")
 
 # label the eight decoded features empirically rather than guessing the observation layout
@@ -194,7 +221,8 @@ def report(label, X, y, g, ctrl=None, tail=""):
           f"  {fmt(ridge_grouped(X, within(y, g), g))}  {fmt(ctl)}{tail}")
 
 
-print(f"\n{'label':<30}{'btwn':>8}  {'R2 all':>13}  {'R2 within-life':>13}  {'R2 ctrl':>13}")
+print(f"\n{'label':<30}{'btwn':>8}  {'R2 all':>13}  {'R2 within-life':>13}  {'R2 ctrl':>13}"
+      f"  {'+actions':>13}")
 print("  (R2 within-life uses each held-out lifetime's own mean to define the within component, so")
 print("   it measures within-life PREDICTABILITY, not a predictor you could deploy as-is.)")
 report("remaining lifetime", H, left, grp, Fe)
@@ -211,21 +239,31 @@ for h in args.horizons:
         continue
     src = np.concatenate([a for a, _ in per_t]); dst = np.concatenate([b for _, b in per_t])
     g = grp[src]
-    bs, ra, rw, rc = [], [], [], []
+    AC = action_counts(src, h, g)
+    HA = np.concatenate([H[src], AC], 1)          # the trunk PLUS what the agent actually did
+    bs, ra, rw, rc, rwa, sds = [], [], [], [], [], []
     for j in range(len(DECODE_INDEX)):
         y = (Fe[dst, j] - Fe[src, j]).astype(np.float64)
         bs.append(between_share(y, g))
         ra.append(ridge_grouped(H[src], y, g)[0])
         rw.append(ridge_grouped(H[src], within(y, g), g)[0])
         rc.append(ridge_grouped(Fe[src], y, g)[0])
+        rwa.append(ridge_grouped(HA, within(y, g), g)[0])
+        sds.append(float(within(y, g).std()))
     print(f"{f'needs change, h={h} (mean of 8)':<30}{np.nanmean(bs):>8.2f}  "
           f"{np.nanmean(ra):>13.3f}  {np.nanmean(rw):>13.3f}  {np.nanmean(rc):>13.3f}"
-          f"   n={len(src)}, {len(np.unique(g))} lifetimes")
+          f"  {np.nanmean(rwa):>13.3f}   n={len(src)}, {len(np.unique(g))} lifetimes")
     if len(args.horizons) > 1 and h == args.horizons[1]:        # per-scalar for one horizon
         for j, s in enumerate(("satiety", "hydration", "energy", "health", "temp", "stress",
                                "sleepy", "health2")[:len(DECODE_INDEX)]):
-            print(f"    {s:<26}{bs[j]:>8.2f}  {ra[j]:>13.3f}  {rw[j]:>13.3f}  {rc[j]:>13.3f}")
+            print(f"    {s:<26}{bs[j]:>8.2f}  {ra[j]:>13.3f}  {rw[j]:>13.3f}  {rc[j]:>13.3f}"
+                  f"  {rwa[j]:>13.3f}  sd {sds[j]:.5f}")
 
+DRINK, SEEKW = E.ACTION_NAMES.index("drink"), E.ACTION_NAMES.index("seek_water")
+print(f"\nvalidation: drink chosen on {100 * A1[:, DRINK].mean():.2f}% of ticks, seek_water on "
+      f"{100 * A1[:, SEEKW].mean():.2f}% -- a random policy over {E.N_ACTIONS} actions. If a label's"
+      "\n  within-life sd is ~0 the label barely varies, so its R2 is noise and the probe is"
+      "\n  UNINFORMATIVE for it rather than evidence against it.")
 print("\nGrouped split: whole agent-lifetimes held out; penalty tuned inside train only.")
 print("between-life = share of the label's variance lying between lifetimes rather than within one.")
 print("R2 within-life removes each lifetime's own mean, isolating structure a head could learn.")
