@@ -128,9 +128,30 @@ kills the process between checkpoints. Before this change `history.json` was wri
 `--ckpt-every`, so an interrupted run lost every row logged since its last checkpoint. Now it
 loses nothing.
 
-Do not weaken this. `history.json` is a few hundred KB for a full run — the write cost is
-irrelevant next to a training update, and it is the only artifact that survives an interrupted run
-and still says what the run learned.
+Do not weaken this. It is the only artifact that survives an interrupted run and still says what
+the run learned.
+
+### But pick `--log-every` from the update count, not out of habit
+
+The whole file is rewritten on every logged row, so **total write I/O grows with the square of the
+row count**: `row_size x rows^2 / 2`. A row is about 1.5 KB. That is harmless when updates are few
+and ruinous when they are many, and the update count depends entirely on batch size:
+
+| worlds | agent-steps/update | updates for 1e8 | rows at `--log-every 1` | total write I/O |
+|---|---|---|---|---|
+| 128 | 1,048,576 | 95 | 95 | ~7 MB |
+| 4 | 32,768 | **3,052** | **3,052** | **~7 GB** |
+
+7 GB of repeated rewrites to a mounted Google Drive is far slower than the byte count suggests,
+because the cost is per operation. So on a small-batch run, set `--log-every` so you land near
+100-400 rows: `--log-every 10` at `--worlds 4` gives 305 rows, ~450 KB and ~90 MB of I/O, which is
+still denser than any curve needs.
+
+Durability is not weakened by this. Set `--log-every` equal to `--ckpt-every` and a crash loses the
+same number of updates of rows as it loses of training.
+
+The fix if many-row runs are ever wanted: append each row to a `history.jsonl` (O(1) per row) and
+rewrite `history.json` only at checkpoints. Not done.
 
 ---
 
