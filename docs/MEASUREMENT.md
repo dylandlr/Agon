@@ -424,6 +424,13 @@ Can't reduce memory use below 9.25GiB by rematerialization; only reduced to 11.1
   down from 12.02GiB originally
 ```
 
+**Trap: the Python traceback blames the wrong line.** In that log it ends at
+`m = jax.tree_util.tree_map(np.asarray, m)` — the metric copy in `train_phase2.py`, which looks
+like the logging is at fault. It is not. JAX executes asynchronously, so the host-side traceback
+lands at the first place a lazy array is *read*, not at the op that failed to allocate. The
+allocation that failed is named in the error itself: `executable_name='jit_update'`, the training
+update. Read the `executable_name`, not the traceback, when attributing an OOM.
+
 **Cause: no `--agent-chunk`, on a GPU too small for the whole 64-agent update at once.** At
 society30 the rollout observation buffer alone is `steps x agents x worlds x obs_dim x 4 B` =
 `128 x 64 x 4 x 8668 x 4` = 1.06 GiB, and backprop through 128 GRU steps multiplies that. With
@@ -588,9 +595,12 @@ cell 16 again. Cell 12 also derives `LOG_EVERY` from the update count — 3,051 
 against 95 at 128, so a fixed `--log-every 1` is right at one world count and gigabytes of
 quadratic rewriting at the other (§1). Cell 4 refuses an old zip that has no `--gae-lambda`.
 
-Making `experiment.py`'s guard refuse to mix λ in one root would also catch it when a run is
-launched by hand rather than from the notebook. That is a reasonable small addition and is
-deliberately not bundled with the fix.
+`experiment.py` also refuses it now, which covers the paths the notebook does not: `hprc/*.slurm`
+and anything launched by hand pass `--root` directly. `stale()` compares a run's `gae_lambda`
+against the one being asked for, on the same condition as the code-version check — only where
+weights exist and would really be reused. A run made before the flag existed has no such key and
+counts as 0.95, which is what it actually used. A code mismatch still reports as a code mismatch
+and not also as a λ mismatch.
 
 ### B. Lengthen the rollout window (`--steps`)
 
