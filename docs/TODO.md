@@ -1572,3 +1572,41 @@ deaths between hot and cold biomes. realins stays in the code as the experiment 
   exists but is under this panel's resolution, and per-world diffs are divergence-dominated
   (wetland s21 -56 for roofs, badlands s3 +22 against). Not worth tuning the 0.4 coefficient
   until something needs it; the metric is now standing panel equipment.
+
+## r45 — insulation-as-damping: NOT shipped (both variants); the additive heater is load-bearing
+Code in 6a9382c (v1) and 994756e (v2), behind AGON_P.insdamp. Flag-off verified byte-exact vs
+r42 arm B (the flag-off eff expression is kept verbatim because float multiplication is not
+associative). Dead-code finding en route: the r35 wallShield has been identically zero since
+r41 (it requires outd && FLOORS, but outd = !FLOORS) — the r43 note crediting the shipped build
+with a wind shield was wrong; wind protection on floors comes from outd=false zeroing chill.
+
+### v1 (pure model: no floor warmth, material ins as damping by wall coverage)
+- **Significant harm: extinctions 10 -> 16, discordants 0 saved / 6 killed, exact p=0.031** —
+  the first significant extinction result of the arc. spoiled +5.9 (t=2.21; fewer roofs ->
+  less dry storage). All kills in the cold bootstrap gap: with no floor warmth until walls
+  stand, cold colonists freeze-loop instead of building (temperate s21: built 79 -> 0, techs
+  10 -> 3, probe confirmed the chain).
+- The upside was real: wetland s21 4 -> 16 alive (panel record), temperate s3 6 -> 12 — walls
+  damping heat works where the bootstrap isn't lethal. v2's run showed the wetland 16 was
+  divergence luck (it evaporated under a +3 perturbation).
+
+### v2 (+3 flat floor warmth kept additive; material term still damping)
+- Harm softened, not fixed: extinctions 10 -> 14, 0 saved / 4 killed (p=0.125), built -8.8,
+  spoiled +4.0 (t=1.74), never-placed 3 -> 5. The kills moved (highlands s3 8 -> 0, badlands
+  s3, volcanic s21, savanna s21); cold worlds that v1 killed partly recovered (alpine s3
+  4 -> 8, highlands s21 6 -> 9, tundra s3 survives at 4). Low pairing rho (0.5-0.8): the
+  restructure injects large variance either way, and the net is negative in both variants.
+
+### Verdict and what it teaches
+The additive rcov*ins heater is physically wrong (r44) AND load-bearing (r45): colonies live
+off its full payout from the moment floors exist, and the behavior layer has no compensating
+drive — a cold colonist seeks warmth, it does not work to create warmth. Honest insulation
+physics is blocked on behavior, not on thermals: the prerequisite is a "cold motivates
+building" drive (build act outranking shelter-seeking when walls are queued and materials are
+in store), measured on its own first. Until then the shipped additive model stays; realins
+(r44) and insdamp (r45) remain in the code, off, as the experiment record.
+
+### Candidates for next round
+1. "Cold motivates building" behavior drive (prerequisite for any honest insulation model;
+   plausibly helps the shipped model too — build completion is the panel's known bottleneck).
+2. Leave thermals; attack the 5 food/water-blocked worlds (no construction change reaches them).
