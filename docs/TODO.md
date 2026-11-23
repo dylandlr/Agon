@@ -1735,3 +1735,33 @@ is bare", so no behavioral trigger downstream of knowledge can fire.
 This is also ecologically rich (rumor dynamics, collective memory) and likely matters well
 beyond migration. Scout v10 stays in the reflex behind AGON_P.scout as the experiment record —
 inert off, nearly unreachable on — shipped nowhere.
+
+## r51 — fresh (belief hygiene): mechanism right, NOT shipped; false hope is load-bearing
+AGON_P.fresh (f2ac3bd): timestamped sightings, fresher-beats-staler in tellKnow and the camp-pool
+sync, busts set false instead of deleting. Flag-off byte-exact 4/4.
+
+### What it proved (the M1 story is now complete)
+- The ghost treadmill dies: jungle s3 starvation 4 -> 1. The r50 diagnosis was right — stale
+  shared belief was what kept depletion worlds starving beside full far rings.
+- fresh+scout == fresh alone (identical smoke outcomes): honest knowledge makes the r49/r50
+  behavioral patch redundant. The right fix at the right layer dissolves the workaround.
+- The jungles STILL die, now of heat (s3: 7 -> 16 heat deaths) — M1a's compound diagnosis
+  confirmed: with the informational constraint removed, thermal binds.
+
+### Why it is not shipped: panel extinctions 7 -> 10 (1 saved / 4 killed, p=0.375)
+alive -0.67 (t=-1.13), built -8.6, techs -1.3 — ns individually, one-directional together. Killed
+forest s21, desert s3 (the r48 trophy), tundra s21, volcanic s21; saved badlands s21. Mechanism:
+honest far-knowledge re-routes the colony's time budget into long-range foraging; construction
+and hearth-tending collapse (tundra s3 built 34 -> 1 while alive ROSE 7 -> 9). **The false
+beliefs were load-bearing for sedentism**: the treadmill's short futile trips kept colonists
+near camp, where every shipped survival mechanism (walls, roofs, hearth, table, workwarm) lives.
+Same family as the additive heater (r44/r45): a wrong model propping up the system that grew
+around it. Flag stays as the experiment record.
+
+### What this means for the roadmap
+Sedentism in Agon is currently maintained by an epistemic artifact. Honest beliefs naturally
+produce ranging/nomadism — which the fixed camp punishes. The real M1 (camp relocation /
+satellite camps) is the structure that honest knowledge NEEDS: fix the epistemics and the camp
+together or not at all. That pairs fresh with the heavy re-anchoring work scoped under "M1
+scoping note" above — a deliberate, larger round, not a quick flag. Heat remains the other open
+front (exertion/canopy for jungles; desert s21 + volcanic s3 still die of heat with shade on).
