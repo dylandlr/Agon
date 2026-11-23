@@ -246,13 +246,24 @@ That hydration figure survived three challenges, each of which could have overtu
 | unpaired splits — every label got a different split | real bug; fixing it moved hydration 0.193 → **0.024**. All figures here are paired, 5 shared splits. |
 | the head is action-conditioned (`decode(dyn(z, a))`) and the probe regressed from `h_t` alone | adding the realized action counts over the window lifts hydration only 0.024 → **0.074**, and *lowers* the 8-feature mean (0.180 → 0.156) because 84 features cost more variance than they buy |
 | the label may simply not vary, making R² noise | it varies: within-life sd **0.103**, *larger* than `body_temp`'s 0.088 — comparable variance, 20× worse predictability |
+| the random-init trunk simply cannot represent it, where a trained encoder could | `scripts/probe_trained_trunk.py`: training the real network on the label reaches train R² **0.816** and held-out R² **0.059** — it memorizes. `body_temp`, the positive control, reaches held-out **0.873**. |
 
-So the explanation is not variance and not missing actions. Hydration change depends on a
-conjunction — choosing `drink` *while standing on water* — that the random-init trunk does not
-represent, where `body_temp` change is driven by ambient conditions the observation window carries
-directly. That is a claim about the representation, not the label, and it is exactly the kind of
-thing a *trained* encoder might acquire. Hence the caveat below has a specific reason: re-measure
-hydration with a trained trunk before treating it as settled.
+So it is not variance, not missing actions, and **not a representation limit either** — a trained
+encoder fits the training lifetimes and generalizes nothing. The information is not in the
+observation at tick *t*, because hydration change over the next 24 ticks depends on whether the
+agent *will* choose `drink` while on water during them, and under a random policy that is a future
+exogenous event no observation can contain. `body_temp` generalizes (0.873) because it is driven by
+ambient conditions already visible at *t*.
+
+This changes what would settle it. An earlier version of this section said to re-measure with a
+trained *trunk*; that has now been done and it does not help. What is needed is a trained
+**policy**, where drinking becomes a function of state and the label stops being exogenous. That is
+a GPU run, not another local probe.
+
+One caveat on the figure: `probe_trained_trunk.py` prints the *best* held-out R² over epochs, which
+is a max over 8 noisy values and so optimistic. The final epoch is 0.059 and the mean is about
+0.04. The conclusion does not turn on which is quoted, but the max should not be read as the
+estimate.
 
 Limits: a random policy, so death timing is largely exogenous and lifetime predictability is
 understated relative to a trained agent; a frozen random trunk, so these are lower bounds; 48
@@ -760,12 +771,17 @@ labels generalize across held-out lifetimes (§0), and the answer reshapes the c
 3. **Pick the feature on the measurement, not on intuition.** `body_temp` is the one own-state
    feature where the trunk clearly beats the current needs (within-life 0.528 against −0.082).
    `energy` and `sleepiness` are matched or beaten by the current needs alone, so a head on them
-   adds no pressure. **`hydration` scores 0.024** — the cause of 42% of deaths is not learnable
-   here. It held up against unpaired splits, against action-conditioning, and against the
-   label-has-no-variance objection (§0), and the surviving explanation is that hydration change
-   needs a conjunction the random-init trunk does not carry — `drink` *while on water*. Re-measure
-   it with a trained trunk before treating it as settled; it is the one number here that could
-   change C's value materially.
+   adds no pressure.
+
+   **`hydration` is out of C's spec.** It scores 0.024 from the random trunk and survived four
+   challenges (§0): unpaired splits, action-conditioning, label-has-no-variance, and — the one that
+   would have put it back in — a trained encoder, which reaches train R² 0.816 and held-out 0.059
+   while the `body_temp` control reaches 0.873. Under a random policy the label is partly
+   exogenous: hydration change over 24 ticks depends on whether the agent *will* choose `drink`
+   while on water, which no observation at *t* contains. So a hydration head would be trained on
+   noise. It can only be reconsidered after a run with a trained policy, where drinking becomes
+   state-determined — and that is the single measurement most likely to change C's value, because
+   thirst is 42% of deaths.
 4. **The label worth adding is progression toward death** (within-life R² 0.479, against −1.741 from
    the current needs). It is the strongest signal measured, the existing head does not predict it,
    and it is the thing `V` actually needs. That — not a longer horizon on the needs head — is what
