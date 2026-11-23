@@ -138,6 +138,34 @@ Three independent measurements fit one mechanism: a near-constant critic, a habi
 and specifically degraded lookahead. The October proposal already noted the compulsive drinking and
 attributed it to episode noise. It is not noise.
 
+### The credit path is 14× shorter than the window it already runs in
+
+Measured on `gae` itself, not derived from it — `tests/test_credit_reach.py` puts a death on the
+last tick of the window, holds the value at zero, and reads the advantage at the first tick. A run
+has two truncations of the credit path, and only the shorter one matters:
+
+| truncation | ticks |
+|---|---|
+| rollout window: `--steps` (128) plus the carried memory tail (`memory_span` = one game day, 48) | **176** |
+| credit half-life at `gae_lambda` 0.95: `(0.997 × 0.95)^k` | **12.8** |
+
+So `gae_lambda` throws away 93% of a window the run already computes and pays for. What the first
+tick of the window sees of a −1.0 death on its last tick:
+
+| `gae_lambda` | γλ | half-life | reach | sees of a −1.0 death |
+|---|---|---|---|---|
+| **0.95 (every run so far)** | 0.94715 | 12.8 | 12.8, λ-bound | **−0.00007** |
+| 0.99 | 0.98703 | 53.1 | 53.1, λ-bound | −0.10181 |
+| 0.995 | 0.99201 | 86.5 | 86.5, λ-bound | −0.24586 |
+| 1.0 | 0.99700 | 230.7 | 176, window-bound | −0.59109 |
+
+Thirst kills roughly 230 ticks after the last drink (§0, the return identity). At 0.95 a death
+has to cross **18 windows** of chained bootstrapping to reach the drink that would have prevented
+it, and every one of those hops is a regression onto a `V` that is itself near-constant. At 1.0 it
+crosses **1.3**. `gae_lambda` is given per 30-minute tick and raised to `tick_scale`; every run so
+far is at the 30-minute calibration, so `tick_scale` is 1.0 and the effective λ is the configured
+one. `--gae-lambda` now exposes it, defaulting to 0.95 so nothing changed silently.
+
 ### Still open
 
 **Root cause: credit assignment, confirmed with a mechanism** (above), not merely by elimination.
@@ -145,11 +173,9 @@ What remains is quantitative, and `value.explained_variance` on a live run suppl
 zero the critic's explained variance actually is during training, rather than inferred from a
 near-constant value probe after the fact. That number also becomes the metric any fix is judged on.
 
-The fix is not specified yet and must not be guessed. The candidates all target the same thing --
-getting state-dependent signal into `V` -- and differ in how: auxiliary prediction heads that
-supply the signal directly, a longer effective credit path, or a critic input path that is not
-shared with 532 language dimensions. Capacity is NOT among them: the architecture fits remaining
-lifetime to train R^2 0.995.
+The fix is specified in **§5d**, with the four candidates ranked and the measurement each is judged
+on. It is not yet chosen or applied. Capacity is NOT among the candidates: the architecture fits
+remaining lifetime to train R² 0.995.
 
 ---
 
@@ -288,10 +314,11 @@ carry any consequence at all beyond GAE's reach.
 ### GAE's reach
 
 Credit decays as `(γλ)^k = (0.997 × 0.95)^k = 0.9472^k`: half-life **12.8 ticks**, 99% of the mass
-within ~85 ticks (1.8 days). `--steps` (default 128) is not the binding truncation; `gae_lambda`
-is. Any action whose consequence arrives later than ~2 days reaches the policy **only** through
-`V`. Hence `value.explained_variance`: if it sits near 0, delayed survival behaviour cannot be
-learned no matter what the reward says.
+within ~85 ticks (1.8 days). The rollout window is 176 ticks — `--steps` (128) plus the carried
+memory tail — so `--steps` is **not** the binding truncation; `gae_lambda` is, by 14×. Any action
+whose consequence arrives later than ~2 days reaches the policy **only** through `V`. Hence
+`value.explained_variance`: if it sits near 0, delayed survival behaviour cannot be learned no
+matter what the reward says. §0 measures the reach on `gae` itself and §5d is the fix spec.
 
 ---
 
@@ -509,6 +536,78 @@ window's +4,840 numbers cost only **+5,760** parameters (`3·3·24·16 → 3·3�
 +730 numbers cost **+46,720** (`194·64 → 924·64`) by landing in a dense layer. 11% of the network,
 not 180%. The live question is that 532 of `feat_dense`'s 924 inputs are heard/read symbols sharing a
 64-unit bottleneck with the 8 scalars that determine reward.
+
+## 5d. The targeted fix: four candidates, one measurement
+
+Every candidate targets the same confirmed defect — `V` is near-constant, so `A(s,a) ≈ r + const`
+and the policy can only learn a state-independent habit. They differ in how they get
+state-dependent signal into `V`. None is applied yet.
+
+All four are judged on the same number: **`value.explained_variance`** in `history.json`, now
+logged every update. A fix that does not move it off ~0 has not worked, whatever else it changes.
+The behavioural confirmations are the second gate — a policy that drinks 2.9× more when full than
+when thirsty, and flees predators less than random, must reverse — because explained variance can
+rise on a critic that predicts lifetime without the policy using it.
+
+### A. Raise `gae_lambda` — recommended first, alone
+
+One number. Credit reach goes from 12.8 ticks to 176 (§0), so a thirst death 230 ticks after the
+last drink crosses 1.3 windows instead of 18.
+
+The standard objection to λ→1 is variance, and it does not apply with its usual force here. The
+return identity is **verified exact**: `G = c_a/(1−γ)·(1−γ^(T−1)) − c_d·γ^(T−1) − Φ₀`. The return is
+an affine function of lifetime, so the variance of the Monte-Carlo return is the variance of
+lifetime — which is precisely the quantity `V` exists to predict, and precisely what the
+architecture already fits to train R² 0.995. In a normal task MC variance is reward and transition
+noise; here it is the signal.
+
+- **Cost**: zero. The flag exists; no new parameters, no new compute, no new loss term.
+- **Blast radius**: learning dynamics of every run. Nothing structural. Fully reversible.
+- **Residual risk**: at λ=1 the *policy* advantage also becomes Monte-Carlo, which does raise
+  policy-gradient variance for real. If that bites, the next step is separate λ for critic and
+  actor — but that is a second change and must not be bundled with this one.
+- **Suggested value**: 1.0, because it is the only value where the 176-tick window rather than λ is
+  the binding truncation, and 0.995 still discards half of it. If 1.0 destabilizes the policy, 0.99
+  is the fallback and still a 4× improvement.
+
+### B. Lengthen the rollout window (`--steps`)
+
+Raises the ceiling that A would then bind against: 176 → 304 at `--steps 256`.
+
+Only worth doing **after** A, and only if A's measurement shows the window has become the binding
+constraint. Memory scales linearly in `--steps`, and the Colab profile already OOMs at 128 with
+`--agent-chunk 8`, so this is the expensive candidate on current hardware.
+
+### C. Auxiliary prediction heads
+
+Predict needs at longer horizons, or remaining lifetime, as a supervised head. Labels are free from
+the rollout. This is the proposal's own §5 "consequence models", and in the literature it is UNREAL
+/ general value functions (Sutton & Barto ch17, auxiliary tasks).
+
+- **Cost**: a head, a loss term, a coefficient to tune. Changes `policy.py` and `ppo_multi.py`.
+- **Why not first**: it shapes the *representation*; it does not change the critic's *target*. With
+  the target still reaching 12.8 ticks back, a better representation has nothing to regress onto.
+  C without A is likely insufficient. A without C may be sufficient. If A moves explained variance
+  but behaviour does not follow, C is the next change.
+
+### D. A critic input path not shared with the 532 language dimensions
+
+`feat_dense` puts 532 heard/read symbols and the 8 scalars that determine reward through the same
+64-unit bottleneck (§6). The rationale would be gradient interference, not capacity.
+
+**Last, and not yet justified.** Capacity was measured fine (train R² 0.995; encoder effective rank
+34/128, condition number 1.3e3). Interference is unmeasured, so this candidate rests on a
+hypothesis nothing in §0 supports. It needs its own measurement before it needs an implementation.
+
+### Why this order
+
+A is one number, costs nothing, targets the measured defect at its mechanism, and has a
+justification specific to this environment's verified return identity. B, C and D all cost real
+code or real memory and all become easier to judge once A has moved the baseline. Changing more
+than one at a time forfeits the ability to attribute the result — which is the whole reason the
+diagnosis took this long.
+
+---
 
 ## 6. Spaces, for reference
 

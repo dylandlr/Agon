@@ -50,6 +50,12 @@ def main():
     ap.add_argument("--scarcity", type=float, default=1.0, help="plant abundance: scales starting stock and regrowth (1 = normal)")
     ap.add_argument("--encoder", choices=["conv", "mlp"], default="conv")
     ap.add_argument("--gamma", type=float, default=0.997)
+    ap.add_argument("--gae-lambda", type=float, default=0.95,
+                    help="GAE lambda, given per 30-minute tick and converted by tick_scale like gamma. Credit "
+                         "decays as (gamma*lambda)^k, so this sets how far back a consequence reaches: 0.95 is a "
+                         "12.8-tick half-life, 0.99 is 53, 1.0 is 230.7 and lets the rollout window (--steps plus "
+                         "the carried memory tail) bind instead. Raise it when a cause and its effect are further "
+                         "apart than the half-life -- thirst kills ~230 ticks after the last drink")
     ap.add_argument("--trait-gamma", action="store_true")
     ap.add_argument("--no-agent-lr", action="store_true")
     ap.add_argument("--seed", type=int, default=0)
@@ -209,7 +215,7 @@ def main():
     cfg = MAConfig(num_worlds=args.worlds, num_steps=args.steps, total_ticks=args.ticks, lr=args.lr, agent_chunk=args.agent_chunk,
                    msg_net=args.msg_net, msg_frozen=args.msg_frozen,
                    consolidation_ticks=args.consolidation_ticks, retention_coef=args.retention_coef,
-                   encoder=args.encoder, gamma=args.gamma, trait_gamma=args.trait_gamma,
+                   encoder=args.encoder, gamma=args.gamma, trait_gamma=args.trait_gamma, gae_lambda=args.gae_lambda,
                    per_agent_lr=not args.no_agent_lr, seed=args.seed,
                    num_minibatches=min(4, args.worlds), imitation_coef=args.imitation,
                    imitation_bias=args.imitation_bias, imitate_positive_only=not args.imitate_all,
