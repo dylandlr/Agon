@@ -1818,3 +1818,25 @@ forest s21, which fresh alone killed, is no longer killed with mig present. With
 of cross-panel comparison: mig looks mildly protective, fresh remains the liability, and the
 r52 pairing hypothesis dissolved when the trigger became distress-driven (v2 needs no belief
 hygiene). mig:1-alone panel running — that is the ship/park arm.
+
+### Panel, arm B = mig:1 alone — null, harmless; SHIPPED on product grounds
+Fired in 4/24 worlds (hash-identical elsewhere): forest s21 4 -> 12, temperate s21 8 -> 6,
+wetland s21 10 -> 8, jungle s3 0 -> 0. Extinctions 7 = 7, zero discordants. Means all ns and
+mildly positive (alive +0.17 t=0.46, walls +4.8 t=1.72, built +7.1 t=1.26; alive MDE 1.05).
+Without fresh, desert s21 never fires (identical trajectory) — its save needed the combined
+arm, so it stays unclaimed. Ship rationale, stated plainly: this is NOT a measured win. The
+panel served as the kill gate (r44/r45 precedent) and found no harm; migration is the first
+item on Dyl's social wishlist, the keystone M2/M3 (status-led relocation, fission) build on,
+and the mechanism is verified end-to-end (distress-only firing, reachable water-scored sites,
+ruins persist, cooldown holds). Default-on as of this round; AGON_P.nomig opts out.
+Inertness 8/8: nomig == pre-ship baseline hash, new default == ab_mig arm B hash, on
+jungle 3 / forest 21 / temperate 21 / desert 21. New reference hashes: ab_mig.json arm B.
+
+### r52 carried items
+- fresh stays killed; desert s21's combined-arm save is evidence that belief hygiene becomes
+  affordable once the camp can follow honest knowledge — re-test fresh AFTER the heat round.
+- Heat is now the confirmed binding constraint in every blocked world (M1a + the r52 probes).
+  The next survival round should attack exertion/canopy/night-walking, not knowledge or camps.
+- minimap ox() still reads the founding anchor; viewport rectangle drifts after a relocation.
+- Trigger edge: a death at exactly dtick = tick-500 leaves the window between probe and fire
+  (seen on jungle s21); harmless, documented here so a future probe mismatch isn't chased.

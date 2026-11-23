@@ -4789,8 +4789,10 @@ class Component extends DCLogic {
     // worlds (temperate's worst window is 1). So: on distress, move toward the centroid of food the
     // colony knows beyond its home radius — migSite then scores water adjacency around that aim
     // point. Cooldown 2000, shelter established, and >= 2 far entries (nothing known = nowhere to
-    // go). Deterministic, no RNG; flag off, nothing here runs or writes.
-    if ((window.AGON_P || {}).mig && tick > 0 && tick % 500 === 0 && (s.store || {}).shelterT != null && tick - (this._migT || -1e9) > 2000 && (this._K || {}).camp) {
+    // go). Deterministic, no RNG. Shipped default-on in r52 (panel: fired 4/24 worlds, no harm,
+    // extinctions 7=7; shipped for the wishlist/realism, not a measured win). AGON_P.nomig opts
+    // out: with it set, nothing here runs or writes.
+    if (!(window.AGON_P || {}).nomig && tick > 0 && tick % 500 === 0 && (s.store || {}).shelterT != null && tick - (this._migT || -1e9) > 2000 && (this._K || {}).camp) {
       let died = 0; for (const q of s.agents) if (!q.alive && !q.fac && q.dtick > tick - 500 && (q.cause === 'starvation' || q.cause === 'thirst' || q.cause === 'heat')) died++;
       if (died >= 2) {
         let fx = 0, fy = 0, fn = 0;
