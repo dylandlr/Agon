@@ -215,6 +215,39 @@ which is another reason to read them first.
 
 ## 5. Diagnosis routes
 
+### First: is there a `history.json` at all?
+
+A design folder holding only a `<design>.log` of one or two KB, with no `history.json`, means the
+run **died before its first logged update**. Several designs with logs of *identical* size, created
+a few minutes apart, means every one of them died the same way — the harness moved to the next
+design each time. Read the log; it is a traceback, not a training log.
+
+The failure seen on Colab, 2026-11-22, on all five designs of `intel_d23dd987b2ec_society30_w4`:
+
+```
+jax.errors.JaxRuntimeError: RESOURCE_EXHAUSTED: Out of memory while trying to allocate 9.21GiB
+  with allocator GPU_0_bfc on device 0. [executable_name='jit_update']
+Can't reduce memory use below 9.25GiB by rematerialization; only reduced to 11.12GiB,
+  down from 12.02GiB originally
+```
+
+**Cause: no `--agent-chunk`, on a GPU too small for the whole 64-agent update at once.** At
+society30 the rollout observation buffer alone is `steps x agents x worlds x obs_dim x 4 B` =
+`128 x 64 x 4 x 8668 x 4` = 1.06 GiB, and backprop through 128 GRU steps multiplies that. With
+`agent_chunk = 0` the loss is computed over all 64 agents simultaneously and the peak reaches
+~12 GiB, which does not fit a T4 (15 GB) or an L4 (22 GB, shared).
+
+**Fix: `--agent-chunk 8`** (4 or 2 if it still OOMs). It computes the loss that many agents at a
+time: **identical gradients**, about 30% slower, a large drop in peak memory. The notebook passes
+it as `CHUNK`. Only set it to 0 on an A100/H100 — `nvidia-smi` in notebook cell 2 says which.
+
+Note the shape of this failure: it costs ~5 minutes of compile per design before dying, so five
+designs burn 20+ minutes of GPU and produce nothing. Run **one** design first and confirm
+`history.json` has rows before queueing the rest.
+
+Do not reach for this explanation when the log is large and rows exist — then the run trained, and
+the table below applies.
+
 | Symptom in `history.json` | Reading | Next probe |
 |---|---|---|
 | `mean_age_at_death` plateaus at 1k–2k ticks | objective saturation (§3): nothing left to pay for | raise `c_d` relative to `c_a/(1−γ)`, or raise `γ` (`--gamma`, or `--trait-gamma` to let the `patience` gene ∈ [0.95, 0.999] carry it) |
