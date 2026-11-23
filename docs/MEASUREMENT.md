@@ -3,8 +3,111 @@
 The single source of truth for run artifacts and run diagnosis. If something here disagrees with
 another doc, this file is right and the other one is stale.
 
-Nothing in this file is a claim about what the agents *do*. It is a description of what is
-recorded and what each number would mean. Conclusions require reading an actual run.
+Sections 1 to 7 describe what is *recorded* and what each number would mean. Section 0 is the
+exception: it holds findings that have actually been measured, with the measurement that produced
+each one. Nothing enters section 0 on reasoning alone.
+
+---
+
+## 0. Confirmed findings
+
+Every line here was measured. Anything derived by reading code and not yet checked against a run
+belongs in the open-questions list at the end, not here.
+
+### The return identity holds exactly
+
+`G = c_a/(1−γ)·(1−γ^(T−1)) − c_d·γ^(T−1) − Φ₀`
+
+Verified on five seeds, one agent (so `social` and `genetic` are both zero — `genetic` is
+`(relatedness * ~eye) @ signal`, which excludes self), resting until death. Measured versus
+predicted agreed to **1e-5**, max |diff| 0.00001:
+
+| seed | T | Φ₀ | measured | predicted |
+|---|---|---|---|---|
+| 0 | 269 | 2.296 | −0.8993 | −0.8993 |
+| 1 | 200 | 2.119 | −1.1686 | −1.1685 |
+| 2 | 261 | 2.032 | −0.6832 | −0.6832 |
+| 3 | 221 | 2.303 | −1.2074 | −1.2074 |
+| 4 | 210 | 2.559 | −1.5382 | −1.5382 |
+
+So the potential-based shaping telescopes to exactly `−Φ₀` and contributes nothing policy-dependent
+to the return. Observed `Φ₀` reaches **2.559**, so `pain_aversion` exceeds 1 — an earlier claim here
+that `Φ ≤ 2.2` was wrong.
+
+Lifetimes for a do-nothing policy land at **T = 200–269** (single agent) and episodes under a random
+policy end at t = 221–547 with every agent dead. Both bracket the independent figure that an agent
+dies of thirst roughly 230 ticks after its last drink.
+
+### Saturation is not the current failure
+
+With the identity confirmed, the marginal value of one more tick is `dG/dT = 0.013·γ^(T−1)`:
+
+| lifetime | `dG/dT` |
+|---|---|
+| 230 ticks (where agents die today) | 6.5e-3 |
+| 1,920 (one year) | 4.0e-5 |
+| 4,800 (2.5 years) | 7.3e-9 |
+
+Agents dying in the low hundreds of ticks sit at the **steepest** part of the objective. Saturation
+cannot explain a failure that happens where the gradient is strongest. It remains a real problem for
+the emergence track once lifetimes pass ~1,000 ticks, and §3 has the derivation.
+
+### The critic is blind to lethal danger
+
+From `intel_f5550cf9ebbd_society30_w4/validate/caveman_dangerous_predators/diagnose/diagnose.json`
+(Nov 7, code version `f5550cf9ebbd`). The probe sweeps `body_temp` over
+`[0.0, −0.3, −0.5, −0.7, −0.9]`, where `−0.3` is `cold_onset` and `−0.7` is `cold_threshold`, the
+point damage begins. Outside shelter at night, n=153:
+
+| body_temp | V | P(seek_shelter) |
+|---|---|---|
+| 0.0 comfortable | −1.4657 | 0.02942 |
+| −0.7 damage | −1.4725 | 0.02953 |
+| −0.9 lethal | −1.4746 | 0.02955 |
+
+V falls **0.0089** from comfortable to lethal — **0.2% of the 4.333 return range** — while
+`P(seek_shelter)` rises 0.00013 and stays near 3%. `P(rest/sleep)` and `P(move)` move the wrong way.
+By `diagnose.py`'s own rubric both failure modes fire: the value does not fall with cold, so credit
+assignment never reached it; and the shelter probability does not rise, so there is no remedy either.
+
+V sits near −1.4 in every context, which is about the mean return of a short-lived agent — it
+predicts the average and almost nothing conditional. The one cold death on record knew shelter was
+2 cells away (`d_known: 2`) and stayed out.
+
+### Trained performance is reflex-level
+
+Same file, `survival` section, in agent-years: **policy 9.81**, `reflex_cold` **9.89**,
+`reflex_dusk` 8.78, random 3.96. A hand-coded reflex beats the trained policy. Deaths under the
+policy: **thirst 10 of 24 (42%)**, predation 4, starvation 3, disease 3. Thirst kills ~230 ticks
+after the last drink; GAE carries 99% of its credit within 85 ticks, so the dominant death cause is
+the one just beyond reach.
+
+Fire ladder: `near_fire 0, fed_fire 0, torch_lit 0, ignited 0` across 13,459 ticks while carrying
+2,226 wood, and 226 wood through 1,332 cold ticks. Not one rung, ever.
+
+### The architecture can represent survival value
+
+Supervised probe: train the real network to predict an agent's remaining lifetime from one
+observation. Train MSE falls 0.3834 → 0.0045 on unit-variance targets, i.e. **train R² ≈ 0.995**.
+So `feat_dense(924 → 64)` does **not** structurally prevent body state from reaching the critic, and
+the capacity-bottleneck hypothesis is dead. The encoder is also not degenerate: 0 of 128 hidden dims
+constant, condition number 1.3e3, participation-ratio effective rank 34/128.
+
+Held-out R² under a grouped split oscillated near 0, but that is overfitting at **48 agent-lifetimes
+(38 in train)**, not a capacity limit — the independent unit for this task is the lifetime, not the
+agent-tick. Real runs see ~6,800 lifetimes per learner at 1e8 steps.
+
+**Two probe designs that produced garbage, recorded so they are not repeated.** A temporal
+train/test split measures the monotone drift of hydration, not decodability (hydration R² −5.7).
+A random split leaks, because consecutive agent-ticks are near-identical observations with
+near-identical labels — it inflated the raw-observation reference from a true **−553** to a fake
+**+0.914**. Split by whole agent-lifetime.
+
+### Still open
+
+Why the critic is blind. Capacity is eliminated, so credit assignment leads — but by elimination,
+not by direct evidence. The instrument that settles it is `value.explained_variance` from a real run
+on the emergence config; offline CPU probing has reached its limit.
 
 ---
 
