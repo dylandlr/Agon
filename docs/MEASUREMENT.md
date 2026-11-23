@@ -579,11 +579,18 @@ A run's λ is **not** part of `--root` and **not** part of `code_version` (which
 `lifesim/*.py`, `train_phase2.py` and `continuous_world.py`, not the arguments). So the baseline and
 the λ run land in the same `<root>/validate/<design>/` folder and the second silently resumes or
 overwrites the first — and `experiment.py`'s existing guard will not catch it, because that guard
-only refuses to mix *code versions* in one root. **Use a separate `--root` per λ.** In the notebook
-that means appending a suffix to `ROOT` in cell 12 for the λ run, not just editing the flag.
+only refuses to mix *code versions* in one root. **Use a separate `--root` per λ.**
 
-Making the guard refuse to mix λ in one root would turn that silent collision into an error. It is
-a reasonable small addition and is deliberately not bundled with the fix.
+The notebook now does this for you. Cell 12 has one knob, `LAM`, and derives the root from it:
+λ=0.95 keeps the baseline's existing path, and anything else appends `_lam1p0`, `_lam0p99` and so
+on. So the paired runs are: cell 12 with `LAM = 0.95`, cell 16; then cell 12 with `LAM = 1.0`,
+cell 16 again. Cell 12 also derives `LOG_EVERY` from the update count — 3,051 updates at 4 worlds
+against 95 at 128, so a fixed `--log-every 1` is right at one world count and gigabytes of
+quadratic rewriting at the other (§1). Cell 4 refuses an old zip that has no `--gae-lambda`.
+
+Making `experiment.py`'s guard refuse to mix λ in one root would also catch it when a run is
+launched by hand rather than from the notebook. That is a reasonable small addition and is
+deliberately not bundled with the fix.
 
 ### B. Lengthen the rollout window (`--steps`)
 
