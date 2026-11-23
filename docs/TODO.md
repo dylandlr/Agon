@@ -1689,3 +1689,27 @@ inertness both ways byte-exact 12/12 (default == r48 arm B, noshade == arm A), d
 Shipped baseline is now: vern + roofs + global build order + workwarm + shade.
 Remaining extinct in arm B (7): desert s21, volcanic s3, alpine s21, badlands s21, savanna s21,
 jungle s3, jungle s21 — the jungles are the proven depletion-and-reach class (M1's target).
+
+## r49/M1 — scout: NEGATIVE result, parked; the mechanic's true home is the reflex layer
+AGON_P.scout went through 8 variants (4fdfb57 + this commit). The honest findings:
+- **v1's panel effect was divergence luck, not mechanism.** 19/24 worlds byte-identical (the
+  narrowest footprint of the session) and jungle s3's rescue (0 -> 2) looked like the M1a story
+  confirmed — but instrumentation showed the trigger's eligible moments number ELEVEN in 6000
+  jungle-s3 ticks. The v1 harms (forest s21 built 120 -> 5, wetland s3 alive 4 -> 1) and the
+  rescue were both butterfly amplification through those rare calls. r42's savanna lesson,
+  re-learned: a save with no mechanism behind it is divergence until instrumented.
+- **Why the trigger starves, layer by layer** (each v-iteration eliminated one):
+  (1) fog memory returns remembered bushes with food:1 forced, so a stripped world still "knows
+  of food" and kbW-empty ~never holds; (2) the agent never stands on a bare remembered bush —
+  the knowledge pass busts ghosts at range 7 and the agent retargets mid-walk, so arrival-based
+  strikes never land; (3) pickWork's tail is structurally starved: hungry agents are captured by
+  the needs reflex (pickWork not called) and fed agents return 'build' earlier, so ANY signal
+  computed at the end of the food-security block is evaluated ~11 times per run.
+- **Design directive for the next attempt**: the starvation response belongs in the needD
+  reflex path, where failed foraging actually happens — "hungry + no reachable known food ->
+  directed outward walk instead of idle ghost-chasing". That is a reflex-layer round of its own.
+- One discipline catch en route: a v2 `else a.scoutT = 0` wrote a key onto every agent with the
+  flag OFF — behavior identical, hash changed; the byte-exact check caught exactly what it
+  exists to catch. The whole block is now unreachable when off (verified MATCH post-strip).
+- The v8 pop-counting trigger stays in the code behind the flag as the experiment record;
+  it is inert off and nearly inert on (11 evaluations), shipped nowhere.

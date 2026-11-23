@@ -5695,8 +5695,41 @@ class Component extends DCLogic {
         // food security: when the colony holds less than ~5 meals a head (8 in autumn, laying in for winter) (shelf plus what everyone carries), gathering and hauling berries to the table come first for everyone, ahead of crafting, taming and wandering
         { const alive = agents.filter((q) => q.alive && !q.fac).length || 1, held = store.food + agents.reduce((n, q) => n + (q.alive && !q.fac ? q.inv.berries : 0), 0);
           if (!a.fac && held / alive < (Math.floor(tick / 500) % 4 === 2 ? ((window.AGON_P || {}).secAut ?? 8) : ((window.AGON_P || {}).secGrow ?? 5)) && kbW(a).some((b) => b.food >= 1)) { if (a.inv.berries >= 3 && store.food < storeCapN) return 'haul'; if (a.inv.berries < 5) return 'gather'; }
-          // M1 (scout): larder near empty and the known world eaten bare — strike out for new ground
-          if (SCOUT && !a.fac && held / alive < 2 && !kbW(a).some((b) => b.food >= 1) && a.sat > 0.3 && a.hyd > 0.3) return 'scout'; }
+          // M1 (scout): larder near empty and the known world eaten bare — strike out for new ground.
+          // v2: the v1 panel showed the whole village fanning out on transient dips (forest s21
+          // built 120 -> 5; wetland s3 alive 4 -> 1), so two gates: the emptiness must be SUSTAINED
+          // (60 consecutive eligible ticks) and at most 2 colonists scout at a time — send scouts,
+          // not the village. Everyone else keeps to normal work.
+          if (SCOUT && !a.fac) {
+            // v2 note: the whole block must be unreachable when the flag is off — even a scoutT = 0
+            // write would add a key to the serialized agent and break byte-exact inertness.
+            // v4: no scout cap. v1's rescue WAS the mass excursion — the hungry village relocating
+            // its foraging footprint, each walker learning and eating on-site; capping it to 2
+            // scouts kept the discovery and lost the colony (jungle s3 rescue vanished under v2/v3).
+            // The transient-dip harm (forest s21, wetland s3) is handled by the accrual gate alone:
+            // brief kbW-empty windows decay away and never reach 25.
+            // The pressure signal must be the one that is PERSISTENT in the depleted worlds and
+            // transient elsewhere, or +1/-1 flutter freezes the counter below any threshold: the
+            // agent's satiety flutters (v4 bug) and the larder flutters around 2/head as foragers'
+            // pocket berries cycle (v5 bug). What stays true in a stripped world is that the agent
+            // KNOWS of no food — accrue on that alone; larder and satiety only gate the departure.
+            // v7: the kbW-empty gate (v1-v6) almost never opens — fog memory returns remembered
+            // bushes with food:1 forced, so a stripped world still "knows of food" and the colony
+            // chases ghosts forever (instrumented: 11 eligible calls in 6000 jungle-s3 ticks; v1's
+            // apparent rescue was divergence luck through those moments, not the mechanism). The
+            // honest signal is the agent's own foraging outcome: walking to a remembered bush and
+            // finding it bare is a confirmed strike (+6); standing on real food resets. Five
+            // strikes without a find (> 30) and a fed colonist strikes out for new ground.
+            // v8: the agent never actually stands on a bare remembered bush — the knowledge pass
+            // busts ghosts at range 7 and the agent retargets mid-walk (v7's strike never fired:
+            // instrumented maxT 0). The observable event is the POP: a bush leaving the agent's
+            // known-food list without a successful gather. Pops accrue; a real gather resets.
+            const scKn = kbW(a).length, scGw = (a.work && a.work.gather) || 0;
+            if (scGw > (a.gN ?? -1)) a.scoutT = 0;
+            else if (a.kbN !== undefined && scKn < a.kbN) a.scoutT = (a.scoutT || 0) + 6;
+            a.gN = scGw; a.kbN = scKn;
+            if ((a.scoutT || 0) > 30 && held / alive < 4 && a.sat > 0.3 && a.hyd > 0.3) return 'scout';
+          } }
         if (w.hunt > 0 && (a.gear.weapon || a.sat < 0.7) && animals.some((q) => !q.dead && !q.own && AK[q.k].role === 'prey' && cheb(a, q) <= 10)) c.push(['hunt', w.hunt]);
         if (!a.fac && farmOK && w.gather > 0 && Math.floor(tick / 500) % 4 !== 3 && plots.some((q) => tillable(q, a))) c.push(['farm', w.gather]);
         if (w.gather > 0 && a.inv.berries < 4 && kbW(a).some((b) => b.food >= 1)) c.push(['gather', w.gather]);
