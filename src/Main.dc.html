@@ -4756,6 +4756,15 @@ class Component extends DCLogic {
     // past comfort, as fire does. The cold bootstrap is untouched: below comfort the cap never
     // binds, so cold-world warmth is bit-identical. Off, everything reduces to the shipped model.
     const SHADE = !(window.AGON_P || {}).noshade;   // default ON since r48 (alive +1.83, t=3.48); AGON_P.noshade is the opt-out baseline
+    // M1 experiment (AGON_P.scout): the jungle extinctions are an exploration failure, not a food
+    // shortage — fog knowledge reaches 7 tiles, wander staggers 1 tile, so a colony eats its known
+    // radius bare and starves beside an unknown full map (M1a probe: near ring 0.0 by t=3000, far
+    // ring 48-75). Under the flag, a fed colonist with an empty larder and NO known food strikes
+    // out from camp on a fixed bearing (spread by id); the knowledge pass learns bushes within 7 as
+    // they go, and the moment anything is known the normal gather/haul logic takes back over. No
+    // camp re-anchoring; satellite rest comes free from the existing cold-tent behavior. Off, no
+    // branch is reachable and no RNG is drawn.
+    const SCOUT = !!(window.AGON_P || {}).scout;
     // r41: shelter is the floor again, in BOTH arms. r40 measured the alternative and it killed
     // colonies: making the roof the gate meant insulation fell to zero and wind chill switched on
     // the moment roofs were enabled, so a colony lost the shelter it already had exactly while it
@@ -5685,7 +5694,9 @@ class Component extends DCLogic {
         if (!a.fac && (a.carry || (carc.length && w.haul > 0 && a.sat > 0.35 && a.hyd > 0.35))) return 'haul';
         // food security: when the colony holds less than ~5 meals a head (8 in autumn, laying in for winter) (shelf plus what everyone carries), gathering and hauling berries to the table come first for everyone, ahead of crafting, taming and wandering
         { const alive = agents.filter((q) => q.alive && !q.fac).length || 1, held = store.food + agents.reduce((n, q) => n + (q.alive && !q.fac ? q.inv.berries : 0), 0);
-          if (!a.fac && held / alive < (Math.floor(tick / 500) % 4 === 2 ? ((window.AGON_P || {}).secAut ?? 8) : ((window.AGON_P || {}).secGrow ?? 5)) && kbW(a).some((b) => b.food >= 1)) { if (a.inv.berries >= 3 && store.food < storeCapN) return 'haul'; if (a.inv.berries < 5) return 'gather'; } }
+          if (!a.fac && held / alive < (Math.floor(tick / 500) % 4 === 2 ? ((window.AGON_P || {}).secAut ?? 8) : ((window.AGON_P || {}).secGrow ?? 5)) && kbW(a).some((b) => b.food >= 1)) { if (a.inv.berries >= 3 && store.food < storeCapN) return 'haul'; if (a.inv.berries < 5) return 'gather'; }
+          // M1 (scout): larder near empty and the known world eaten bare — strike out for new ground
+          if (SCOUT && !a.fac && held / alive < 2 && !kbW(a).some((b) => b.food >= 1) && a.sat > 0.3 && a.hyd > 0.3) return 'scout'; }
         if (w.hunt > 0 && (a.gear.weapon || a.sat < 0.7) && animals.some((q) => !q.dead && !q.own && AK[q.k].role === 'prey' && cheb(a, q) <= 10)) c.push(['hunt', w.hunt]);
         if (!a.fac && farmOK && w.gather > 0 && Math.floor(tick / 500) % 4 !== 3 && plots.some((q) => tillable(q, a))) c.push(['farm', w.gather]);
         if (w.gather > 0 && a.inv.berries < 4 && kbW(a).some((b) => b.food >= 1)) c.push(['gather', w.gather]);
@@ -5924,6 +5935,13 @@ class Component extends DCLogic {
       } else if (G === 'socialize') {
         const f = agents.filter((b) => b !== a && b.alive).sort((x, y) => cheb(a, x) - cheb(a, y))[0];
         if (f && cheb(a, f) > 1) act = stepBy(a, Math.sign(f.x - a.x), Math.sign(f.y - a.y)) ? 'move' : 'idle'; else { act = 'idle'; if (f && s.learn && !a.fac && !f.fac && tick % 4 === 0) teach(a, f); }
+      } else if (G === 'scout' && !a.fac && SCOUT) {
+        // each scout holds a fixed bearing from camp (spread by id so the party fans out radially);
+        // past scoutR they quarter the ground at random instead of marching off the map edge
+        const sn = (parseInt(a.id.slice(1), 10) || 0), sang = 2 * Math.PI * (sn % 8) / 8 + (Math.PI / 8) * ((sn >> 3) % 2), sd = cheb(a, { x: CAMPC[0], y: CAMPC[1] });
+        if (sd > ((window.AGON_P || {}).scoutR ?? 34)) { act = wander(a) ? 'move' : 'idle'; }
+        else { const sx = Math.sign(Math.round(Math.cos(sang) * 2)), sy = Math.sign(Math.round(Math.sin(sang) * 2)); act = (stepBy(a, sx, sy) || stepBy(a, sx, 0) || stepBy(a, 0, sy) || wander(a)) ? 'move' : 'idle'; }
+        if (act === 'move') { a.bub = 'gather'; a.bubT = 2; }
       } else if (G === 'rest') { act = 'idle';
       } else if (G === 'gather' && !bushes.some((b) => b.x === a.x && b.y === a.y && b.food >= 1 && okFood(a, b)) && a.inv.berries < 6 && kbW(a).some((b) => b.food >= 1)) { const res = moveTo(a, (x, y) => kbW(a).some((b) => b.x === x && b.y === y && b.food >= 1)); act = res === 'moved' ? 'move' : 'idle';
       } else if ((!G || G === 'gather') && bushes.some((b) => b.x === a.x && b.y === a.y && b.food >= 1 && okFood(a, b)) && a.inv.berries < 6 && r() < 0.6) {
