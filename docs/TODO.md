@@ -1963,3 +1963,42 @@ whisper, it ships with one flag flip — Dyl's call, stated in the report.
 stScore is the status half of fission ("the second-status agent leads their clique out").
 Status gets a load-bearing job there — relocation targets, clique leadership — instead of a
 cosmetic one. The follow-count instrumentation (this._fol) is the concentration endpoint.
+
+## r55/M2b — friendship (AGON_P.affil): SORTING EMERGES, clustering does not; drift parked
+Commits 73b5650 + 8cdf778 + 5a95346; flag stays off. Dyl's criterion: visible clustering only
+if emergent. It wasn't — but the round produced the project's first emergent social structure.
+
+### What was built (one flag, local rules only)
+Pairwise warmth between colonists: grown by time spent adjacent (awake 1x, asleep 0.25x),
+scaled by personality similarity, decaying toward zero (eq ~ rate x co-presence x 3000). An
+idle colonist seeks whoever THEY are most bonded to (warmth > 0.6, within 16). No status, no
+roles, no structure anywhere in the code.
+
+### What emerged — homophily sorting, the M3 prerequisite
+With the v2 kernel (agreement count: dims where |dpers| < 0.2; multiplier 0.3-1.9), bonded
+pairs are consistently more similar than the population: simBonded 0.44-0.51 vs simAll
+0.30-0.43 in 4/4 worlds. Like gravitates to like through nothing but faster warmth accrual.
+This is the relation-graph-with-assortment that M3's fission requires, demonstrated live.
+
+### What did not emerge — and why the drift is parked
+No spatial clustering (dispersion unchanged: 6.9->7.0, 7.4->7.8, 8.3->8.0, 8.8->7.6), no
+social centers (affection topShare 0.19-0.32), no consistent provider-centering (corr with
+stScore: -0.07, 0.17, 0.42, 0.97-on-7-agents). Meanwhile the smoke shows the r54 time-budget
+diversion again, worse: alive -0/-4/-5/-1, built desert 103->62, jungle 129->46 — pursuing
+distant friends costs real work. Parked on smoke evidence (scout precedent); no panel spent on
+a mechanic that fails the ship criterion either way. Two iterations used, as declared.
+
+### Bugs on the way (both mine, both instructive)
+- The relc prune floor (0.01) sat above one accrual step (0.0023): decay-then-prune guillotined
+  every young bond each tick; warmth was capped at ~0.005 and the first smoke was byte-identical
+  to default. Thresholds must be sized against step sizes.
+- The v1 similarity kernel (mean |dpers| over 8 dims) compressed every pair to ~0.65 by the law
+  of large numbers — homophily had no gradient at all. Averaging kills variance; counting
+  agreements keeps it.
+
+### The design insight for M3
+In a 10-20 colonist camp where everyone meets everyone daily, affiliation alone cannot break
+spatial symmetry — co-presence is too uniform. Clustering plausibly needs a substrate choice
+that locks in preference (beds/dwellings chosen by warmth, so friends sleep together and
+compound) or faction-scale separation (M3 fission across camps). The warmth graph + assortment
+is ready; the expression layer is the open design.
