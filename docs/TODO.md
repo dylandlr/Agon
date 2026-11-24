@@ -2288,3 +2288,29 @@ fission, treaty. Reference hashes: ab_treaty.json arm B.
   textContent — sc-if keeps template text in DOM, lesson noted); zero pageerrors; dark +
   snow chrome shots; hashes vs ab_buildt B: temperate s21 + desert s3 MATCH (render-only).
 - Phase 1 next: vitals bar (legend dies), alert stack with jump-to, roster chips, time block.
+
+## r60 CORRECTION — BUILDT was broken as shipped; fixed; verdict void, re-panel running
+- Dyl's eyes caught it ("make sure construction animations and sprites are added" ->
+  stage screenshots impossible to capture -> churn probe): under BUILDT, ZERO segments ever
+  completed (temperate s21: 106 starts/0 completions; savanna s21: 90/0; walls flat at the
+  scenario's 15 starting walls). The panel's walls -42* was NOT the intended cost model —
+  it was construction entirely broken, and I misread it. Ship verdict retracted.
+- Root cause (instrumented, not guessed): advance() rebuilds `store` each tick from an
+  EXPLICIT field list (line ~4997); store.bprog wasn't in it, so progress reset every tick
+  and the "start" branch re-deducted one material per work-tick. Same failure class as
+  r55's agents-map relc drop. LESSON (now twice): grep the per-tick rebuild lists
+  (agents map AND store literal) for every new persistent field.
+- Fixes: (1) bprog carried through the store rebuild (shallow copy; absent stays absent,
+  so nobuildt serialization is untouched); (2) cancel refund: an orphaned site returns its
+  committed material; (3) permanent gated instrumentation window.__BD (start/cancel events).
+- Post-fix measure (temperate s21, 12k ticks): 110 starts, 108 completions, 1 cancel,
+  walls 15->61; staged sprites verified in-world (bs_st1.png: stone courses + progress
+  strip + builder adjacent).
+- Construction sprites/animations (this round, render-only): staged site art per material
+  (wattle stakes/weave, timber frame/planks, stone pile/courses) as SVG data-URI on the
+  site tile; chips fly while a builder works the site (agbchip); settle ring on completion
+  (agbset); ember progress strip. Builder-side hammer stroke + hand chips from r-anim.
+- ab_buildt.json B (and its stats + the "pillar order" tech timelines, which ARE still
+  valid as measurements of tech emergence — techs don't depend on walls going up — but
+  will be re-recorded anyway) superseded by ab_buildt2.json when the re-panel lands.
+  Reference hashes remain ab_treaty B for arm A until then.

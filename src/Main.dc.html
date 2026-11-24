@@ -9,7 +9,7 @@
 <body>
 <x-dc><helmet>
 <style>
-:root{--ground:#2a1d14;--surface:#4a3626;--surface-raised:#57402c;--border:#241709;--border-strong:#7a5c40;--ink:#ece2cf;--ink-muted:#b5a48c;--accent-blue:#9db8d2;--fill-blue:#3d5a74;--fill-green:#3d5c41;--signal-yellow:#d8a43b;--on-signal:#1c110b;--danger:#d07a5a;--ok:#7fa06a;--font-display:Georgia,'Iowan Old Style',serif}[data-pbar]{font-family:var(--font-display)}
+:root{--ground:#2a1d14;--surface:#4a3626;--surface-raised:#57402c;--border:#241709;--border-strong:#7a5c40;--ink:#ece2cf;--ink-muted:#b5a48c;--accent-blue:#9db8d2;--fill-blue:#3d5a74;--fill-green:#3d5c41;--signal-yellow:#d8a43b;--on-signal:#1c110b;--danger:#d07a5a;--ok:#7fa06a;--font-display:Georgia,'Iowan Old Style',serif}[data-pbar]{font-family:var(--font-display)}@keyframes agbchip{0%{transform:translate(0,-2px);opacity:0.9}100%{transform:translate(var(--bcx,6px),16px);opacity:0}}@keyframes agbset{0%{transform:scale(0.35);opacity:0.75}100%{transform:scale(1.6);opacity:0}}
 body{margin:0;background:#1c110b}
 button{font:inherit;color:inherit;cursor:pointer}
 a{color:#7cacdf}
@@ -143,7 +143,8 @@ body.agon-paused *{animation-play-state:paused !important}
     <div style="position: absolute; left: 0; top: 0; width: var(--ww); height: var(--wh); z-index: 62; pointer-events: none">
       <sc-for list="{{flies}}" as="f" hint-placeholder-count="3"><div style="{{f.wrap}}"><div style="{{f.move}}"><div class="{{f.cls}}" style="{{f.flap}}"></div></div></div></sc-for>
       <sc-for list="{{glows}}" as="g" hint-placeholder-count="3"><div style="{{g.wrap}}"><div style="{{g.dot}}"></div></div></sc-for>
-      <sc-for list="{{bsites}}" as="q" hint-placeholder-count="0"><div style="{{q.style}}"><div style="{{q.fill}}"></div></div></sc-for>
+      <sc-for list="{{bsites}}" as="q" hint-placeholder-count="0"><div style="{{q.style}}"><div style="{{q.fill}}"></div><div style="{{q.c1}}"></div><div style="{{q.c2}}"></div><div style="{{q.c3}}"></div></div></sc-for>
+      <sc-for list="{{bdust}}" as="q" hint-placeholder-count="0"><div style="{{q.style}}"></div></sc-for>
       <sc-for list="{{pawns}}" as="a" hint-placeholder-count="4">
         <div style="{{a.uiWrap}}">
           <div style="{{a.nameStyle}}">{{a.nameLabel}}</div>
@@ -4993,7 +4994,12 @@ class Component extends DCLogic {
     const BUILDTICKS = { wattle: 4, timber: 6, stone: 9 }; // ticks of work per segment, by wall material
     const PLEX = [['timid', 'brave'], ['solitary', 'gregarious'], ['incurious', 'curious'], ['hot-tempered', 'patient'], ['gentle', 'fierce'], ['idle', 'industrious'], ['callous', 'kind'], ['generous', 'greedy']];
     const epithet = (q) => { const p = q.pers || []; const dv = p.map((v, i) => [Math.abs(v - 0.5), i, v]).sort((x, y) => y[0] - x[0]).slice(0, 2).filter((e) => e[0] > 0.15); if (!dv.length) return 'an even-tempered soul'; const w = dv.map((e) => PLEX[e[1]][e[2] > 0.5 ? 1 : 0]); return (/^[aeiou]/.test(w[0]) ? 'an ' : 'a ') + w.join(', ') + ' soul'; };
-    const store = { built: ((s.store || {}).built || []).slice(), shelterT: (s.store || {}).shelterT ?? null, water: (s.store || {}).water || 0, wallMat: (s.store || {}).wallMat || null, norms: (s.store || {}).norms || {}, mats: { ...((s.store || {}).mats || {}) }, food: (s.store || {}).food || 0, items: ((s.store || {}).items || []).slice(), known: ((s.store || {}).known || []).slice(), techs: ((s.store || {}).techs || []).slice(), insight: (s.store || {}).insight || 0, bad: (s.store || {}).bad || 0, spoiled: (s.store || {}).spoiled || 0, lots: ((s.store || {}).lots || []).map((l) => l.slice()), lk: (s.store || {}).lk || 'berry', know: { ...((s.store || {}).know || {}) }, forced: ((s.store || {}).forced || []).slice(), rec: { ...((s.store || {}).rec || {}) }, plots0: (s.store || {}).plots0, cult: (s.store || {}).cult };
+    const store = { built: ((s.store || {}).built || []).slice(), shelterT: (s.store || {}).shelterT ?? null, water: (s.store || {}).water || 0, wallMat: (s.store || {}).wallMat || null, norms: (s.store || {}).norms || {}, mats: { ...((s.store || {}).mats || {}) }, food: (s.store || {}).food || 0, items: ((s.store || {}).items || []).slice(), known: ((s.store || {}).known || []).slice(), techs: ((s.store || {}).techs || []).slice(), insight: (s.store || {}).insight || 0, bad: (s.store || {}).bad || 0, spoiled: (s.store || {}).spoiled || 0, lots: ((s.store || {}).lots || []).map((l) => l.slice()), lk: (s.store || {}).lk || 'berry', know: { ...((s.store || {}).know || {}) }, forced: ((s.store || {}).forced || []).slice(), rec: { ...((s.store || {}).rec || {}) }, plots0: (s.store || {}).plots0, cult: (s.store || {}).cult,
+      // r60 fix: bprog must survive the per-tick store rebuild or construction progress resets
+      // every tick (the r55 relc lesson, relearned on store: explicit field lists drop new state).
+      // One level deep is enough (values are numbers); absent stays absent so the nobuildt arm
+      // serializes identically.
+      bprog: (s.store || {}).bprog ? { ...(s.store || {}).bprog } : undefined };
     // AGON_P.bdbg: which of the four build-gate conditions actually stalls construction. Snapshot at
     // the top of the tick, before the agent loop mutates the queue or the stores. Off by default.
     if ((window.AGON_P || {}).bdbg) {
@@ -6242,11 +6248,11 @@ class Component extends DCLogic {
           // BUILDT: construction takes time. Materials commit when work starts; progress accrues
           // per adjacent builder-tick; the segment exists only when the work is done.
           const bp = store.bprog || (store.bprog = {});
-          for (const k in bp) if (!BUILDQ.includes(k)) delete bp[k]; // camp plan moved on: drop orphans
+          for (const k in bp) if (!BUILDQ.includes(k)) { if (window.__BD) window.__BD.push({ ev: 'cancel', k, pr: +bp[k].toFixed(2), tick: s.tick, qLen: BUILDQ.length, q0: BUILDQ.slice(0, 4), built: BUILTS.has(k) }); store.mats[mk] = (store.mats[mk] || 0) + 1; delete bp[k]; } // camp plan moved on: drop the orphan and return its committed material (refunded in the current wall material — close enough for the rare churn case)
           const near = BUILDQ.map((k) => { const [x, y] = k.split(',').map(Number); return { k, x, y, d: cheb(a, { x, y }), st: bp[k] !== undefined }; })
             .sort((p, q) => (q.st ? 1 : 0) - (p.st ? 1 : 0) || p.d - q.d)[0]; // finish started work first, then nearest
           if (near && near.d <= 1 && (near.st || (store.mats[mk] || 0) > BUILDKEEP)) {
-            if (!near.st) { store.mats[mk] -= 1; bp[near.k] = 0; }
+            if (!near.st) { store.mats[mk] -= 1; bp[near.k] = 0; if (window.__BD) window.__BD.push({ ev: 'start', k: near.k, tick: s.tick, qLen: BUILDQ.length }); }
             bp[near.k] += 1 / (BUILDTICKS[store.wallMat || 'wattle'] || 6);
             if (bp[near.k] >= 1 - 1e-9) {
               delete bp[near.k]; if (!Object.keys(bp).length) delete store.bprog;
@@ -7426,10 +7432,46 @@ class Component extends DCLogic {
       birds, flies: s.xray ? [] : flies, glows: s.xray ? [] : glows, fish, seaAn, seaPk, seaFl, ripples, ambStyle,
       // construction sites: segments with committed materials and work underway (store.bprog).
       // Dashed frame with a fill that rises with progress, in the wall material's tone.
-      bsites: (() => { const bp = (s.store || {}).bprog; if (!bp) return []; const wm = (s.store || {}).wallMat || 'wattle', wc = { wattle: '#9b8a66', timber: '#8a6a46', stone: '#8d8578' }[wm] || '#9b8a66'; const out = [];
-        for (const k in bp) { const [x, y] = k.split(',').map(Number), pr = Math.max(0, Math.min(1, bp[k]));
-          out.push({ style: 'position: absolute; left: ' + (x * TS) + 'px; top: ' + (y * TS) + 'px; width: ' + TS + 'px; height: ' + TS + 'px; box-sizing: border-box; border: 2px dashed rgba(233,220,200,0.6); background: rgba(0,0,0,0.12); z-index: ' + ((y + 1) * TS - 2) + '; pointer-events: none; display: flex; align-items: flex-end',
-            fill: 'width: 100%; height: ' + Math.round(pr * 100) + '%; background: ' + wc + '; opacity: 0.65; border-top: 2px solid rgba(28,17,11,0.5); transition: height 300ms linear' }); }
+      // construction sites: staged sprite per wall material (laid-out materials -> frame ->
+      // near-complete), chips while a builder works the site, ember progress strip. The art is
+      // an inline-SVG data URI on the site div; chips are three animated flecks (agbchip).
+      bsites: (() => { const st0 = s.store || {}, bp = st0.bprog || {};
+        const prev = this._bprev || {}, done = this._bdone = this._bdone || {}, nowMs = Date.now();
+        for (const k in prev) if (!(k in bp)) done[k] = nowMs; // just completed (or cancelled): settle burst
+        for (const k in done) if (nowMs - done[k] > 1100) delete done[k];
+        this._bprev = Object.assign({}, bp);
+        const ks = Object.keys(bp); if (!ks.length) return [];
+        const wm = st0.wallMat || 'wattle';
+        const PAL = { wattle: ['#9b8a66', '#6e5a42', '#51402e'], timber: ['#8a6a46', '#6e5138', '#44331f'], stone: ['#8d8578', '#6f685c', '#504b43'] }[wm] || ['#9b8a66', '#6e5a42', '#51402e'];
+        const stake = (x) => "<rect x='" + x + "' y='14' width='3' height='26' rx='1' fill='" + PAL[2] + "'/>";
+        const art = (st) => { let inner = '';
+          if (wm === 'stone') { const blk = (x, y, w) => "<rect x='" + x + "' y='" + y + "' width='" + w + "' height='7' rx='1.5' fill='" + PAL[0] + "' stroke='" + PAL[2] + "' stroke-width='1'/>";
+            inner = st === 0 ? "<ellipse cx='24' cy='36' rx='12' ry='5' fill='rgba(0,0,0,0.18)'/>" + blk(14, 30, 9) + blk(24, 31, 10) + blk(19, 24, 9)
+              : st === 1 ? blk(6, 33, 11) + blk(18, 33, 12) + blk(31, 33, 11) + blk(12, 26, 12) + blk(25, 26, 11)
+              : blk(6, 33, 11) + blk(18, 33, 12) + blk(31, 33, 11) + blk(12, 26, 12) + blk(25, 26, 11) + blk(6, 19, 10) + blk(17, 19, 12) + blk(31, 19, 9) + blk(10, 12, 12) + blk(23, 12, 10);
+          } else if (wm === 'timber') { const plank = (x, y, w, h) => "<rect x='" + x + "' y='" + y + "' width='" + w + "' height='" + h + "' rx='1' fill='" + PAL[0] + "' stroke='" + PAL[2] + "' stroke-width='1'/>";
+            inner = st === 0 ? "<ellipse cx='24' cy='37' rx='13' ry='5' fill='rgba(0,0,0,0.18)'/>" + plank(10, 32, 26, 4) + plank(13, 27, 22, 4) + plank(16, 22, 18, 4)
+              : st === 1 ? stake(8) + stake(37) + plank(6, 14, 36, 4) + plank(6, 34, 36, 4) + plank(11, 18, 5, 16)
+              : stake(8) + stake(37) + plank(6, 14, 36, 4) + plank(6, 34, 36, 4) + plank(10, 18, 6, 16) + plank(18, 18, 6, 16) + plank(26, 18, 6, 16) + "<rect x='34' y='18' width='6' height='16' fill='none' stroke='" + PAL[2] + "' stroke-width='1' stroke-dasharray='2 2'/>";
+          } else { const withy = (y, o) => "<path d='M6 " + y + " q6 " + o + " 12 0 t12 0 t12 0' fill='none' stroke='" + PAL[0] + "' stroke-width='2.4' stroke-linecap='round'/>";
+            inner = st === 0 ? "<ellipse cx='24' cy='37' rx='13' ry='5' fill='rgba(0,0,0,0.18)'/><rect x='10' y='30' width='28' height='3' rx='1.5' fill='" + PAL[1] + "'/><rect x='12' y='34' width='26' height='3' rx='1.5' fill='" + PAL[0] + "'/>" + stake(14) + stake(31)
+              : st === 1 ? stake(8) + stake(22) + stake(37) + withy(34, -3) + withy(29, 3) + withy(24, -3)
+              : stake(8) + stake(22) + stake(37) + withy(34, -3) + withy(29, 3) + withy(24, -3) + withy(19, 3) + withy(15, -2); }
+          return "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'>" + inner + '</svg>'; };
+        const worked = {};
+        for (const a of s.agents) if (a.alive && !a.fac && a.act === 'build') for (const k of ks) { const c = k.split(','); if (Math.max(Math.abs(a.x - c[0]), Math.abs(a.y - c[1])) <= 1) worked[k] = 1; }
+        const out = [];
+        for (const k of ks) { const [x, y] = k.split(',').map(Number), pr = Math.max(0, Math.min(1, bp[k])), st = pr < 0.34 ? 0 : pr < 0.72 ? 1 : 2, on = worked[k];
+          out.push({ style: 'position: absolute; left: ' + (x * TS) + 'px; top: ' + (y * TS) + 'px; width: ' + TS + 'px; height: ' + TS + 'px; box-sizing: border-box; border: 1px dashed rgba(233,220,200,0.35); z-index: ' + ((y + 1) * TS - 2) + '; pointer-events: none; background: url("data:image/svg+xml,' + encodeURIComponent(art(st)) + '") center / ' + TS + 'px ' + TS + 'px no-repeat',
+            fill: 'position: absolute; left: 3px; bottom: 2px; height: 3px; width: ' + Math.round(pr * (TS - 8)) + 'px; background: var(--signal-yellow); opacity: 0.9; transition: width 300ms linear',
+            c1: on ? 'position: absolute; left: 18px; top: 20px; width: 3px; height: 3px; background: ' + PAL[1] + '; --bcx: -9px; animation: agbchip 0.65s linear infinite' : 'display: none',
+            c2: on ? 'position: absolute; left: 24px; top: 18px; width: 3px; height: 3px; background: ' + PAL[0] + '; --bcx: 3px; animation: agbchip 0.65s linear 0.2s infinite' : 'display: none',
+            c3: on ? 'position: absolute; left: 29px; top: 21px; width: 3px; height: 3px; background: ' + PAL[2] + '; --bcx: 11px; animation: agbchip 0.65s linear 0.38s infinite' : 'display: none' }); }
+        return out; })(),
+      // one-shot settle burst where a segment just finished (ring expands and fades)
+      bdust: (() => { const done = this._bdone || {}; const out = [];
+        for (const k in done) { const [x, y] = k.split(',').map(Number);
+          out.push({ style: 'position: absolute; left: ' + (x * TS + 8) + 'px; top: ' + (y * TS + 8) + 'px; width: 32px; height: 32px; border-radius: 50%; border: 3px solid rgba(220,205,180,0.75); z-index: ' + ((y + 1) * TS) + '; pointer-events: none; animation: agbset 0.9s ease-out forwards' }); }
         return out; })(),
       fireGlow: E0.CAMPON.fire ? ring(130, 0.05, LM.darkness, ms, false) : 'display: none', fireGlow2: E0.CAMPON.fire ? ring(70, 0.07, LM.darkness, ms, true) : 'display: none',
       shadows: !this.optGet('shadows', true) ? [] : SHADOWS.filter((o) => !o.grp || E0.CAMPON[o.grp]).concat(entShadows, s.bushes.map((b) => ({ style: shapeSt(bushBox(b).sh) }))),
