@@ -4914,6 +4914,7 @@ class Component extends DCLogic {
     // the r55 accrual WITHOUT the parked idle-drift (measured as a time tax). The split mechanic
     // itself lands only if the M3 probe shows cold cuts actually occur.
     const FISS = !!(window.AGON_P || {}).fission;
+    const defEv = [];   // defection notices, merged into the log once it exists (this preamble runs before 'const log' — the r52b store TDZ, same class)
     if (AFFIL || FISS) {
       const live = agents.filter((q) => q.alive && !q.fac);
       // similarity kernel v2: the mean-|diff| kernel compressed every pair to ~0.65 (8-dim
@@ -4944,7 +4945,7 @@ class Component extends DCLogic {
             const host = agents.find((b) => b.alive && b.fac && b.home);
             if (host) {
               q.fac = host.fac; q.home = host.home.slice(); q.bed = -1; q.tg = null; q.intent = null;
-              log.push({ t: tick, text: q.id + ' can no longer bear the colony and defects to ' + (RIVALS[host.fac - 1] ? RIVALS[host.fac - 1].name : 'the rivals'), kind: 'bad' });
+              defEv.push({ t: tick, text: q.id + ' can no longer bear the colony and defects to ' + (RIVALS[host.fac - 1] ? RIVALS[host.fac - 1].name : 'the rivals'), kind: 'bad' });
             }
           }
         }
@@ -5075,7 +5076,7 @@ class Component extends DCLogic {
     const fishTry = (a, how) => { const set = how === 'pole' ? FS_POLE : how === 'spear' ? FS_SPEAR : FS_BARE, p0 = how === 'pole' ? 0.16 : how === 'spear' ? 0.13 : 0.03; if (r() > p0 * (0.6 + 0.4 * (a.xp && a.xp.fish ? 1 : 0.8))) return null; const fk = fishTake('caught', set); if (!fk) return null; a.sat = Math.min(1, a.sat + 0.3 * SEA[fk].nut); a.work.fish = (a.work.fish || 0) + 1; if (how === 'spear') a.work.spearfish = (a.work.spearfish || 0) + 1; if (how === 'pole' && r() < 0.06) { const m = (a.mats || {}).fiber > 0 ? a.mats : store.mats; if (m.fiber > 0) m.fiber -= 1; } log.push({ t: tick, text: a.id + (how === 'pole' ? ' lands a ' : how === 'spear' ? ' spears a ' : ' grabs a ') + SEA[fk].n.toLowerCase() + (how === 'pole' ? ' on the line' : ' at the bank'), kind: 'info' }); return fk; };
     const nutAdd = (x, y, v, w) => { const k = x + ',' + y; ORG[k] = Math.min(4, (ORG[k] || 0) + v); NL[w] = (NL[w] || 0) + v; };
     let carc = []; for (const q of (s.carc || [])) { if ((q.rt || 0) >= 1 || tick - q.dt >= 6000) nutAdd(q.x, q.y, 0.6 + (q.meat || 1) * 0.15, 'rot'); else carc.push({ ...q }); }
-    const log = s.log.slice(); for (const e of lorePend) log.push(e); for (const e of soilEv) log.push(e);
+    const log = s.log.slice(); for (const e of lorePend) log.push(e); for (const e of soilEv) log.push(e); for (const e of defEv) log.push(e);
     if (mindOn && tick % 25 === 0) { const nn = A.mind.norms(agents, tick, store.norms); for (const h of Object.keys(nn)) for (const k of Object.keys(nn[h])) if (!(store.norms[h] && store.norms[h][k])) log.push({ t: tick, text: 'A custom takes hold: ' + (h === 'camp' ? 'the band' : 'House ' + h) + ' now fears ' + A.mind.label(k) + ' (' + Math.round(nn[h][k].share * 100) + '%)', kind: 'info' }); for (const h of Object.keys(store.norms)) for (const k of Object.keys(store.norms[h])) if (!(nn[h] && nn[h][k])) log.push({ t: tick, text: 'The custom of fearing ' + A.mind.label(k) + ' is fading', kind: 'info' }); store.norms = nn; for (const h of Object.keys(nn)) for (const k of Object.keys(nn[h])) { const ob = A.mind.obedience(agents.filter((q) => (q.fac ? 'R' + q.fac : 'camp') === h), k); nn[h][k].ob = ob; if (ob.fol !== null && ob.dev !== null && ob.nd >= 1 && ob.fol > ob.dev + 2 && !(nn[h][k].warned > tick - 200)) { nn[h][k].warned = tick; log.push({ t: tick, text: 'Those who keep the custom of fearing ' + A.mind.label(k) + ' fare worse than those who do not', kind: 'warn' }); } } }
     // an experiment: what the person holds or stands beside, tried through the interaction layer; a first success is a discovery that belongs to them
     // each colonist leans toward some kinds of experiment: curiosity and patience toward material science, diligence toward making, empathy toward food and water, bravery and temper toward fire, curiosity and bravery toward going out and trying the terrain itself; a personal quirk keeps two similar people from being identical
