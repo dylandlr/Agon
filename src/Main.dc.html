@@ -5020,6 +5020,7 @@ class Component extends DCLogic {
     const BUILDT = !(window.AGON_P || {}).nobuildt;
     const BUILDTICKS = { wattle: 4, timber: 6, stone: 9 }; // ticks of work per segment, by wall material
     const BSOLO = BUILDT && !(window.AGON_P || {}).nobsolo; // r62: one segment per agent at a time
+    const CREW = BSOLO && !(window.AGON_P || {}).nocrew; // r64: warm pairs may crew a segment; clashing pairs are slower than solo
     // TECHPAY (r63): a technology whose patterns are met is REACHABLE, not yet known — the
     // colony's insight pool pays its cost over derive passes (cheapest first), and the tech
     // fires when paid. Insight gains a real engine: +2 on every colony-first discovery.
@@ -6313,13 +6314,38 @@ class Component extends DCLogic {
           const bo = BSOLO ? (store.bown || (store.bown = {})) : null;
           for (const k in bp) if (!BUILDQ.includes(k)) { if (window.__BD) window.__BD.push({ ev: 'cancel', k, pr: +bp[k].toFixed(2), tick: s.tick, qLen: BUILDQ.length, q0: BUILDQ.slice(0, 4), built: BUILTS.has(k) }); store.mats[mk] = (store.mats[mk] || 0) + 1; delete bp[k]; if (bo) delete bo[k]; } // camp plan moved on: drop the orphan and return its committed material (refunded in the current wall material — close enough for the rare churn case)
           if (bo) for (const k in bo) { if (!(k in bp)) { delete bo[k]; continue; } const own = s.agents.find((q) => q.id === bo[k]); if (!own || !own.alive || own.fac) delete bo[k]; }
-          const near = BUILDQ.map((k) => { const [x, y] = k.split(',').map(Number); return { k, x, y, d: cheb(a, { x, y }), st: bp[k] !== undefined, mine: bp[k] !== undefined && (!bo || bo[k] === a.id) }; })
-            .filter((p) => !bo || !(p.k in bo) || bo[p.k] === a.id) // never touch another agent's claim
+          // CREW (r64): a warm, willing agent may JOIN another's project instead of opening
+          // their own. The pair's rate is a relationship property: warmth and patience raise
+          // it, hot-tempered pairs drag it BELOW solo pace (the helper gets in the way), a
+          // grudge forbids it, and the helper re-decides every tick, so bad crews dissolve.
+          // Joining is always the joiner's choice; claims never transfer. AGON_P.nocrew opts out.
+          const relW = (p, q) => Math.max((p.relc || {})[q.id] || 0, (q.relc || {})[p.id] || 0);
+          const crewQ = (own) => { if (!own) return 0; const w = relW(a, own);
+            if (w < -0.05) return 0;
+            const pa = a.pers || [], po = own.pers || [];
+            const clash = Math.max(0, 0.8 - (pa[3] ?? 0.5) - (po[3] ?? 0.5)) + (Math.abs((pa[1] ?? 0.5) - (po[1] ?? 0.5)) > 0.6 ? 0.15 : 0);
+            return Math.max(0.7, Math.min(1.9, 1.45 + 1.3 * Math.min(0.35, Math.max(0, w)) - 2.2 * clash)); };
+          const crewOwn = (k) => { if (!CREW || !bo || !(k in bo) || bo[k] === a.id) return null; return agents.find((q) => q.id === bo[k] && q.alive && !q.fac) || null; };
+          const joinQ = (k) => { const own = crewOwn(k); if (!own) return 0; const q = crewQ(own); if (!q) return 0;
+            const keen = (a.pers || [])[1] ?? 0.5; // the gregarious join sooner, and sometimes misjudge a bad pairing
+            return (q >= 0.95 || (keen > 0.7 && q >= 0.75)) && ((a.work.build || 0) > 4 || keen > 0.45) ? q : 0; };
+          const near = BUILDQ.map((k) => { const [x, y] = k.split(',').map(Number); const jq = joinQ(k); return { k, x, y, jq, d: cheb(a, { x, y }) + (jq ? (jq >= 1.2 ? 0 : 1.5) : 0), st: bp[k] !== undefined, mine: bp[k] !== undefined && (!bo || bo[k] === a.id) }; })
+            .filter((p) => !bo || !(p.k in bo) || bo[p.k] === a.id || p.jq > 0) // another agent's claim only as a willing crew-mate
             .sort((p, q) => (q.mine ? 1 : 0) - (p.mine ? 1 : 0) || p.d - q.d)[0]; // finish own started work first, then nearest claimable
           if (near && near.d <= 1 && (near.st || (store.mats[mk] || 0) > BUILDKEEP)) {
             if (!near.st) { store.mats[mk] -= 1; bp[near.k] = 0; if (window.__BD) window.__BD.push({ ev: 'start', k: near.k, tick: s.tick, qLen: BUILDQ.length }); }
-            if (bo) bo[near.k] = a.id;
-            bp[near.k] += 1 / (BUILDTICKS[store.wallMat || 'wattle'] || 6);
+            const own2 = crewOwn(near.k);
+            if (bo && !own2) bo[near.k] = a.id;
+            if (own2) {
+              // crewing on someone else's wall: the pair's quality decides whether this helps
+              const q2 = crewQ(own2) || 0.7;
+              bp[near.k] = Math.max(0, bp[near.k] + (q2 - 1) / (BUILDTICKS[store.wallMat || 'wattle'] || 6));
+              if (q2 < 0.95 && tick % 40 === 17) { // friction: they work against each other, and both feel it
+                a.relc = a.relc || {}; own2.relc = own2.relc || {};
+                a.relc[own2.id] = Math.max(-2, (a.relc[own2.id] || 0) - 0.02); own2.relc[a.id] = Math.max(-2, (own2.relc[a.id] || 0) - 0.02);
+                if (r() < 0.35) log.push({ t: tick, text: a.id + ' and ' + own2.id + ' get in each other\'s way at the wall', kind: 'info' });
+              }
+            } else bp[near.k] += 1 / (BUILDTICKS[store.wallMat || 'wattle'] || 6);
             if (bp[near.k] >= 1 - 1e-9) {
               delete bp[near.k]; if (bo) delete bo[near.k]; if (!Object.keys(bp).length) { delete store.bprog; if (store.bown) delete store.bown; }
               BUILTS.add(near.k); builtAdded = true;

@@ -2407,3 +2407,15 @@ fission, treaty. Reference hashes: ab_treaty.json arm B.
 - Process note: the /tmp/mar stdlib-shadowing rule bit again (import statistics hangs
   there; exact shadow unidentified, __pycache__ suspected). Analysis one-liners now also
   run from scratchpad with python3 -I, per the standing rule.
+
+## r64 — CREW implemented (relationship-gated build collaboration; flag nocrew)
+- Per DESIGN-tech.md CREW section: joining is the joiner's per-tick choice (positive
+  warmth, no grudge, build identity or gregariousness; the gregarious sometimes misjudge
+  and join a sub-par pair); pair rate = crewQ in [0.7, 1.9] from mutual warmth, shared
+  patience, sociality mismatch; q<1 pairs REMOVE progress (in each other's way) with
+  mutual warmth decay + friction log beats, so bad crews dissolve themselves; claims
+  never transfer; q>1 helpers can push a segment to completion.
+- Smoke (temperate s21): nocrew arm byte-MATCH vs the exact in-panel build; default arm
+  crewTicks 5->32, walls 35->61 (crews claw back the BSOLO throughput loss — the watch
+  item's predicted compensator), zero pageerrors. Savanna smoke running.
+- Panel after the TECHPAY B2 verdict lands (chain: arm A nocrew vs ab_techpay_b2 B).
