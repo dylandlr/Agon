@@ -1840,3 +1840,49 @@ jungle 3 / forest 21 / temperate 21 / desert 21. New reference hashes: ab_mig.js
 - minimap ox() still reads the founding anchor; viewport rectangle drifts after a relocation.
 - Trigger edge: a death at exactly dtick = tick-500 leaves the window between probe and fire
   (seen on jungle s21); harmless, documented here so a future probe mismatch isn't chased.
+
+## r52 audit — the measurements grilled; one claim retracted, one strengthened
+Adversarial pass over the whole r52 measurement chain (Dyl: "systematically analyze, deep
+research and debug the measurements"). Checks and verdicts:
+
+### Retraction: "colonies do not die of local depletion" was belief, not ground truth
+The claim rested on the camp knowledge pool (13-29 known-true bushes within 12 of camp in
+dying worlds). Ground-truth probe (actual bush food, nomig baseline): in BOTH jungles the real
+food within cheb 12 collapses to 1-2 at t~3000 — the moment the death spiral starts — and
+stays there. Local depletion is REAL in jungles. What is false is that the colony can know it:
+true entries go stale because dying colonies stop revisiting (fresh can't help — busts need a
+visit within 2). Corrected claim: the roadmap's exhaustion premise was ecologically right and
+epistemically unusable; the distress trigger remains the right available signal, for the right
+reason. Desert is the opposite and the pure thermal case: food within 12 GROWS 45 -> 84 while
+the colony dies of heat beside it.
+
+### Strengthened: the 6000-tick "mildly negative in fired healthy worlds" washes out at 12000
+12k-tick two-arm runs on the fired worlds: temperate s21 converges 12 = 12, wetland s21
+converges 16 = 16 (the -2s at 6k were transient relocation cost), forest s21's win PERSISTS
+(nomig 4 vs mig 11). Jungles/desert extinct in both arms at 12k. No persistent harm observed
+in any fired world; the ship stands.
+
+### Corrections to the r52 record
+- walls/built are contaminated in fired worlds: ruins stay in WALLS and rebuilds re-count in
+  store.built (wetland 111 -> 222 is two camps, not productivity). The "means mildly positive"
+  reading partly reflects this. Construction metrics are not comparable across arms wherever a
+  move fired; alive/extinctions/survived are unaffected.
+- The v2 code comment claimed the distress trigger "fires only in dying worlds" — the panel
+  falsified that (temperate/forest/wetland s21 moved and live). Comment fixed (7fbba30).
+- Time-to-extinction ('survived', a roadmap M1 endpoint) had never been analyzed: done, null.
+  Extinct-both worlds die at the same tick under mig (jungle s3 -1 tick despite two moves).
+  Migration neither saves nor delays a dying colony at 6k; it only changes live-world outcomes.
+
+### What held up
+- Arm A is byte-identical across ab_fresh / ab_migfresh / ab_mig and equals the shade-era
+  baseline — the cross-panel fresh-vs-mig attribution is sound.
+- 'alive' counts colony agents only; extinction logic correct; McNemar exact values correct.
+- fatalCause is a priority chain where 'thirst' outranks 'heat', so 'heat' counts are
+  conservative — some thirst deaths are heat-driven. "Thermal is binding" survives.
+- r48 shade (p=0.0020, df=23) survives Bonferroni over the arc's 18 panels on the primary
+  endpoint (cutoff 0.0028); under biome-cluster df=11 it is p=0.0051 — fine nominally, short
+  of the corrected cutoff. It stays the arc's only measured win, flagged for replication on a
+  fresh seed pair if the panel is ever widened.
+- Panel power limit, now explicit: a mechanic firing in 4/24 worlds must move ~+6 alive per
+  fired world to clear the alive MDE (1.05). The fixed panel cannot certify rare-event
+  mechanics; their endpoints need event-level analysis (and ab.py should record move counts).
