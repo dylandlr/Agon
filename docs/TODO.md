@@ -1931,3 +1931,35 @@ New reference hashes: ab_cool.json arm B.
 ### r53 ship inertness: 8/8
 nocool:1 == ab_cool arm A and default == ab_cool arm B, byte-exact, on jungle 3 / forest 21 /
 temperate 21 / desert 21 (both directions each). r53 closed.
+
+## r54/M2 — standing status (AGON_P.status): derived leadership WORKS, the drift effect PARKED
+Commit 27c2be0; flag stays off. The round's finding is split cleanly in two.
+
+### What emerged (the part that works)
+stScore — a weighted sum of productive deed tallies only (hunt x2, build x1.5, fire x2,
+gather/craft/fish x1, haul x0.5; endurance counters excluded) — produces real leadership
+structure with zero assignment: follow events 1.4k-3.6k per world, concentration topShare
+0.48-0.95, leaders are the colony's top providers (gather 51-96, haul 45-90), and succession
+emerges free (jungle s3 cycled 8 leaders as they died; desert's stable colony put 95% of
+follows on one member). "A leader is a fact in the data" — delivered.
+
+### What the probes killed before any code
+The roadmap's effect ("others copy the leader's work pick") is structurally dead: a
+rotation-mimicking regretPick monkeypatch (hash-verified inert) counted 0 pickWork tie events
+in 18k ticks across 3 worlds. Same starvation family as r49 scout, caught for the cost of one
+probe. The act histogram found the real traffic: idle = 8.6% of agent-ticks.
+
+### Why the drift effect is parked: a one-directional negative whisper
+Panel (B = status:1): alive -0.04 (t=-0.06, pure null), extinctions 1 -> 3 (saved forest s21,
+killed forest s3 / alpine s21 / wetland s3 — knife-edge worlds all; McNemar p=0.625). But every
+secondary metric leans negative — survived -244 (t=-1.37), walls -7.6 (t=-1.55), built -7.2,
+techs -2.50 (t=-1.92) — the fresh signature: a time-budget diversion. 1.4k-3.6k follow steps
+per world displace agents from their next errand, and the clustering buys nothing functional.
+mig shipped on null-with-positive-lean; this is null-with-negative-lean theater, and the r44
+standard says no. If the visible behavior is wanted for the observation game despite the
+whisper, it ships with one flag flip — Dyl's call, stated in the report.
+
+### What M3 inherits
+stScore is the status half of fission ("the second-status agent leads their clique out").
+Status gets a load-bearing job there — relocation targets, clique leadership — instead of a
+cosmetic one. The follow-count instrumentation (this._fol) is the concentration endpoint.
