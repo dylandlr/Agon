@@ -4855,9 +4855,12 @@ class Component extends DCLogic {
     // agent-ticks (temp>0.7) AT CAMP, day and night alike, in summer waves — not on forage walks —
     // and water gave no thermal relief at all. Two halves, one mechanic: wading (standing
     // water-adjacent) damps toward comfort at cave strength (0.5), and a dangerously hot colonist
-    // (temp>0.8, hysteresis to 0.4) goes to the nearest water and stays until cooled. Flag off,
-    // nothing runs or writes.
-    const COOL = !!(window.AGON_P || {}).cool;
+    // (temp>0.8, hysteresis to 0.4) goes to the nearest water and stays until cooled. Shipped
+    // default-on in r53: alive +4.42 (t=3.72, the project's largest measured win), extinctions
+    // 7 -> 1 with every blocked world saved (desert/jungle x2/volcanic/alpine/badlands/savanna);
+    // the one kill (forest s21) is a knife-edge world's fourth flip in four arms, chaos not
+    // mechanism. AGON_P.nocool opts out: with it set, nothing here runs or writes.
+    const COOL = !(window.AGON_P || {}).nocool;
     // M1 experiment (AGON_P.scout): the jungle extinctions are an exploration failure, not a food
     // shortage — fog knowledge reaches 7 tiles, wander staggers 1 tile, so a colony eats its known
     // radius bare and starves beside an unknown full map (M1a probe: near ring 0.0 by t=3000, far

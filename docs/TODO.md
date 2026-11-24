@@ -1886,3 +1886,44 @@ in any fired world; the ship stands.
 - Panel power limit, now explicit: a mechanic firing in 4/24 worlds must move ~+6 alive per
   fired world to clear the alive MDE (1.05). The fixed panel cannot certify rare-event
   mechanics; their endpoints need event-level analysis (and ab.py should record move counts).
+
+## r53 — cooling off at the water (AGON_P.nocool opts out): SHIPPED, the largest measured win
+Commits 3b52aa4 (mechanic) + this one (ship). The heat round the whole r48-r52 evidence chain
+pointed at.
+
+### Probe first (the r52 audit's lesson, applied)
+Where heat actually is: 76-93% of hot agent-ticks (temp>0.7) are AT CAMP — not on forage walks
+(4-18%) — in 2000-tick summer waves, 42% of them at night in desert, many deaths in bed with
+water 4-15 tiles away. That killed three candidate designs before a line was written: exertion
+heat, canopy-on-walks, and siesta/night-shift (nights are nearly as hot). The model gap: water
+gave zero thermal relief. Dying of heatstroke 5 tiles from a river is absurd, and fixing the
+absurdity was the whole mechanic.
+
+### The mechanic (one flag, two halves)
+Wading: standing water-adjacent joins the damping family at cave strength (0.5, colonists
+only, appended as a conditional IEEE-exact zero in the flag-off arm). Seeking: at temp>0.8 a
+colonist makes for the nearest water and stays until temp<0.4 (hysteresis; preempts sleep —
+"too hot to sleep"; wading refills the skin and rests like sheltering; the truly starving eat
+first; needs waterN>0). Heat's own hydration drain already drove drink trips, so the loop
+self-medicates: the mechanism probe shows coolT active 12.4k agent-ticks in desert s21 and the
+heat meter never filling — zero deaths of any cause there.
+
+### Panel (arm B = cool:1): alive +4.42, t=3.72 — extinctions 7 -> 1
+alive +4.42 (SE 1.19, t=+3.72, p~0.0011 — survives Bonferroni over the arc's 19 panels; the
+previous record was shade's t=3.48). survived +588 (t=2.51), techs +1.54 (t=2.11). food -5.96
+and spoiled -13.2 are significant but are population artifacts: 4-16 extra mouths eat stores
+before they spoil. Discordants: saved desert s21, volcanic s3, alpine s21, badlands s21,
+savanna s21, jungle s3, jungle s21 — EVERY food/water/heat-blocked world open since r36 —
+killed forest s21 (12 -> 0; starvation/cold/thirst across non-summer seasons, nothing
+wading-adjacent; that world's fourth flip in four arms — divergence chaos, priced into the
+mean). McNemar 7v1 exact p=0.0703. 0/24 worlds hash-identical: the damping term touches every
+drink trip, so this reshuffles all divergence luck; the panel mean is the honest estimate.
+New reference hashes: ab_cool.json arm B.
+
+### Carried / notes
+- The r48 carried item (desert s21, volcanic s3 die of heat with shade on) is CLOSED.
+- s.log is a 5-entry sliding window (setState log.slice(-5)) — never count events from it; the
+  smoke's "coolTripLogs=0" was this artifact. Poll state directly (anchor(), coolT, AGON_LOG).
+- Re-test fresh (r51, killed) on top of cool+mig someday: its kill list was heat-mediated
+  (ranging into heat), and the desert s21 fresh+mig save hints the three interact.
+- forest s21 remains the panel's knife-edge bellwether; treat its flips as noise, not signal.
