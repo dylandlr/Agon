@@ -1,0 +1,16 @@
+/* Candidate B — HEARTH & HIDE: the UI is made of the world's materials. Leather, bone, ember. */
+:root{
+  --ground:#1d120a; --surface:#3a2416; --surface-raised:#472d1b; --border:#241307;
+  --border-strong:#7a4f28; --ink:#ecdfc3; --ink-muted:#b39c7d;
+  --accent-blue:#88b6c9; --fill-blue:#2d5668; --fill-green:#3d5c35;
+  --signal-yellow:#d8a43b; --on-signal:#241307; --danger:#d4674d; --ok:#8fbf7a;
+}
+div[style*="background: rgba(48,35,27,0.94)"], button[style*="background: rgba(48,35,27,0.94)"],
+div[style*="background: rgba(48,35,27,0.92)"]{
+  background: linear-gradient(170deg, #472d1b, #33200f) !important;
+  border: 2px solid #241307 !important; border-radius: 10px !important;
+  box-shadow: inset 0 1px 0 #ffffff14, inset 0 0 0 1px #7a4f2855, 0 6px 16px #000000aa !important;
+}
+div[style*="background: rgba(34,24,18,0.82)"]{ background:#33200fe8 !important; border-radius:10px !important; }
+button{ border-radius: 9px !important; }
+div[data-pbar]{ letter-spacing: 0.2em !important; color:#d8a43b !important; text-shadow: 0 1px 0 #000 !important; }

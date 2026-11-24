@@ -1,0 +1,17 @@
+/* Candidate A — FIELD NOTES: the observer's journal. Paper panels, ink text, thin rules. */
+:root{
+  --ground:#2e2620; --surface:#f1e7d2; --surface-raised:#f7efdd; --border:#d8c7a6;
+  --border-strong:#8a7558; --ink:#2a2118; --ink-muted:#6d6054;
+  --accent-blue:#3d6b9e; --fill-blue:#b9cfe4; --fill-green:#bcd3bd;
+  --signal-yellow:#9c6b1f; --on-signal:#fdf6e6; --danger:#a33d2a; --ok:#3e7a52;
+}
+div[style*="background: rgba(48,35,27,0.94)"], button[style*="background: rgba(48,35,27,0.94)"],
+div[style*="background: rgba(48,35,27,0.92)"]{
+  background: #f1e7d2 !important; color: #2a2118 !important;
+  border-color: #8a7558 !important; border-radius: 3px !important;
+  box-shadow: 0 1px 0 #00000014, 0 4px 14px #00000022 !important;
+}
+div[style*="background: rgba(34,24,18,0.82)"]{ background:#f7efddee !important; color:#2a2118 !important; border-radius:3px !important; }
+div[style*="background: rgba(48,35,27,0.94)"] *, div[style*="background: rgba(48,35,27,0.92)"] *{ color:#2a2118; }
+button{ font-family: Georgia, 'Iowan Old Style', serif !important; letter-spacing: 0.02em; }
+div[data-pbar]{ border-bottom: 1px solid #8a755833 !important; font-family: Georgia, serif !important; letter-spacing: 0.14em !important; }
