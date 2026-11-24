@@ -2041,3 +2041,7 @@ PLEX + deed tallies (stScore) + bonds (relc, flag-gated) + current need become t
 context; TAMU API (state.llm: chat.tamu.ai, Claude-Haiku-4.5) generates dialogue/thought text
 only (never decisions, so determinism of outcomes is preserved); tests run mode:'rules'. The
 mockDecide Math.random carried item gets fixed in that round.
+
+### r56 ship inertness: 8/8
+nopers2:1 == ab_pers2 arm A (the pre-ship baseline) and default == ab_pers2 arm B, byte-exact,
+on jungle 3 / forest 21 / temperate 21 / desert 21 (both directions each). r56 closed.
