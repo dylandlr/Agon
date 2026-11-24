@@ -2314,3 +2314,16 @@ fission, treaty. Reference hashes: ab_treaty.json arm B.
   valid as measurements of tech emergence — techs don't depend on walls going up — but
   will be re-recorded anyway) superseded by ab_buildt2.json when the re-panel lands.
   Reference hashes remain ab_treaty B for arm A until then.
+
+## r60 FINAL verdict — BUILDT ships (fixed build, corrected panel ab_buildt2)
+- Arm A (nobuildt) 24/24 byte-MATCH vs ab_treaty B; zero pageerrors across 48 runs.
+- The fixed cost model: walls -7.25 (t=-2.74)*, built -27.7 (t=-4.93)* — A mean 56.6 walls
+  vs B 49.4: colonies raise ~87% as much within 6k ticks, paying 4-9 work-ticks/segment.
+  (Broken build had B ~15 = nothing built; its "walls -42*" and "spoiled +5.7*" were
+  artifacts and are void.)
+- Survival neutral: alive +0.42 (t=+0.81), survived +96 (t=+1.00), peak +0.38 (t=+1.81),
+  spoiled/food/techs ns; extinction discordants: 1, B-saves (forest s3), McNemar p=1.0.
+- SHIPPED. NEW REFERENCE HASHES: ab_buildt2.json arm B (in /tmp/mar and docs/panels/;
+  supersedes ab_treaty B and voids ab_buildt.json).
+- Tech pillar order re-confirmed on the fixed build: firecraft 24/24 + cooking 24/24 in
+  the first three earned; shelter 22/24, shaping 20/24 in the first six.
