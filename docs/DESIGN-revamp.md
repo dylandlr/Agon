@@ -85,3 +85,31 @@ Budget rule: every motion round proves itself on the fps overlay before shipping
 2. EB1 probe + flag — the centerpiece starts; C's autotiling rides along as needed.
 3. U4 chronicle — makes every shipped social mechanic visible.
 4. D1 movement tween; then U1 chrome with rendered candidates; then EB2-EB4.
+
+## E. Emergence spec expansion (Dyl, 2026-11-24 03:15) — mapped against the engine
+
+What the brief asks vs what exists:
+- **Emergent tech/tool creation**: EXISTS at core — insight-driven discovery (store.techs,
+  "X discovers:", lore.front), material-property crafting (MATS hard/sharp/flex), tools used
+  by work (toolOf, fishHow; tilling already uses digging stick/hoe). GAPS: no UI surfaces the
+  discovery tree or who knows what (U-tech panel), and tool ARRIVAL ordering is not tuned to
+  survival need.
+- **Four pillars first (gathering, hunting, farming, carpentry)**: partially emergent now;
+  needs an early-game ordering audit — probe when each practice's first tool/tech lands per
+  biome, then tune insight weights so survival pressure pulls its pillar first (hungry
+  colonies discover hunting/gathering tech before ornament). One flag, panel-measured.
+- **Combat ↔ weapon tools**: ALREADY SYNCED mechanically (gear.weapon reach/thrown/ranged
+  drive MOVES; per-move animations fire — verified live). GAP: impact emphasis (hit flash/
+  knockback) and weapon visibility in hand during moves.
+- **Emergent roles**: stScore (r54) measures what someone IS by deeds; archetypes set initial
+  leanings. GAP: role LABELS surfaced in UI from deeds (the hunter, the builder — epithets
+  from work tallies, same PLEX pattern), not assigned.
+- **Personality development from events/past/psyche**: genuinely NEW. pers[] is static after
+  creation. Design: slow pers drift from lived events via the existing mind/belief system —
+  surviving an attack nudges bravery (either way, by temperament), social success nudges
+  sociability, loss nudges empathy/patience; bounded drift (+-0.15 lifetime), every change
+  event-logged so the observer can trace a biography. One flag, panel + biography endpoint.
+- **Emergent housing + UI**: the EB1-EB4 arc above; the UI half is a dwelling inspector
+  (who lives here, built from what, warmth record) and chronicle lines for building events.
+Sequencing: pillars audit -> pers drift -> tech-tree UI panel -> EB1. Each round keeps the
+one-flag panel discipline.
