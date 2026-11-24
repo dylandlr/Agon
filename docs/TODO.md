@@ -2193,3 +2193,11 @@ dormant; tactics present; fission precondition absent -> redesigned). Open produ
 Dyl: births default-on (unlocks M6), LLM dialogue (deferred), temperate treaty question,
 multi-camp architecture. Baseline: walls, roofs, order, workwarm, shade, mig, cool, pers2,
 fission, treaty. Reference hashes: ab_treaty.json arm B.
+
+## r-ui-chrome-pick — chrome direction decided (A "Field Notes" + ember accent)
+- Built both candidates live on the app (docs/chrome-candidates/), published comparison artifact.
+- Stress-tested A's bright-biome risk on tundra s3 mid-storm: separation holds (borders/shadows,
+  not value contrast). Pick: A, with B's #d8a43b ember-amber as accent. Details in DESIGN-revamp.md.
+- Fertile-soil decals lightened 0.78→0.9 (they impersonated shadows; Dyl flagged). Render-only.
+- Appearance-genetics audit done: genome rich, gap = style-as-culture (queued round).
+- Next: full chrome build round (typography, icons, alerts, chronicle panel, border pass).

@@ -3154,7 +3154,7 @@ function terrInner() {
   let sp = '';
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (hh(x, y, 301) < 0.2) { const c = SOILB[1 + Math.floor(hh(x, y, 302) * 3)]; sp += '<ellipse cx="' + (x * TS + 8 + hh(x, y, 303) * 32).toFixed(0) + '" cy="' + (y * TS + 8 + hh(x, y, 304) * 32).toFixed(0) + '" rx="' + (22 + hh(x, y, 305) * 26).toFixed(0) + '" ry="' + (16 + hh(x, y, 306) * 20).toFixed(0) + '" fill="' + c + '"/>'; }
   o += sp;
-  if (D.rich) o += '<path d="' + D.rich + '" fill="' + (MAC && MAC.rain > 0.62 && MAC.elev < 300 ? '#3a4634' : darker(SOILB[0], 0.78)) + '"/>';
+  if (D.rich) o += '<path d="' + D.rich + '" fill="' + (MAC && MAC.rain > 0.62 && MAC.elev < 300 ? '#3a4634' : darker(SOILB[0], 0.9)) + '"/>'   // fertile-soil patches: at 0.78 these read as orphaned shadow blobs (Dyl flagged them); 0.9 keeps the information as soil, not shade;
   if (D.grav) o += '<path d="' + D.grav + '" fill="' + hmix(SOILB[0], '#807868', 0.5) + '"/>';
   if (D.sand) o += '<path d="' + D.sand + '" fill="' + SANDC + '" stroke="#a98f5a" stroke-width="5" stroke-linejoin="round"/>';
   o += '<path d="' + D.grass + '" fill="' + GRASSB[0] + '" stroke="#3a4528" stroke-width="5" stroke-linejoin="round"/>';

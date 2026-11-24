@@ -113,3 +113,42 @@ What the brief asks vs what exists:
   (who lives here, built from what, warmth record) and chronicle lines for building events.
 Sequencing: pillars audit -> pers drift -> tech-tree UI panel -> EB1. Each round keeps the
 one-flag panel discipline.
+
+## Chrome decision (r-ui-chrome-pick)
+
+**Pick: Candidate A "Field Notes", with B's ember-amber #d8a43b as A's accent.**
+
+Evidence: both candidates were styled live on the real app (token overrides on the Main :root
+tokens + translucent-panel selectors; stylesheets in docs/chrome-candidates/). A's one stated
+risk was light chrome over bright biomes. Stress test: tundra s3 at tick 1660, mid-storm — pale
+snow ground plus storm desaturation, the brightest/lowest-contrast world the sim produces.
+Result (scratchpad frames/chrome_A_snow.png): panel/world separation holds because the paper
+panels carry their own borders and shadows rather than relying on value contrast; ink-on-paper
+text contrast is biome-independent; alert stack still dominates. Weakest element is the bottom
+tick bar — gets a stronger border in the full round. B's single advantage (zero contrast risk)
+is closed by this test; its best idea (ember-amber) is adopted as A's accent for story beats,
+headers, and the signal color. A wins on identity: a real re-direction (Dyl asked for one), and
+the observer's-journal frame matches what Agon is — you watch, you don't command.
+
+Full round scope: typography (serif label system), icons, alert styling on paper, chronicle
+panel (U4) in the same language, bright-biome border pass, sweep of hardcoded-dark corners.
+
+## Dark ground circles (Dyl asked)
+
+They are fertile-soil patches, not shadows: the `rich` terrain decal path fills tiles where
+FERTN(x,y) > FRICH (founding-camp rect excluded) with darker(SOILB[0], 0.78) — information
+(where farming would take), but at 0.78 they read as orphaned shadow blobs. Differential test
+(shadows toggled off, circles persist) proved they are terrain, not the shadow layer.
+Fix shipped: darken factor 0.78 → 0.9, so they stay visible as soil, not shade.
+
+## Appearance genetics audit (beards / hair / clothing styles)
+
+What already exists (art.js `ge` genome): skin 3 additive loci; hair pigment dark-dominant with
+red recessive (k4); curl incomplete-dominance (k5); baldness sex-modified (k6); 8 face measures;
+beard density (k15); BEARDNAMES 8 styles; ap[] inherited in mkChild with ±0.12 noise. Clothing
+is already material-true: wornParts spec() renders "tpl|mat" tinted by MATS[mat].color, so a
+hide coat looks like hide. The gap is not genetics — it is **style-as-culture**: grooming and
+garment style variants (which beard cut, how a coat is worn) currently never vary socially.
+Proposed round: style variants as norms in store.norms, spreading via the existing homophily/
+warmth graph (r55 relc), inherited household-first — measured like any other emergence round
+(do styles cluster by camp/kin more than chance?), opt-out flag, 24-world panel.
