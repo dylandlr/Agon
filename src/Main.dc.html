@@ -4893,6 +4893,15 @@ class Component extends DCLogic {
     // the colony's signs: what it has agreed a mark means. Seeded with the signs a body can make on its own.
     const lex = Object.assign({}, s.lex || Object.fromEntries(A.lexSeed().map((g) => [g, 0]))); let lexHit = false;
     const agents = s.agents.map((a) => ({ ...a, inv: { ...a.inv }, mats: { ...(a.mats || {}) }, gear: { ...(a.gear || {}) }, work: { hunt: 0, gather: 0, craft: 0, haul: 0, cold: 0, stormed: 0, sheltered: 0, sawwall: 0, ...(a.work || {}) }, mind: (a.mind || []).slice(), pers: a.pers || [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5], th: a.th || [0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125], thS: (a.thS || [0, 0, 0, 0, 0, 0, 0, 0]).slice(), thN: a.thN || 0, wn: (a.wn || []).map((w) => ({ ...w })), mis: { ...(a.mis || {}) }, know: { ...(a.know || {}) }, xp: { ...(a.xp || {}) }, rgU: a.rgU ? { ...a.rgU } : undefined, bel: Object.fromEntries(Object.entries(a.bel || {}).map(([k, b]) => [k, { ...b }])) }));
+    // r54/M2 (AGON_P.status, opt-in): standing status. Derived ONLY from deeds already tallied —
+    // productive work counts, never assigned. The one effect this round: an idle colonist drifts
+    // toward the colony's most accomplished member and loiters nearby (the M2 probe killed the
+    // roadmap's work-pick lever: the pickWork tie-break fired 0 times in 18k ticks across 3 worlds,
+    // while idle holds 8.6% of agent-ticks). Leadership is then a fact in the follow counts
+    // (this._fol, component state), never a role. Flag off, nothing here runs or writes.
+    const STATUS = !!(window.AGON_P || {}).status;
+    const stScore = (q) => { const w = q.work || {}; return 2 * (w.hunt || 0) + (w.gather || 0) + 1.5 * (w.build || 0) + (w.craft || 0) + (w.fish || 0) + (w.spearfish || 0) + 2 * (w.fire || 0) + 0.5 * (w.haul || 0); };
+    let STL = null; if (STATUS) { let bs = -1; for (const q of agents) { if (!q.alive || q.fac) continue; const v = stScore(q); if (v > bs) { bs = v; STL = q; } } }
     const store = { built: ((s.store || {}).built || []).slice(), shelterT: (s.store || {}).shelterT ?? null, water: (s.store || {}).water || 0, wallMat: (s.store || {}).wallMat || null, norms: (s.store || {}).norms || {}, mats: { ...((s.store || {}).mats || {}) }, food: (s.store || {}).food || 0, items: ((s.store || {}).items || []).slice(), known: ((s.store || {}).known || []).slice(), techs: ((s.store || {}).techs || []).slice(), insight: (s.store || {}).insight || 0, bad: (s.store || {}).bad || 0, spoiled: (s.store || {}).spoiled || 0, lots: ((s.store || {}).lots || []).map((l) => l.slice()), lk: (s.store || {}).lk || 'berry', know: { ...((s.store || {}).know || {}) }, forced: ((s.store || {}).forced || []).slice(), rec: { ...((s.store || {}).rec || {}) }, plots0: (s.store || {}).plots0, cult: (s.store || {}).cult };
     // AGON_P.bdbg: which of the four build-gate conditions actually stalls construction. Snapshot at
     // the top of the tick, before the agent loop mutates the queue or the stores. Off by default.
@@ -6263,6 +6272,13 @@ class Component extends DCLogic {
           const txt = A.thoughtLine(tkey, tctx);
           a.mind = (a.mind || []).concat({ t: tick, k: topI, text: txt, ic: A.thoughtIcons(tkey, tctx) }).slice(-8); a.lastTop = topI;
         }
+      }
+      // r54/M2 (status): a colonist with nothing to do drifts toward the colony's most
+      // accomplished member and loiters within 2 — people gravitate to competence. Only a pure
+      // idle tick is spent this way, and only when the leader is alive, distinct, and within 16.
+      if (STATUS && !a.fac && act === 'idle' && STL && STL !== a && STL.alive) {
+        const dL = cheb(a, STL);
+        if (dL > 2 && dL <= 16) { const res = moveTo(a, (x, y) => cheb({ x, y }, STL) <= 2); if (res === 'moved') { act = 'move'; const F = this._fol || (this._fol = {}); F[STL.id] = (F[STL.id] || 0) + 1; } }
       }
       // idle agonists glance around now and then; the face turns with them
       if ((act === 'idle' || act === 'rest') && r() < 0.07) { const GD = [[0, 1], [1, 0], [-1, 0], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]], gz = GD[Math.floor(r() * GD.length)]; a.face = gz; if (gz[0]) a.fx = gz[0]; }
