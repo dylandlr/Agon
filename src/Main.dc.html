@@ -4910,7 +4910,11 @@ class Component extends DCLogic {
     // archived. The M2b probe: raw adjacency is flat (every pair ~550 ticks, top ~2x mean), so
     // without the similarity term warmth cannot differentiate. Flag off, nothing runs or writes.
     const AFFIL = !!(window.AGON_P || {}).affil;
-    if (AFFIL) {
+    // r57/M3 (AGON_P.fission, scaffolding): fission reads the warmth graph, so this flag enables
+    // the r55 accrual WITHOUT the parked idle-drift (measured as a time tax). The split mechanic
+    // itself lands only if the M3 probe shows cold cuts actually occur.
+    const FISS = !!(window.AGON_P || {}).fission;
+    if (AFFIL || FISS) {
       const live = agents.filter((q) => q.alive && !q.fac);
       // similarity kernel v2: the mean-|diff| kernel compressed every pair to ~0.65 (8-dim
       // averaging), so homophily had no gradient and bonds didn't assort (smoke: simBonded ==
