@@ -19,10 +19,13 @@ everything else (924 dims) through ONE `nn.Dense(64)`. Inside those 924:
 
 D's claim is that the 532 swamp the 8. Four measurements, in order of how much they can settle:
 
-M1  INPUT ENERGY SHARE. Exact, not a hypothesis. For a Dense layer dL/dW = x (x) delta, so input
-    column j's gradient norm is |x_j| * ||delta||, and a block's share of ||dL/dW||^2 is its share
-    of sum_j x_j^2. Measured on real rollout observations this says exactly what fraction of
-    `feat_dense`'s weight update each block drives, for ANY loss and at any point in training.
+M1  INPUT ENERGY SHARE. For a Dense layer dL/dW = x (x) delta, so the gradient reaching the row of
+    W fed by input j has norm |x_j| * ||delta||, and ON ONE SAMPLE a block's share of ||dL/dW||_F^2
+    is exactly its share of sum_j x_j^2 -- for any loss, at any point in training, because
+    ||delta|| factors out. Over a DATASET that becomes an approximation: the reported share is
+    sum_{j in B} E[x_j^2] / sum_j E[x_j^2], which equals the true average share only if ||delta||^2
+    is uncorrelated with how x's energy is split between blocks. Treat it as the share for a
+    typical tick, not a theorem about the run.
 
 M2  LEAVE-ONE-BLOCK-OUT at the 64-d output. Zero a block, recompute relu(feat_dense(feats)), and
     report how much the activation moves. Non-analytic because of the relu, and it says whether the
@@ -246,8 +249,9 @@ print(f"\n{len(F)} alive agent-ticks from {len(np.unique(grp))} lifetimes "
       f"feats = {F.shape[1]} dims\n")
 
 # ------------------------------------------------------------------ M1: input energy share
-print("M1. share of feat_dense's weight gradient each block drives")
-print("    exact: dL/dW = x (x) delta, so a block's share of ||dL/dW||^2 is its share of sum_j E[x_j^2]")
+print("M1. share of feat_dense's weight gradient each block drives, for a typical tick")
+print("    dL/dW = x (x) delta, so per sample a block's share of ||dL/dW||_F^2 is its share of")
+print("    sum_j x_j^2 exactly; averaging over ticks assumes ||delta|| does not covary with the split")
 e = (F.astype(np.float64) ** 2).mean(0)
 tot = e.sum()
 print(f"    {'block':<28}{'dims':>6}{'share':>9}{'per-dim':>12}")
