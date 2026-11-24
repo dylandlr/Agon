@@ -419,6 +419,7 @@ body.agon-paused *{animation-play-state:paused !important}
         <div style="flex: 0 0 auto; display: flex; align-items: center; gap: 18px; padding: 14px 28px; border-bottom: 1px solid var(--border-strong); background: rgba(0,0,0,0.3)"><span style="font-size: 20px; font-weight: 800; letter-spacing: 0.12em; color: #ffd23f">GLOSSARY</span><div style="display: flex; gap: 4px; margin-left: 12px"><sc-for list="{{mm.gTabs}}" as="gt" hint-placeholder-count="3"><button onClick="{{gt.go}}" style="{{gt.style}}">{{gt.label}}</button></sc-for></div></div>
         <div style="flex: 1; min-height: 0; display: flex; gap: 20px; padding: 18px 28px 0">
           <div style="flex: 1; min-width: 0; overflow: auto; display: flex; flex-wrap: wrap; gap: 8px; align-content: flex-start; padding-bottom: 18px">
+            <sc-if value="{{mm.gd.isTech}}"><div style="width: 100%; padding: 8px; box-sizing: border-box; border-radius: 6px; background: rgba(0,0,0,0.25); border: 1px solid var(--border)"><div style="{{mm.gd.dagStyle}}"></div><div style="font-size: 11px; color: var(--ink-muted); padding: 6px 2px 0">{{mm.gd.dagLegend}}</div></div></sc-if>
             <sc-for list="{{mm.gFlora}}" as="gc" hint-placeholder-count="0"><button onClick="{{gc.pick}}" style="{{gc.style}}"><div style="flex: 1; display: flex; align-items: flex-end; justify-content: center"><div class="{{gc.cls}}" style="{{gc.spr}}"></div></div><span style="font-size: 12px; font-weight: 800">{{gc.name}}</span><span style="font-size: 10px; color: var(--ink-muted)">{{gc.sub}}</span></button></sc-for>
             <sc-for list="{{mm.gFauna}}" as="ga" hint-placeholder-count="0"><button onClick="{{ga.pick}}" style="{{ga.style}}"><div style="flex: 1; width: 100%; overflow: hidden; display: flex; align-items: flex-end; justify-content: center"><dc-import name="Animal" coat="" kind="{{ga.kind}}" v="{{ga.v}}" look="E" state="calm" size="{{ga.sz}}" girth="{{1}}" gait="" shadow="{{false}}" hint-size="74px,74px"></dc-import></div><span style="font-size: 12px; font-weight: 800">{{ga.name}}</span><span style="font-size: 10px; color: var(--ink-muted)">{{ga.sub}}</span></button></sc-for>
             <sc-for list="{{mm.gSea}}" as="gs" hint-placeholder-count="0"><button onClick="{{gs.pick}}" style="{{gs.style}}"><div style="flex: 1; display: flex; align-items: center; justify-content: center; border-radius: 4px; width: 100%; background: {{gs.bg}}"><div class="{{gs.cls}}" style="{{gs.spr}}"></div></div><span style="font-size: 12px; font-weight: 800">{{gs.name}}</span><span style="font-size: 10px; color: var(--ink-muted)">{{gs.sub}}</span></button></sc-for>
@@ -4470,6 +4471,30 @@ class Component extends DCLogic {
       const keys = items.map((q) => q.key), cur = keys.includes(sel) ? sel : keys[0]; gd.key = cur;
       v.gSea = items.map((q) => card(q.key, { name: q.name, sub: q.sub, bg: 'rgba(0,0,0,0.28)', cls: '', spr: q.sw(52), on: q.key === cur }));
       const C = items.find((q) => q.key === cur); gd.title = C.name; gd.sub = C.sub; gd.note = C.note; gd.swStyle = C.sw(160); gd.swCls = ''; gd.swBg = 'rgba(0,0,0,0.25)'; for (const [a, b] of C.lines) L(a, b);
+      // the full tech DAG as a drawn diagram: tiers as columns, prerequisite edges as rightward
+      // curves, this colony's known techs inked in ember. The glossary is the observer's codex,
+      // so it shows the whole tree; the in-game Knowledge panel (redesign Phase 3) stays fogged.
+      { const known = new Set(((this.state.store || {}).techs) || []);
+        const cols = [[], [], [], []];
+        for (const t of A.TECH) cols[t.tier].push(t);
+        const row = {}, pos = {};
+        cols.forEach((col, ci) => { col.sort((p, q) => { const rOf = (n) => n.req.length ? n.req.reduce((m, r) => m + (row[r] !== undefined ? row[r] : 6), 0) / n.req.length : 6; return rOf(p) - rOf(q) || p.label.localeCompare(q.label); });
+          col.forEach((t, i) => { row[t.key] = i; pos[t.key] = [18 + ci * 205, 40 + i * 46]; }); });
+        const H2 = 40 + Math.max(...cols.map((c) => c.length)) * 46 + 10, W2 = 18 + 4 * 205;
+        let sv = '';
+        for (const t of A.TECH) for (const r of t.req) { const a = pos[r], b = pos[t.key]; if (!a || !b) continue;
+          const dx = a[0] === b[0] ? 70 : 45, x1 = a[0] + 150, y1 = a[1] + 18, x2 = b[0], y2 = b[1] + 18;
+          sv += "<path d='M" + x1 + " " + y1 + " C" + (x1 + dx) + " " + y1 + " " + (x2 - dx) + " " + y2 + " " + x2 + " " + y2 + "' fill='none' stroke='" + (known.has(r) && known.has(t.key) ? 'rgba(216,164,59,0.55)' : 'rgba(181,164,140,0.26)') + "' stroke-width='1.6'/>"; }
+        const TN2 = ['First ideas', 'Craft', 'Practice', 'Mastery'];
+        cols.forEach((c, ci) => { sv += "<text x='" + (18 + ci * 205) + "' y='24' font-family='Georgia,serif' font-size='13' fill='#d8a43b' letter-spacing='2'>TIER " + ci + " · " + TN2[ci].toUpperCase() + "</text>"; });
+        for (const t of A.TECH) { const [x, y] = pos[t.key], on = known.has(t.key);
+          sv += "<rect x='" + x + "' y='" + y + "' width='150' height='36' rx='5' fill='" + (on ? 'rgba(216,164,59,0.16)' : 'rgba(0,0,0,0.35)') + "' stroke='" + (on ? '#d8a43b' : '#7a5c40') + "' stroke-width='1.3'/>" +
+            "<text x='" + (x + 10) + "' y='" + (y + 16) + "' font-family='system-ui,sans-serif' font-size='12' font-weight='700' fill='" + (on ? '#ece2cf' : '#b5a48c') + "'>" + t.label + "</text>" +
+            "<text x='" + (x + 10) + "' y='" + (y + 29) + "' font-family='system-ui,sans-serif' font-size='9' fill='" + (on ? 'rgba(236,226,207,0.75)' : 'rgba(181,164,140,0.7)') + "'>" + (t.req.length ? t.req.join(' + ') : 'starting idea') + " · " + t.cost + "</text>"; }
+        const svg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 " + W2 + " " + H2 + "'>" + sv + '</svg>';
+        gd.isTech = true;
+        gd.dagStyle = 'width: 100%; max-width: ' + W2 + 'px; aspect-ratio: ' + W2 + ' / ' + H2 + '; background: url("data:image/svg+xml,' + encodeURIComponent(svg) + '") top left / contain no-repeat';
+        gd.dagLegend = 'The whole tree, tiers left to right; lines flow from prerequisite to dependent. Ember = this colony knows it (' + [...known].filter((k) => A.techOf(k)).length + ' of ' + A.TECH.length + '). Number = insight to find.'; }
     }
     v.gd = gd;
   }

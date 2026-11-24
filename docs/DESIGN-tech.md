@@ -106,3 +106,38 @@ Decision gate: after the measurements, pick the mix with Dyl.
 3. EB1a shack-first (after TECHPAY so shack gates read the real economy)
 4. Loss/spread measurement round → decision gate → rust and/or teaching rounds
 5. Knowledge panel (redesign Phase 3) consumes paid/cost fill for its carved tokens
+
+## CREW — emergent build collaboration (designed r62c, implements after the BSOLO verdict)
+
+Dyl's requirement: others can join a project and speed it up — or slow it down when the
+teamwork is poor for believable reasons (personality clash) — through real agent
+relations, skills and interests. Relationship-gated, NOT tech-gated: cooperation is social
+reality, not a research unlock. (BSOLO's "one wall per agent" stays the primitive default;
+CREW is the layer on top of it.)
+
+Mechanics (flag `nocrew`, 24-world panel, chained on the then-current reference):
+- **Joining is the joiner's choice.** An agent taking the build goal may work a CLAIMED
+  segment instead of opening its own when: warmth toward the owner is positive (r55 relc),
+  no grudge between them (r57), and their work identity leans build (r54 stScore share) or
+  their industrious/gregarious dims favor company (PLEX p5/p1). No assignment, ever.
+- **Team rate is a pair property**: helper contribution × teamK, where teamK rises with
+  mutual warmth and build-xp complement, and FALLS with personality clash (opposed dims
+  where |Δpers| is large on hot-tempered/solitary axes) and any standing grudge — below
+  1.0 means the pair is SLOWER than the owner alone (tools in each other's way, arguments:
+  voiced friction lines, log beats).
+- **Bad teamwork feeds back**: a sustained sub-1.0 pairing decays warmth slightly and the
+  helper tends to leave (choice re-evaluated per tick) — crews that don't work dissolve
+  themselves. Good crews accrue the r55 adjacency warmth they already earn by standing
+  together, so working teams bond — emergent, measurable.
+- **Emergence measures for the panel**: do crews form along warmth lines more than chance
+  (permutation test on pair warmth at join moments)? do clash-pairs dissolve faster? wall
+  throughput and survival deltas; McNemar as always.
+
+## Glossary DAG (shipped r62c, render-only)
+
+The full tech DAG is drawn in the Glossary's Tech tab: tiers as columns (serif ember
+headers), prerequisite edges as rightward curves, each node carrying its reqs and insight
+cost, with the techs THIS colony knows inked in ember (count in the legend). The glossary
+is the observer's codex and shows the whole tree; the in-game Knowledge panel stays
+fogged. This diagram is the first concrete artifact of the Knowledge panel's visual
+language (carved tokens, ember = known) and will gain paid/cost fill when TECHPAY lands.

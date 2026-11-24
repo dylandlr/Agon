@@ -2354,3 +2354,16 @@ fission, treaty. Reference hashes: ab_treaty.json arm B.
   pending a measurement round (loss counters in panel, rust-as-economy-drain prototype,
   teaching with the social arc), decision gate after.
 - Not doing: per-person-only mastery, soft reqs, research-points UI, unflagged gate edits.
+
+## r62c — glossary tech DAG (shipped) + CREW collaboration design
+- Glossary Tech tab now opens with the full DAG drawn as a diagram: 4 tier columns,
+  prerequisite curves, per-node reqs + insight cost, ember = known by this colony
+  (verified: temperate s21 t2500 shows 12/33 lit). Render-only; detail cards unchanged.
+- CREW designed (DESIGN-tech.md): relationship-gated build collaboration — joining is the
+  joiner's choice (warmth+, no grudge, build identity/gregariousness), team rate rises
+  with warmth/skill complement and falls BELOW SOLO on clash/grudge pairs, bad pairings
+  decay warmth and dissolve. Implements as flag nocrew + panel AFTER the BSOLO verdict
+  (panel still running).
+- PROCESS SLIP, logged: rebuilt /tmp/ab while the BSOLO panel was reading it. No harm
+  this time (every post-launch edit was render-only, hashes unaffected) but the rule
+  exists for the general case — next time stage rebuilds until panels finish.
