@@ -4487,8 +4487,10 @@ class Component extends DCLogic {
           sv += "<path d='M" + x1 + " " + y1 + " C" + (x1 + dx) + " " + y1 + " " + (x2 - dx) + " " + y2 + " " + x2 + " " + y2 + "' fill='none' stroke='" + (known.has(r) && known.has(t.key) ? 'rgba(216,164,59,0.55)' : 'rgba(181,164,140,0.26)') + "' stroke-width='1.6'/>"; }
         const TN2 = ['First ideas', 'Craft', 'Practice', 'Mastery'];
         cols.forEach((c, ci) => { sv += "<text x='" + (18 + ci * 205) + "' y='24' font-family='Georgia,serif' font-size='13' fill='#d8a43b' letter-spacing='2'>TIER " + ci + " · " + TN2[ci].toUpperCase() + "</text>"; });
-        for (const t of A.TECH) { const [x, y] = pos[t.key], on = known.has(t.key);
-          sv += "<rect x='" + x + "' y='" + y + "' width='150' height='36' rx='5' fill='" + (on ? 'rgba(216,164,59,0.16)' : 'rgba(0,0,0,0.35)') + "' stroke='" + (on ? '#d8a43b' : '#7a5c40') + "' stroke-width='1.3'/>" +
+        const tp = ((this.state.store || {}).techProg) || {};
+        for (const t of A.TECH) { const [x, y] = pos[t.key], on = known.has(t.key), paid = !on && tp[t.key] ? Math.min(1, tp[t.key] / t.cost) : 0;
+          sv += "<rect x='" + x + "' y='" + y + "' width='150' height='36' rx='5' fill='" + (on ? 'rgba(216,164,59,0.16)' : 'rgba(0,0,0,0.35)') + "' stroke='" + (on ? '#d8a43b' : paid ? '#a8824f' : '#7a5c40') + "' stroke-width='1.3'/>" +
+            (paid ? "<rect x='" + (x + 2) + "' y='" + (y + 31) + "' width='" + Math.max(2, Math.round(146 * paid)) + "' height='3' rx='1.5' fill='#d8a43b' opacity='0.85'/>" : '') +
             "<text x='" + (x + 10) + "' y='" + (y + 16) + "' font-family='system-ui,sans-serif' font-size='12' font-weight='700' fill='" + (on ? '#ece2cf' : '#b5a48c') + "'>" + t.label + "</text>" +
             "<text x='" + (x + 10) + "' y='" + (y + 29) + "' font-family='system-ui,sans-serif' font-size='9' fill='" + (on ? 'rgba(236,226,207,0.75)' : 'rgba(181,164,140,0.7)') + "'>" + (t.req.length ? t.req.join(' + ') : 'starting idea') + " · " + t.cost + "</text>"; }
         const svg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 " + W2 + " " + H2 + "'>" + sv + '</svg>';
@@ -5018,6 +5020,12 @@ class Component extends DCLogic {
     const BUILDT = !(window.AGON_P || {}).nobuildt;
     const BUILDTICKS = { wattle: 4, timber: 6, stone: 9 }; // ticks of work per segment, by wall material
     const BSOLO = BUILDT && !(window.AGON_P || {}).nobsolo; // r62: one segment per agent at a time
+    // TECHPAY (r63): a technology whose patterns are met is REACHABLE, not yet known — the
+    // colony's insight pool pays its cost over derive passes (cheapest first), and the tech
+    // fires when paid. Insight gains a real engine: +2 on every colony-first discovery.
+    // AGON_P.notechpay opts out (instant fire on pattern match, no new accruals, no techProg).
+    const TECHPAY = !(window.AGON_P || {}).notechpay;
+    const PAYRATE = 0.5; // insight paid per derive pass (every 4 ticks) into one reachable tech
     const PLEX = [['timid', 'brave'], ['solitary', 'gregarious'], ['incurious', 'curious'], ['hot-tempered', 'patient'], ['gentle', 'fierce'], ['idle', 'industrious'], ['callous', 'kind'], ['generous', 'greedy']];
     const epithet = (q) => { const p = q.pers || []; const dv = p.map((v, i) => [Math.abs(v - 0.5), i, v]).sort((x, y) => y[0] - x[0]).slice(0, 2).filter((e) => e[0] > 0.15); if (!dv.length) return 'an even-tempered soul'; const w = dv.map((e) => PLEX[e[1]][e[2] > 0.5 ? 1 : 0]); return (/^[aeiou]/.test(w[0]) ? 'an ' : 'a ') + w.join(', ') + ' soul'; };
     const store = { built: ((s.store || {}).built || []).slice(), shelterT: (s.store || {}).shelterT ?? null, water: (s.store || {}).water || 0, wallMat: (s.store || {}).wallMat || null, norms: (s.store || {}).norms || {}, mats: { ...((s.store || {}).mats || {}) }, food: (s.store || {}).food || 0, items: ((s.store || {}).items || []).slice(), known: ((s.store || {}).known || []).slice(), techs: ((s.store || {}).techs || []).slice(), insight: (s.store || {}).insight || 0, bad: (s.store || {}).bad || 0, spoiled: (s.store || {}).spoiled || 0, lots: ((s.store || {}).lots || []).map((l) => l.slice()), lk: (s.store || {}).lk || 'berry', know: { ...((s.store || {}).know || {}) }, forced: ((s.store || {}).forced || []).slice(), rec: { ...((s.store || {}).rec || {}) }, plots0: (s.store || {}).plots0, cult: (s.store || {}).cult,
@@ -5026,7 +5034,8 @@ class Component extends DCLogic {
       // One level deep is enough (values are numbers); absent stays absent so the nobuildt arm
       // serializes identically.
       bprog: (s.store || {}).bprog ? { ...(s.store || {}).bprog } : undefined,
-      bown: (s.store || {}).bown ? { ...(s.store || {}).bown } : undefined };
+      bown: (s.store || {}).bown ? { ...(s.store || {}).bown } : undefined,
+      techProg: (s.store || {}).techProg ? { ...(s.store || {}).techProg } : undefined };
     // AGON_P.bdbg: which of the four build-gate conditions actually stalls construction. Snapshot at
     // the top of the tick, before the agent loop mutates the queue or the stores. Off by default.
     if ((window.AGON_P || {}).bdbg) {
@@ -5064,9 +5073,31 @@ class Component extends DCLogic {
           : (wm !== cur && ['wattle', 'timber', 'stone'].indexOf(wm) > ['wattle', 'timber', 'stone'].indexOf(cur));
         if (store.techs.includes('shelter') && take) { store.wallMat = wm; lorePend.push({ t: tick, text: 'The walls are rebuilt in ' + this.E.WALLMATS[wm].label.toLowerCase(), kind: 'info' }); } }
       const nt = A.lore.derive(uni, ev, (window.AGON_P || {}).forceMark ? [...store.forced, 'markmaking'] : store.forced), was = store.techs;
-      for (const k of nt) if (!was.includes(k)) lorePend.push({ t: tick, text: 'The colony now knows ' + A.techOf(k).label.toLowerCase() + ': ' + A.techOf(k).text, kind: 'info' });
-      for (const k of was) if (!nt.includes(k)) lorePend.push({ t: tick, text: 'The knowledge of ' + A.techOf(k).label.toLowerCase() + ' is lost: no one alive remembers how.', kind: 'warn' });
-      store.techs = nt;
+      if (!TECHPAY) {
+        for (const k of nt) if (!was.includes(k)) lorePend.push({ t: tick, text: 'The colony now knows ' + A.techOf(k).label.toLowerCase() + ': ' + A.techOf(k).text, kind: 'info' });
+        for (const k of was) if (!nt.includes(k)) lorePend.push({ t: tick, text: 'The knowledge of ' + A.techOf(k).label.toLowerCase() + ' is lost: no one alive remembers how.', kind: 'warn' });
+        store.techs = nt;
+      } else {
+        // reachable, then paid: patterns met (nt) makes a tech reachable; forced techs and
+        // already-known techs pass straight through; the rest wait on the insight pool.
+        // Progress persists in store.techProg while a tech stays reachable-unpaid, pauses if
+        // its patterns decay, and is lost with the tech on knowledge loss (full re-pay —
+        // the rust investigation will revisit that harshness).
+        const tp = store.techProg || {}, keep = [], newly = [];
+        for (const k of nt) { if (was.includes(k)) keep.push(k); else if (store.forced.includes(k)) { keep.push(k); newly.push(k); } }
+        const reach = nt.filter((k) => !was.includes(k) && !store.forced.includes(k))
+          .sort((p, q) => A.techOf(p).cost - A.techOf(q).cost || (p < q ? -1 : 1));
+        let budget = PAYRATE; // one pool, cheapest reachable tech drinks first
+        for (const k of reach) { const c = A.techOf(k).cost; tp[k] = tp[k] || 0;
+          const pay = Math.min(store.insight || 0, c - tp[k], budget);
+          if (pay > 0) { tp[k] += pay; store.insight -= pay; budget -= pay; }
+          if (tp[k] >= c - 1e-9) { delete tp[k]; keep.push(k); newly.push(k); } }
+        for (const k of Object.keys(tp)) if (keep.includes(k)) delete tp[k];
+        for (const k of newly) lorePend.push({ t: tick, text: 'The colony now knows ' + A.techOf(k).label.toLowerCase() + ': ' + A.techOf(k).text, kind: 'info' });
+        for (const k of was) if (!nt.includes(k)) { delete tp[k]; lorePend.push({ t: tick, text: 'The knowledge of ' + A.techOf(k).label.toLowerCase() + ' is lost: no one alive remembers how.', kind: 'warn' }); }
+        store.techs = keep;
+        if (Object.keys(tp).length) store.techProg = tp; else delete store.techProg;
+      }
     }
     if (s.disc === 'emergent' && store.techs && store.techs.includes('shelter') && store.shelterT == null) store.shelterT = tick; this.E.applyCamp({ disc: s.disc, store, tick, ruin: this.ruinHere() });
     // founders' kit (experiment switch AGON_P.startCloth = tick-0 hide cloak for each adult): a naked founder dropped at -30 C dies in a day, which the tests cannot tell apart from a failure of the colonists' own decisions
@@ -5164,7 +5195,7 @@ class Component extends DCLogic {
       const ctx = { id: a.id, tick, know: a.know, colony: store.know, xp: a.xp, front: A.lore.front(techs, store.know, null), need: { food: a.sat < 0.5, cold: (a.temp || 0) < -0.2, hurt: (a.inj || 0) > 0.2 }, intel: (a.g.intel || 1) * iK, curio: a.pers[2], bench: atBench, foc: ((window.AGON_P || {}).foc ?? 'gate') && ((window.AGON_P || {}).foc ?? 'gate') !== 'gate' ? focusOf(a) : null };
       const sg = A.lore.pick(cands, ctx, r), x = a.xp[sg] ? { ...a.xp[sg] } : { n: 0 }; x.n++; a.xp[sg] = x; a.trained += 3; if ((window.AGON_P || {}).xcDbg) { const XC = (window.__XC = window.__XC || {}); const cl = A.lore.cls(sg); (XC[a.id] = XC[a.id] || {})[cl] = ((XC[a.id] || {})[cl] || 0) + 1; }
       if (a.know[sg] || r() >= A.lore.odds(sg, ctx)) return;
-      a.know[sg] = tick; a.bub = 'craft'; a.bubT = 3; const first = !store.know[sg]; if (first) store.know[sg] = { by: a.id, t: tick };
+      a.know[sg] = tick; a.bub = 'craft'; a.bubT = 3; const first = !store.know[sg]; if (first) { store.know[sg] = { by: a.id, t: tick }; if (TECHPAY) store.insight = (store.insight || 0) + 2; } else if (TECHPAY) store.insight = (store.insight || 0) + 0.5; // independent rediscovery keeps the pool alive once the easy firsts dry up
       log.push({ t: tick, text: a.id + (first ? ' discovers: ' : ' works out for themself: ') + A.lore.label(sg).toLowerCase(), kind: 'info' });
       for (const y of A.lore.yields(sg)) { if (y[0] === 'berries') a.inv.berries = Math.min(9, a.inv.berries + 1); else if (A.MATS[y[0]]) a.mats[y[0]] = (a.mats[y[0]] || 0) + 1; }
       for (const q of agents) if (q !== a && q.alive && !q.fac && !q.know[sg] && cheb(a, q) <= 3 && r() < 0.15 * (q.g.intel || 1) * iK) { q.know[sg] = tick; log.push({ t: tick, text: q.id + ' watches ' + a.id + ' and copies it', kind: 'info' }); }

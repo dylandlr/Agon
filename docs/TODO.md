@@ -2367,3 +2367,28 @@ fission, treaty. Reference hashes: ab_treaty.json arm B.
 - PROCESS SLIP, logged: rebuilt /tmp/ab while the BSOLO panel was reading it. No harm
   this time (every post-launch edit was render-only, hashes unaffected) but the rule
   exists for the general case — next time stage rebuilds until panels finish.
+
+## r62 verdict — BSOLO SHIPS (with a named watch item for CREW)
+- Arm A (nobsolo) 24/24 byte-MATCH vs ab_buildt2 B; zero errors.
+- No significant survival harm: alive -0.08 (t=-0.13), peak +-0.00, McNemar p=0.5.
+  Intended cost: walls -6.9 (t=-2.90)*, built -13.4 (t=-3.20)* (no segment-swarming).
+- WATCH: both extinction discordants are B-kills (forest21, jungle21) and survived leans
+  -213 (ns, MDE 437). Not significant, but the signs lean negative where BUILDT's leaned
+  positive. CREW's panel must explicitly test whether warm-pair sharing claws back wall
+  throughput and flips this lean. Shipped on explicit design requirement (Dyl: one wall
+  per agent) + no significant harm. NEW REFERENCE: ab_bsolo.json arm B (archived in
+  docs/panels/).
+
+## r63 — TECHPAY (reachable-then-paid tech economy; flag notechpay; panel running)
+- Implemented per DESIGN-tech.md: patterns (lore derive) make a tech REACHABLE; the
+  colony insight pool pays its cost (PAYRATE 0.5/derive pass, cheapest reachable first);
+  fires when paid; knowledge loss unchanged (lost techs re-pay in full — rust round will
+  revisit). store.techProg persists progress (absent when flag off; carried through the
+  per-tick store rebuild — the bprog lesson applied at write time, not re-learned).
+- Insight engine (gated by flag): +2 colony-first discovery, +0.5 independent rediscovery
+  (added after savanna smoke showed pool flatline -> near-stall; post-fix savanna pays at
+  subsistence and techs keep landing: 12 by t9000, shelter 2040; temperate 17 with surplus
+  pooling once pattern-gating binds -> biome-paced arcs, no deadlock).
+- Double-off (nobsolo+notechpay) byte-MATCH vs ab_buildt2 B; single-off chains to ab_bsolo
+  B via the panel's arm A. Glossary DAG now draws paid/cost fill bars on reachable nodes.
+- Panel ab_techpay.json pending -> verdict next. CREW implements after.
