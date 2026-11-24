@@ -4851,6 +4851,13 @@ class Component extends DCLogic {
     // past comfort, as fire does. The cold bootstrap is untouched: below comfort the cap never
     // binds, so cold-world warmth is bit-identical. Off, everything reduces to the shipped model.
     const SHADE = !(window.AGON_P || {}).noshade;   // default ON since r48 (alive +1.83, t=3.48); AGON_P.noshade is the opt-out baseline
+    // r53 (AGON_P.cool, opt-in): cooling off at the water. The r53 probe put 76-93% of hot
+    // agent-ticks (temp>0.7) AT CAMP, day and night alike, in summer waves — not on forage walks —
+    // and water gave no thermal relief at all. Two halves, one mechanic: wading (standing
+    // water-adjacent) damps toward comfort at cave strength (0.5), and a dangerously hot colonist
+    // (temp>0.8, hysteresis to 0.4) goes to the nearest water and stays until cooled. Flag off,
+    // nothing runs or writes.
+    const COOL = !!(window.AGON_P || {}).cool;
     // M1 experiment (AGON_P.scout): the jungle extinctions are an exploration failure, not a food
     // shortage — fog knowledge reaches 7 tiles, wander staggers 1 tile, so a colony eats its known
     // radius bare and starves beside an unknown full map (M1a probe: near ring 0.0 by t=3000, far
@@ -5769,12 +5776,13 @@ class Component extends DCLogic {
           kw = (INSDAMP && !a.fac && rcov) ? (covAt(a.x, a.y) || { wall: 0 }).wall * ((REALINS ? REALINS[store.wallMat || 'wattle'] : this.E.WALLMATS[store.wallMat || 'wattle'].ins) / 40) : 0,
           // the flag-off arm keeps the r42 expression verbatim: float multiplication is not
           // associative, so even an algebraically equal regrouping would break byte-exact inertness
-          eff = (INSDAMP || (SHADE && !a.fac)) ? eff0 + (22 - eff0) * Math.min(0.85, 0.3 * rfC + kw + ((SHADE && !a.fac && terAt(a.x, a.y) >= 6) ? 0.5 : 0)) : eff0 + (22 - eff0) * 0.3 * rfC;
+          eff = (INSDAMP || (SHADE && !a.fac)) ? eff0 + (22 - eff0) * Math.min(0.85, 0.3 * rfC + kw + ((SHADE && !a.fac && terAt(a.x, a.y) >= 6) ? 0.5 : 0) + ((COOL && !a.fac && waterAdj(a.x, a.y)) ? 0.5 : 0)) : eff0 + (22 - eff0) * 0.3 * rfC;
         const coldGap = Math.max(0, 10 - eff) / (0.5 + 0.5 * (a.g.insulation + gearIns(a))), heatGap = Math.max(0, eff - 28);
         const tgt = Math.max(-1, Math.min(1, (heatGap - coldGap) / 10));
         a.temp = (a.temp || 0) + (tgt - (a.temp || 0)) * 0.15;
         if (a.temp < -0.7) { a.hypo = Math.min(1, (a.hypo || 0) + 0.006); a.stress = Math.min(1, a.stress + 0.01); } else if (a.temp > -0.5 && a.hypo > 0) a.hypo = Math.max(0, a.hypo - 0.012);
         if (a.temp > 0.7) { a.hyd -= 0.004; a.heat = Math.min(1, (a.heat || 0) + 0.004); } else if (a.temp < 0.5 && a.heat > 0) a.heat = Math.max(0, a.heat - 0.01);
+        if (COOL && a.coolT && a.temp < 0.4) delete a.coolT;   // r53: cooled off — back to work
         // melanin shields from strong sun: pale skin burns outdoors by day when it is hot (dark skin barely does)
         if (outd && !night && heatGap > 0 && a.ge && r() < 0.25) harm(a, 0.0012 * Math.min(heatGap, 12) * Math.pow(1 - A.skinOf(a.ge), 2), 'burn', 'sun');
       }
@@ -5940,6 +5948,15 @@ class Component extends DCLogic {
       else if (shelterNeed) { if (a.slpM || a.ene < 0.3) { act = 'sleep'; a.ene = Math.min(1, a.ene + 0.06); if (a.bub !== 'sleep') { a.bub = 'sleep'; a.bubT = 4; } } else { act = 'shelter'; a.ene = Math.min(1, a.ene + 0.01); } } // sheltering from the weather is also when the tired sleep
       // freezing colonists with food and water in hand warm up at the hearth (or a cave or floor) before carrying on with work
       else if (!a.fac && a.inv.berries > 0 && a.sat < 0.45 && !(a.pkT > tick)) { packEat(a); act = 'eat'; a.bub = 'eat'; a.bubT = 2; log.push({ t: tick, text: a.id + ' eats from the pack', kind: 'info' }); } // food in hand comes before every errand
+      // r53 (cool): dangerously hot colonists go to the water and cool off in it before anything
+      // else — including sleep: most heat deaths in the probe were at camp, several asleep. Enter
+      // at temp>0.8, stay until 0.4 (hysteresis, so no work/wade thrash); wading also refills the
+      // skin. Guards: water must exist, and the truly starving eat first.
+      else if (COOL && !a.fac && this.E.waterN > 0 && a.sat > 0.15 && (a.temp > 0.8 || (a.coolT && a.temp > 0.4))) {
+        if (!a.coolT) { a.coolT = 1; if (!(a.coolLog > tick - 100)) { a.coolLog = tick; log.push({ t: tick, text: a.id + ' is overheating and makes for the water', kind: 'warn' }); } }
+        if (waterAdj(a.x, a.y)) { if (a.hyd < 0.8) { a.hyd = Math.min(1, a.hyd + 0.5); a.inv.water = 1; } act = 'shelter'; a.ene = Math.min(1, a.ene + 0.01); a.bub = 'drink'; a.bubT = 2; }
+        else { const res = moveTo(a, (x, y) => waterAdj(x, y)); act = res === 'moved' ? 'move' : 'idle'; }
+      }
       else if (!a.fac && a.temp < -0.5 && !shelt(a.x, a.y) && terAt(a.x, a.y) < 6 && cheb(a, { x: CAMPC[0], y: CAMPC[1] }) > 8 && !(s.tents || []).some((q) => q.t > tick && cheb(a, q) <= 1) && (a.mats.hide || 0) + (a.mats.fur || 0) >= 2 && a.ene > 0.02) {
         // cold, far from home, with skins on their back: drape them over branches as a windbreak and sit it out behind it. Nothing has to be known for this; anyone who has carried a hide in the wind thinks of it
         const nh = Math.min(2, a.mats.hide || 0); a.mats.hide = (a.mats.hide || 0) - nh; if (nh < 2) a.mats.fur = (a.mats.fur || 0) - (2 - nh);
