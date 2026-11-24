@@ -143,6 +143,7 @@ body.agon-paused *{animation-play-state:paused !important}
     <div style="position: absolute; left: 0; top: 0; width: var(--ww); height: var(--wh); z-index: 62; pointer-events: none">
       <sc-for list="{{flies}}" as="f" hint-placeholder-count="3"><div style="{{f.wrap}}"><div style="{{f.move}}"><div class="{{f.cls}}" style="{{f.flap}}"></div></div></div></sc-for>
       <sc-for list="{{glows}}" as="g" hint-placeholder-count="3"><div style="{{g.wrap}}"><div style="{{g.dot}}"></div></div></sc-for>
+      <sc-for list="{{bsites}}" as="q" hint-placeholder-count="0"><div style="{{q.style}}"><div style="{{q.fill}}"></div></div></sc-for>
       <sc-for list="{{pawns}}" as="a" hint-placeholder-count="4">
         <div style="{{a.uiWrap}}">
           <div style="{{a.nameStyle}}">{{a.nameLabel}}</div>
@@ -348,7 +349,7 @@ body.agon-paused *{animation-play-state:paused !important}
   <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; padding: 6px; border-radius: 8px; background: rgba(48,35,27,0.92); border: 1px solid var(--border); max-width: 100%; box-sizing: border-box; pointer-events: auto">
     <sc-for list="{{bar}}" as="b" hint-placeholder-count="12">
       <button aria-label="{{b.label}}" aria-pressed="{{b.pressed}}" onClick="{{b.select}}" style="{{b.style}}">
-        <dc-import name="Pawn" strength="{{b.g.strength}}" a0="{{b.ap0}}" a1="{{b.ap1}}" a2="{{b.ap2}}" size="{{34}}" hint-size="34px,34px"></dc-import>
+        <dc-import name="Pawn" ge="{{b.p.ge}}" sx="{{b.p.sx}}" phy="{{b.p.phy}}" muscle="{{b.p.muscle}}" stamina="{{b.p.stamina}}" frame="{{b.p.frame}}" fat="{{b.p.fat}}" strength="{{b.p.strength}}" shadow="{{false}}" build="{{b.p.build}}" grow="{{b.p.grow}}" old="{{b.p.old}}" a0="{{b.p.a0}}" a1="{{b.p.a1}}" a2="{{b.p.a2}}" expression="{{b.p.expr}}" look="S" wa="{{b.wa}}" wc="{{b.wc}}" ww="{{b.ww}}" size="{{34}}" hint-size="34px,34px"></dc-import>
         <div style="display: flex; gap: 2px; margin-top: 2px">
           <div style="{{b.p1}}"></div><div style="{{b.p2}}"></div><div style="{{b.p3}}"></div>
         </div>
@@ -4980,6 +4981,14 @@ class Component extends DCLogic {
     // as a requested feature past the kill gate, not a measured win). AGON_P.nopers2 opts out:
     // with it set, nothing here runs or writes.
     const PERS2 = !(window.AGON_P || {}).nopers2;
+    // BUILDT (r60): construction takes time. A wall segment is no longer conjured in the tick a
+    // builder stands next to it: materials are committed when work starts, progress accrues per
+    // adjacent builder-tick (several builders can share a segment), and the wall exists only at
+    // completion. Progress lives in store.bprog { "x,y": 0..1 } ONLY while a segment is underway
+    // (deleted on completion), so with the flag off the store serialization is untouched.
+    // AGON_P.nobuildt opts out: with it set, nothing here runs or writes.
+    const BUILDT = !(window.AGON_P || {}).nobuildt;
+    const BUILDTICKS = { wattle: 4, timber: 6, stone: 9 }; // ticks of work per segment, by wall material
     const PLEX = [['timid', 'brave'], ['solitary', 'gregarious'], ['incurious', 'curious'], ['hot-tempered', 'patient'], ['gentle', 'fierce'], ['idle', 'industrious'], ['callous', 'kind'], ['generous', 'greedy']];
     const epithet = (q) => { const p = q.pers || []; const dv = p.map((v, i) => [Math.abs(v - 0.5), i, v]).sort((x, y) => y[0] - x[0]).slice(0, 2).filter((e) => e[0] > 0.15); if (!dv.length) return 'an even-tempered soul'; const w = dv.map((e) => PLEX[e[1]][e[2] > 0.5 ? 1 : 0]); return (/^[aeiou]/.test(w[0]) ? 'an ' : 'a ') + w.join(', ') + ' soul'; };
     const store = { built: ((s.store || {}).built || []).slice(), shelterT: (s.store || {}).shelterT ?? null, water: (s.store || {}).water || 0, wallMat: (s.store || {}).wallMat || null, norms: (s.store || {}).norms || {}, mats: { ...((s.store || {}).mats || {}) }, food: (s.store || {}).food || 0, items: ((s.store || {}).items || []).slice(), known: ((s.store || {}).known || []).slice(), techs: ((s.store || {}).techs || []).slice(), insight: (s.store || {}).insight || 0, bad: (s.store || {}).bad || 0, spoiled: (s.store || {}).spoiled || 0, lots: ((s.store || {}).lots || []).map((l) => l.slice()), lk: (s.store || {}).lk || 'berry', know: { ...((s.store || {}).know || {}) }, forced: ((s.store || {}).forced || []).slice(), rec: { ...((s.store || {}).rec || {}) }, plots0: (s.store || {}).plots0, cult: (s.store || {}).cult };
@@ -6216,15 +6225,39 @@ class Component extends DCLogic {
       } else if (G === 'build' && !a.fac && BUILDQ.length) {
         if (window.__BS) window.__BS.chose = (window.__BS.chose || 0) + 1;
         const mk = BUILDMAT[store.wallMat || 'wattle'];
-        const near = BUILDQ.map((k) => { const [x, y] = k.split(',').map(Number); return { k, x, y, d: cheb(a, { x, y }) }; }).sort((p, q) => p.d - q.d)[0];
-        if (near && near.d <= 1 && (store.mats[mk] || 0) > BUILDKEEP) {
-          store.mats[mk] -= 1; BUILTS.add(near.k); builtAdded = true;
-          const qi = BUILDQ.indexOf(near.k); if (qi >= 0) BUILDQ.splice(qi, 1);
-          a.work.build = (a.work.build || 0) + 1; a.rw = (a.rw || 0) + 0.3;
-          if (window.__BS) window.__BS.acts++;
-          act = 'build'; a.bub = 'craft'; a.bubT = 2;
-        } else if (near) { const res = moveTo(a, (x, y) => cheb({ x, y }, near) <= 1); act = res === 'moved' ? 'move' : 'idle'; }
-        else act = 'idle';
+        if (!BUILDT) {
+          // legacy: a segment appears in the tick a builder stands beside it
+          const near = BUILDQ.map((k) => { const [x, y] = k.split(',').map(Number); return { k, x, y, d: cheb(a, { x, y }) }; }).sort((p, q) => p.d - q.d)[0];
+          if (near && near.d <= 1 && (store.mats[mk] || 0) > BUILDKEEP) {
+            store.mats[mk] -= 1; BUILTS.add(near.k); builtAdded = true;
+            const qi = BUILDQ.indexOf(near.k); if (qi >= 0) BUILDQ.splice(qi, 1);
+            a.work.build = (a.work.build || 0) + 1; a.rw = (a.rw || 0) + 0.3;
+            if (window.__BS) window.__BS.acts++;
+            act = 'build'; a.bub = 'craft'; a.bubT = 2;
+          } else if (near) { const res = moveTo(a, (x, y) => cheb({ x, y }, near) <= 1); act = res === 'moved' ? 'move' : 'idle'; }
+          else act = 'idle';
+        } else {
+          // BUILDT: construction takes time. Materials commit when work starts; progress accrues
+          // per adjacent builder-tick; the segment exists only when the work is done.
+          const bp = store.bprog || (store.bprog = {});
+          for (const k in bp) if (!BUILDQ.includes(k)) delete bp[k]; // camp plan moved on: drop orphans
+          const near = BUILDQ.map((k) => { const [x, y] = k.split(',').map(Number); return { k, x, y, d: cheb(a, { x, y }), st: bp[k] !== undefined }; })
+            .sort((p, q) => (q.st ? 1 : 0) - (p.st ? 1 : 0) || p.d - q.d)[0]; // finish started work first, then nearest
+          if (near && near.d <= 1 && (near.st || (store.mats[mk] || 0) > BUILDKEEP)) {
+            if (!near.st) { store.mats[mk] -= 1; bp[near.k] = 0; }
+            bp[near.k] += 1 / (BUILDTICKS[store.wallMat || 'wattle'] || 6);
+            if (bp[near.k] >= 1 - 1e-9) {
+              delete bp[near.k]; if (!Object.keys(bp).length) delete store.bprog;
+              BUILTS.add(near.k); builtAdded = true;
+              const qi = BUILDQ.indexOf(near.k); if (qi >= 0) BUILDQ.splice(qi, 1);
+              a.work.build = (a.work.build || 0) + 1; a.rw = (a.rw || 0) + 0.3;
+              if (window.__BS) window.__BS.acts++;
+            }
+            act = 'build'; a.bub = 'craft'; a.bubT = 2;
+          } else if (near) { const res = moveTo(a, (x, y) => cheb({ x, y }, near) <= 1); act = res === 'moved' ? 'move' : 'idle'; }
+          else act = 'idle';
+          if (!Object.keys(bp).length && store.bprog) { /* keep store clean when nothing is underway */ if (!Object.keys(store.bprog).length) delete store.bprog; }
+        }
       } else if (G === 'haul' && !a.fac && (a.carry || carc.length)) {
         if (!a.carry) {
           const hi = carc.findIndex((q) => q.x === a.x && q.y === a.y);
@@ -7387,6 +7420,13 @@ class Component extends DCLogic {
       onWorldClick: (e) => { if (this.state.armed) { const q0 = evPt(e); if (q0) giveOrder(this.state.sel, { goal: 'goto', x: Math.max(0, Math.min(W - 1, Math.floor(q0[0] / TS))), y: Math.max(0, Math.min(H - 1, Math.floor(q0[1] / TS))) }); return; } if (this._dragged) { this._dragged = false; return; } if (this.state.msel && this.state.msel.length) this.setState({ msel: [] }); if (this.state.inspect === false) return; const q = evPt(e); if (!q) return; const t = hitTest(this.state, q[0], q[1]); if (t.key === this.state.pin) { this.setState({ pin: null }); return; } const patch = { pin: t.key }; if (t.kind === 'pawn') patch.sel = t.idx; this.setState(patch); },
       tiles, props: SCENERY.filter((o) => (!o.tk || !burntSet.has(o.tk)) && (!o.grp || E0.CAMPON[o.grp]) && (!o.mat || o.mat === wallMatNow)).concat(RIVAL_PROPS, bushes, plotProps, carcProps, beds, covers, doorsP, wellP, tallyP, tentProps, fireProps, shelfIcons).filter(inV).map((o) => o.cls === undefined ? { ...o, cls: '' } : (season !== 1 && o.cls.startsWith('t-') && !o.cls.startsWith('t-dead') && (season !== 2 || !o.cls.startsWith('t-pine')) && (season !== 0 || !o.cls.startsWith('t-pine')) ? { ...o, cls: o.cls + ' q' + season } : o)), embers: EMBERS,
       birds, flies: s.xray ? [] : flies, glows: s.xray ? [] : glows, fish, seaAn, seaPk, seaFl, ripples, ambStyle,
+      // construction sites: segments with committed materials and work underway (store.bprog).
+      // Dashed frame with a fill that rises with progress, in the wall material's tone.
+      bsites: (() => { const bp = (s.store || {}).bprog; if (!bp) return []; const wm = (s.store || {}).wallMat || 'wattle', wc = { wattle: '#9b8a66', timber: '#8a6a46', stone: '#8d8578' }[wm] || '#9b8a66'; const out = [];
+        for (const k in bp) { const [x, y] = k.split(',').map(Number), pr = Math.max(0, Math.min(1, bp[k]));
+          out.push({ style: 'position: absolute; left: ' + (x * TS) + 'px; top: ' + (y * TS) + 'px; width: ' + TS + 'px; height: ' + TS + 'px; box-sizing: border-box; border: 2px dashed rgba(233,220,200,0.6); background: rgba(0,0,0,0.12); z-index: ' + ((y + 1) * TS - 2) + '; pointer-events: none; display: flex; align-items: flex-end',
+            fill: 'width: 100%; height: ' + Math.round(pr * 100) + '%; background: ' + wc + '; opacity: 0.65; border-top: 2px solid rgba(28,17,11,0.5); transition: height 300ms linear' }); }
+        return out; })(),
       fireGlow: E0.CAMPON.fire ? ring(130, 0.05, LM.darkness, ms, false) : 'display: none', fireGlow2: E0.CAMPON.fire ? ring(70, 0.07, LM.darkness, ms, true) : 'display: none',
       shadows: !this.optGet('shadows', true) ? [] : SHADOWS.filter((o) => !o.grp || E0.CAMPON[o.grp]).concat(entShadows, s.bushes.map((b) => ({ style: shapeSt(bushBox(b).sh) }))),
       mtnShadowStyle: mtnShadowStyle,
@@ -7419,7 +7459,7 @@ class Component extends DCLogic {
         }
         return this._rmVal;
       })(),
-      bar: s.agents.map((a, i) => [a, i]).filter(([a]) => !a.fac).map(([a, i]) => ({ g: a.g, ap0: a.ap[0], ap1: a.ap[1], ap2: a.ap[2], label: 'Select ' + a.id, pressed: i === s.sel || (s.msel || []).includes(i), select: () => this.setState({ sel: i, msel: [] }),
+      bar: s.agents.map((a, i) => [a, i]).filter(([a]) => !a.fac).map(([a, i]) => ({ g: a.g, p: this.pawnProps(a), wa: a.alive ? A.wornKey(a.gear && a.gear.armor) : '', wc: a.alive ? A.wornKey(a.gear && a.gear.clothing) : '', ww: a.alive ? A.wornKey(a.gear && a.gear.weapon) : '', label: 'Select ' + a.id, pressed: i === s.sel || (s.msel || []).includes(i), select: () => this.setState({ sel: i, msel: [] }),
         style: 'width: 44px; min-height: 52px; padding: 4px 0 4px; display: flex; flex-direction: column; align-items: center; border-radius: 4px; background: ' + (i === s.sel ? 'var(--surface-raised)' : 'transparent') + '; border: 1px solid ' + (i === s.sel ? 'var(--border-strong)' : 'transparent') + '; opacity: ' + (a.alive ? 1 : 0.4),
         p1: 'width: 9px; height: 3px; background: ' + (a.sat < 0.3 ? '#e08a78' : '#d4c63c'), p2: 'width: 9px; height: 3px; background: ' + (a.hyd < 0.3 ? '#e08a78' : '#7cacdf'), p3: 'width: 9px; height: 3px; background: ' + (a.hea < 0.5 ? '#e08a78' : '#7fbf8e') })),
       calText: 'Year ' + CAL.year + ' · ' + SEASONS[CAL.season] + ' ' + CAL.sday, calLeft: (CAL.left === 0 ? 'last day of ' : CAL.left + ' days to ') + (CAL.left === 0 ? SEASONS[CAL.season].toLowerCase() : SEASONS[(CAL.season + 1) % 4].toLowerCase()), calBar: 'height: 100%; width: ' + (CAL.frac * 100).toFixed(1) + '%; background: ' + ['#8ac45a', '#e6c04a', '#d9803a', '#9ec8e8'][CAL.season], day: Math.floor(s.tick / 50) + 1, hour: String(Math.floor(hr)).padStart(2, '0') + ':' + String(Math.floor((hr % 1) * 60)).padStart(2, '0'),

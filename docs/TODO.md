@@ -2223,3 +2223,29 @@ fission, treaty. Reference hashes: ab_treaty.json arm B.
   (legibility matrix, observer task tests w/ <=3-clicks/<=20s targets), phases 0-4.
 - Queued sim round surfaced: build DURATION (walls appear in 1 tick — root cause of
   construction reading broken) -> nobuildt flag + 24-world panel.
+
+## r60 — real construction (BUILDT) + true portraits + tech-emergence audit
+- Portraits: the top-bar chips passed only strength+palette to Pawn — mannequins. Now they
+  pass the full appearance set (ge genome, sex, body genes, build/grow/old, mood expression,
+  worn armor/clothing/weapon via wornKey); scale omitted so big agents don't overflow 34px.
+  Verified by screenshot: chips match the in-world pawns.
+- BUILDT (flag nobuildt, default ON pending panel): wall segments take work-ticks
+  (wattle 4 / timber 6 / stone 9) instead of appearing in one tick. Mats commit at start;
+  progress in store.bprog only while underway (absent when flag off -> serialization
+  untouched); started segments finish first; several builders can share one. Render:
+  construction-site ghost (dashed frame + fill rising in wall-material tone, bsites layer).
+  Inertness: nobuildt vs ab_treaty arm B = 3/3 byte-MATCH (temperate s21, savanna s21,
+  tundra s3). Behavior smoke: progress ticks 67/128, build acts 67/164, outcomes shifted
+  both directions (temperate 9->12 alive, savanna 12->9) -> 24-world panel running
+  (ab_buildt.json; arm B also records tech timelines).
+- Tech emergence audit: ALREADY REAL, default-on (s.disc='emergent'). tinker() experiments
+  from held/nearby materials; odds biased by need (hunger->food, cold->fire), curiosity,
+  intel, bench; per-person a.know, colony-first store.know, watch-and-copy (3 tiles),
+  teaching, markmaking records, knowledge LOST when carriers die; loreDerive walks the
+  TECH DAG on knowledge patterns incl. experience events (hunt/gather/fish/cold/stormed/
+  sheltered/sawwall). Measured timelines are pillar-shaped: firecraft->cooking->shelter->
+  shaping before tier-2. Gaps found: store.insight accrues (crafts, truce trades) but
+  NOTHING consumes it (vestigial - wire or cut); focusOf() personality-driven experiment
+  focus exists but gated OFF by default (AGON_P.foc) - candidate measured round; no UI
+  (Knowledge panel = redesign Phase 3).
+- Construction-site z note: ghost z-index (y+1)*TS-2 sits just under south neighbors.
