@@ -2674,6 +2674,7 @@ function fxOf(a, tk) {
   const C = (k) => NEEDCOL[k].color, f = [];
   if (a.act === 'move' && a.stress > 0.3) f.push(pfx(12, 38, 5, 5, '#8a7a68', -9, -4, 0.5, 0, true), pfx(30, 38, 5, 5, '#8a7a68', 9, -4, 0.5, 0.25, true));
   if (a.act === 'drink') for (let i = 0; i < 3; i++) f.push(pfx(21 + i * 4, 30, 3, 4, C('hyd'), (i - 1) * 6, -14, 0.9, i * 0.25, true));
+  if (a.act === 'build') for (let i = 0; i < 3; i++) f.push(pfx(28 + (a.face && a.face[0] < 0 ? -12 : 0), 30, 3, 3, i % 2 ? '#a08a6a' : '#6e5a42', (a.face && a.face[0] < 0 ? -1 : 1) * (7 + i * 4), -5 - i * 5, 0.5, i * 0.16, true)); // chips fly from the hammer stroke toward facing
   if (a.act === 'eat') for (let i = 0; i < 3; i++) f.push(pfx(30, 26, 3, 3, C('sat'), 6 + i * 3, -10 - i * 2, 0.6, i * 0.2, false));
   if (a.act === 'sleep' && !a.dn) f.push(pfx(34, 6, 0, 0, C('ene'), 8, -14, 2.4, 0, false, 'z'), pfx(34, 6, 0, 0, C('ene'), 12, -18, 2.4, 1.2, false, 'z'));
   if (a.bub === 'hurt') for (let i = 0; i < 5; i++) { const t = i * 1.2566; f.push(pfx(22, 16, 3, 3, i % 2 ? '#ede9e1' : C('inj'), Math.round(Math.cos(t) * 14), Math.round(Math.sin(t) * 14), 0.45, 0, false)); }
@@ -3156,6 +3157,17 @@ function terrInner() {
   o += sp;
   if (D.rich) o += '<path d="' + D.rich + '" fill="' + (MAC && MAC.rain > 0.62 && MAC.elev < 300 ? '#3a4634' : darker(SOILB[0], 0.9)) + '"/>'   // fertile-soil patches: at 0.78 these read as orphaned shadow blobs (Dyl flagged them); 0.9 keeps the information as soil, not shade;
   if (D.grav) o += '<path d="' + D.grav + '" fill="' + hmix(SOILB[0], '#807868', 0.5) + '"/>';
+  // rich/grav were flat single-colour blobs — the only untextured ground, so the eye read them as
+  // stains or orphaned shadows (Dyl flagged it twice). Same hand-texture as the rest of the ground:
+  // rich gets dark organic flecks and sprout curls, gravel gets pebbles. Clipped to their own paths.
+  { let rt = '', gt2 = '';
+    const inCampR = (x, y) => x >= 7 + OX - 2 && x <= 23 + OX + 2 && y >= 3 + OY - 2 && y <= 13 + OY + 2;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { if (TER[y * W + x] !== 0 || inCampR(x, y)) continue; const F = FERTN(x, y), X = x * TS, Y = y * TS;
+      if (F > FRICH) { for (let n = 0; n < 3; n++) if (hh(x, y, 730 + n) < 0.75) rt += '<ellipse cx="' + (X + 4 + hh(x, y, 733 + n) * 40).toFixed(0) + '" cy="' + (Y + 4 + hh(x, y, 737 + n) * 40).toFixed(0) + '" rx="' + (2.2 + hh(x, y, 741 + n) * 3.4).toFixed(1) + '" ry="' + (1.5 + hh(x, y, 745 + n) * 2.2).toFixed(1) + '" fill="' + darker(SOILB[0], 0.62) + '" opacity="0.5"/>';
+        if (hh(x, y, 750) < 0.3) rt += '<path d="M' + (X + 8 + hh(x, y, 751) * 30).toFixed(0) + ' ' + (Y + 10 + hh(x, y, 752) * 28).toFixed(0) + ' q2 -4 4 0 q2 -3 4 0" fill="none" stroke="' + (MAC && MAC.rain > 0.5 ? '#4c5c40' : darker(SOILB[0], 0.5)) + '" stroke-width="1.4" opacity="0.6" stroke-linecap="round"/>';
+      } else if (F < FGRAV) { for (let n = 0; n < 4; n++) if (hh(x, y, 760 + n) < 0.7) { const w = 1.6 + hh(x, y, 772 + n) * 2.6; gt2 += '<ellipse cx="' + (X + 4 + hh(x, y, 764 + n) * 38).toFixed(0) + '" cy="' + (Y + 4 + hh(x, y, 768 + n) * 38).toFixed(0) + '" rx="' + w.toFixed(1) + '" ry="' + (w * 0.72).toFixed(1) + '" fill="' + (hh(x, y, 776 + n) < 0.5 ? '#8d8576' : '#6e675c') + '" opacity="0.75"/>'; } } }
+    if (rt && D.rich) o += '<clipPath id="crh"><path d="' + D.rich + '"/></clipPath><g clip-path="url(#crh)">' + rt + '</g>';
+    if (gt2 && D.grav) o += '<clipPath id="cgv"><path d="' + D.grav + '"/></clipPath><g clip-path="url(#cgv)">' + gt2 + '</g>'; }
   if (D.sand) o += '<path d="' + D.sand + '" fill="' + SANDC + '" stroke="#a98f5a" stroke-width="5" stroke-linejoin="round"/>';
   o += '<path d="' + D.grass + '" fill="' + GRASSB[0] + '" stroke="#3a4528" stroke-width="5" stroke-linejoin="round"/>';
   let gp = '';
@@ -6658,9 +6670,17 @@ class Component extends DCLogic {
     const haveU = new Set(SLOT);
     for (const u of uOf) if (!haveU.has(u)) { let k = SLOT.indexOf(null); if (k < 0) { k = SLOT.length; SLOT.push(u); } else SLOT[k] = u; haveU.add(u); }
     const slotOfU = new Map(SLOT.map((u, k) => [u, k])), prevO = this._slo || [];
+    // attack legibility (render-only, no sim writes): a predator locked on an adjacent live
+    // target (p.tg) lunges at it instead of standing in the overlap, and the target braces
+    // away from its attacker — so a lion pressed against an elephant reads as an attack,
+    // not as a lion standing on an elephant.
+    const byU = new Map(); for (const q of s.animals) if (!q.dead) byU.set(q.u, q);
+    const braceOf = new Map(); for (const q of s.animals) { if (q.dead || !q.tg) continue; const t = byU.get(q.tg); if (t && Math.max(Math.abs(q.x - t.x), Math.abs(q.y - t.y)) <= 1) braceOf.set(q.tg, [Math.sign(t.x - q.x) || 1, Math.sign(t.y - q.y)]); }
     const critters = s.animals.map((p, ci) => {
       const sz = Math.round(ASZ[p.k] * (p.sz || 1)), off = (48 - sz) / 2;
-      const run = p.st === 'alert' || p.hit, gd = run ? 0.34 : 0.62, a = p.st === 'rest' && !p.hit ? 'none' : p.hit ? A.anim('pounce', ms) : p.mv ? (QUAD[p.k] ? 'ag-qbob ' + (gd / 2).toFixed(2) + 's ease-in-out infinite, ag-qpitch ' + gd.toFixed(2) + 's ease-in-out infinite; --qb: ' + (QB[p.k] * (run ? 1.6 : 1)).toFixed(2) + 'px' : A.anim(MOVE[p.k] || 'hop', ms)) : 'none';
+      const tgA = !p.dead && p.tg ? byU.get(p.tg) : null, lgx = tgA ? Math.sign(tgA.x - p.x) : 0, lgy = tgA ? Math.sign(tgA.y - p.y) : 0;
+      const lunging = !!tgA && !p.hit && !p.mv && !p.dead && Math.max(Math.abs(p.x - tgA.x), Math.abs(p.y - tgA.y)) <= 1, brc = !p.dead && !p.hit && !p.mv ? braceOf.get(p.u) : null;
+      const run = p.st === 'alert' || p.hit, gd = run ? 0.34 : 0.62, a = p.st === 'rest' && !p.hit ? 'none' : p.hit ? A.anim('pounce', ms) : lunging ? 'ag-clunge 0.95s ease-in-out infinite' : brc ? 'ag-cbrace 0.7s ease-in-out infinite' : p.mv ? (QUAD[p.k] ? 'ag-qbob ' + (gd / 2).toFixed(2) + 's ease-in-out infinite, ag-qpitch ' + gd.toFixed(2) + 's ease-in-out infinite; --qb: ' + (QB[p.k] * (run ? 1.6 : 1)).toFixed(2) + 'px' : A.anim(MOVE[p.k] || 'hop', ms)) : 'none';
       const ash = A.ANISH[p.k] || A.ANISH.small, ak = sz / 64, aRx = ash[2] * ak * (p.gt || 1), aRy = ash[3] * ak, mvn = p.hit ? 'pounce' : p.mv ? (MOVE[p.k] || 'hop') : '';
       return {
         gait: p.dead ? '' : p.mv && p.st !== 'rest' ? (p.st === 'alert' || p.hit ? 'run' : 'walk') : '',
@@ -6668,7 +6688,7 @@ class Component extends DCLogic {
         coat: p.cg ? p.cg.join(',') : '', look: (() => { const f = p.face || [0, 0]; return f[1] ? (f[1] < 0 ? 'N' : 'S') + (f[0] ? 'E' : '') : 'E'; })(), kind: SPX[p.k].plan, v: SPD[p.k] ? p.k : (A.VAR_OF[BIOMEK_] || ''), state: p.dead ? 'hurt' : p.st, size: sz, girth: p.gt || 1, xr: XR[p.k] || 'small', tamed: !!p.own || (p.tm || 0) > 0.05,
         badge: 'position: absolute; left: ' + Math.round(sz * 0.62) + 'px; top: -4px; width: 14px; height: 14px; background: ' + (p.own ? svgBg(14, 14, '<path d="M7 12.4 C1.6 8.6 1.2 5.6 2.8 3.8 C4.4 2.2 6.4 2.8 7 4.6 C7.6 2.8 9.6 2.2 11.2 3.8 C12.8 5.6 12.4 8.6 7 12.4Z" fill="#e08a78" stroke="#1c110b" stroke-width="1.3" stroke-linejoin="round"/>') : svgBg(14, 14, '<path d="M7 12.4 C1.6 8.6 1.2 5.6 2.8 3.8 C4.4 2.2 6.4 2.8 7 4.6 C7.6 2.8 9.6 2.2 11.2 3.8 C12.8 5.6 12.4 8.6 7 12.4Z" fill="none" stroke="#e08a78" stroke-width="1.3" stroke-linejoin="round" stroke-dasharray="2 1.6"/>')) + ' no-repeat',
         wrap: 'position: absolute; left: 0; top: 0; width: ' + sz + 'px; height: ' + sz + 'px; z-index: ' + Math.round(p.y * TS + off + sz * 0.84) + '; transform: translate(' + (p.x * TS + off) + 'px, ' + (p.y * TS + off) + 'px); will-change: transform; transition: ' + (prevO[slotOfU.get(uOf[ci])] !== uOf[ci] ? (snapT('c' + uOf[ci], p.x, p.y, 'none'), 'none') : snapT('c' + uOf[ci], p.x, p.y, trans)),
-        move: 'position: absolute; left: 0; top: 0; transform-origin: 50% 82%; --fx: ' + (p.fx < 0 ? -1 : 1) + '; opacity: ' + (p.hid > s.tick ? 0.3 : 1) + '; animation: ' + (p.dead ? 'anfall 0.7s ease-in forwards, anfade 2.4s linear forwards' : a),
+        move: 'position: absolute; left: 0; top: 0; transform-origin: 50% 82%; --fx: ' + (p.fx < 0 ? -1 : 1) + '; --cgx: ' + (lunging ? lgx : brc ? brc[0] : 0) + '; --cgy: ' + (lunging ? lgy : brc ? brc[1] : 0) + '; opacity: ' + (p.hid > s.tick ? 0.3 : 1) + '; animation: ' + (p.dead ? 'anfall 0.7s ease-in forwards, anfade 2.4s linear forwards' : a),
         flip: 'transform: scaleX(' + ((p.face && p.face[1] && !p.face[0]) ? 1 : p.fx) + ')',
       };
     }); this._slo = SLOT.slice();
@@ -6682,7 +6702,7 @@ class Component extends DCLogic {
       const look0 = !a.alive ? (Array.from(a.id).reduce((n, c) => n + c.charCodeAt(0), 0) % 4 === 3 ? 'N' : 'S') : a.act === 'sleep' ? 'S' : (!a.face || (!a.face[0] && !a.face[1])) ? 'S' : (a.face[1] < 0 ? 'N' : a.face[1] > 0 ? 'S' : '') + (a.face[0] ? 'E' : '');
       // facing: idle gazes never show the back of the head, and a new facing must hold for 2 ticks before the sprite switches (no face/width flicker while pathing)
       const look = (() => { let lk = look0; if (a.alive && a.act !== 'move' && a.act !== 'strike' && a.act !== 'sleep') lk = lk === 'N' ? 'S' : lk === 'NE' ? 'E' : lk; if (!a.alive) return lk; const LK = this._lk || (this._lk = {}); let c = LK[a.id]; if (!c || s.tick < c.pt) c = LK[a.id] = { v: lk, p: lk, pt: s.tick }; if (lk === c.v) c.p = lk; else { if (c.p !== lk) { c.p = lk; c.pt = s.tick; } if (s.tick - c.pt >= 2) c.v = lk; } return c.v; })();
-      const vr = Array.from(a.id).reduce((n, c) => n + c.charCodeAt(0), 0) % 4, mn = !a.alive ? (vr > 1 ? 'dead2' :  'dead') : a.bub === 'hurt' ? 'hurt' : a.san < 0.2 && a.act !== 'sleep' ? 'stumble' : a.act === 'move' ? (a.stress > 0.3 ? 'run' : (Object.values(a.mats || {}).some((v) => v > 0) || a.inv.berries >= 3 ? 'carry' : 'move')) : a.act === 'eat' ? 'eat' : a.act === 'drink' ? 'drink' : a.act === 'sleep' ? 'sleep' : a.act === 'strike' ? 'strike' : a.act === 'craft' ? (a.bub === 'craft' ? 'cheer' : 'work') : a.act === 'gather' ? 'forage' : a.act === 'tame' ? 'wave' : 'idle', dir = vr < 2 ? (vr ? -1 : 1) : (a.id.charCodeAt(a.id.length - 1) % 2 ? 1 : -1);
+      const vr = Array.from(a.id).reduce((n, c) => n + c.charCodeAt(0), 0) % 4, mn = !a.alive ? (vr > 1 ? 'dead2' :  'dead') : a.bub === 'hurt' ? 'hurt' : a.san < 0.2 && a.act !== 'sleep' ? 'stumble' : a.act === 'move' ? (a.stress > 0.3 ? 'run' : (Object.values(a.mats || {}).some((v) => v > 0) || a.inv.berries >= 3 ? 'carry' : 'move')) : a.act === 'eat' ? 'eat' : a.act === 'drink' ? 'drink' : a.act === 'sleep' ? 'sleep' : a.act === 'strike' ? 'strike' : a.act === 'build' ? 'work' : a.act === 'craft' ? (a.bub === 'craft' ? 'cheer' : 'work') : a.act === 'gather' ? 'forage' : a.act === 'tame' ? 'wave' : 'idle', dir = vr < 2 ? (vr ? -1 : 1) : (a.id.charCodeAt(a.id.length - 1) % 2 ? 1 : -1);
       const cmk = !a.alive ? '' : a.prmT === s.tick && a.prm ? (a.prm === 'step' ? '' : a.prm) : (a.stunT || 0) >= s.tick ? 'stun' : (a.holdT || 0) >= s.tick ? 'held' : (a.guardT || 0) >= s.tick ? 'guard' : '', cmF = a.prmF && a.prmT >= s.tick - 3 ? a.prmF : (a.face || [0, 1]);
       const SHT = { S: [24, 15.5], N: [24, 15.5], E: [24.8, 12], SE: [24.1, 14], NE: [24.1, 14] }[look] || [24, 15.5], shk = 0.9167 * (a.alive ? (a.sz || 1) : 1), shRx = (a.alive ? SHT[1] : vr > 1 ? 14.5 : 17.5) * shk, shRy = (a.alive ? 5 : vr > 1 ? 6.2 : 5) * shk;   // contact shadow widened past the silhouette: at the old 12.5x3.6 the sprite occluded ~85% of it and pawns read as floating
       const on = i === s.sel || (s.msel || []).includes(i);

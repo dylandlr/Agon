@@ -2201,3 +2201,25 @@ fission, treaty. Reference hashes: ab_treaty.json arm B.
 - Fertile-soil decals lightened 0.78→0.9 (they impersonated shadows; Dyl flagged). Render-only.
 - Appearance-genetics audit done: genome rich, gap = style-as-culture (queued round).
 - Next: full chrome build round (typography, icons, alerts, chronicle panel, border pass).
+
+## r-anim-legibility — event grammar fixes + terrain decal texture (render-only)
+- Dyl's crops decoded: crop 1 = elevation-wall crosshatch + flat dark fertile-soil blob
+  (terrain, confirmed again: rich/grav are smoothLoop cluster fills at Main terrInner);
+  crop 2 = lion pack attacking an elephant (lions legitimately diet on szc<=5; elephant
+  def 0.9, fear 0 — stands its ground) rendered with no attack grammar.
+- Fixes shipped (all render-layer, no sim writes, panel hashes untouched):
+  1) rich/grav patches get hand-texture (organic flecks + sprout curls / pebbles), clipped
+     to their paths — they were the only untextured ground, which is why they read as
+     stains/shadows. 2) act 'build' now maps to the existing ag-work hammer stroke (it fell
+     through to idle — construction animation was literally unmapped) + chips particles via
+     fxOf. 3) predators locked on an adjacent target (p.tg) play ag-clunge toward it;
+     the target braces away (ag-cbrace); render-side only, read from p.tg.
+- Verified: zero pageerrors over ~15k ticks across probes; lion-on-elephant moment
+  captured on savanna s21 t280 (scratchpad frames/lunge_zoom3.png) — reads as a hunt now;
+  gravel pebbles + soil flecks visible (soil_zoom3.png).
+- Chrome verdict overridden by Dyl: Hearth & Hide direction, but FULL redesign required.
+  docs/UI-redesign-spec.md written: IA (ambient/glance/study/workshop), component
+  inventory incl. Chronicle + Bonds tab + Knowledge fog-of-tech, UX testing strategy
+  (legibility matrix, observer task tests w/ <=3-clicks/<=20s targets), phases 0-4.
+- Queued sim round surfaced: build DURATION (walls appear in 1 tick — root cause of
+  construction reading broken) -> nobuildt flag + 24-world panel.

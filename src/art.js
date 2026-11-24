@@ -338,6 +338,8 @@
   var CSS = '@keyframes ag-idle{0%,100%{transform:scale(1,1)}50%{transform:scale(1.02,0.98)}}' +
     '@keyframes ag-walk{0%,100%{transform:none}}' +
     '@keyframes ag-run{0%,100%{transform:rotate(4deg)}}' +
+    '@keyframes ag-clunge{0%,100%{transform:translate(0,0)}14%{transform:translate(calc(var(--cgx,0)*-3px),calc(var(--cgy,0)*-2px)) rotate(calc(var(--cgx,1)*-4deg))}36%{transform:translate(calc(var(--cgx,0)*11px),calc(var(--cgy,0)*8px)) rotate(calc(var(--cgx,1)*6deg)) scale(1.05,0.95)}54%{transform:translate(calc(var(--cgx,0)*4px),calc(var(--cgy,0)*3px))}}' +
+    '@keyframes ag-cbrace{0%,100%{transform:translate(0,0)}30%{transform:translate(calc(var(--cgx,0)*2px),calc(var(--cgy,0)*1.5px)) scale(0.98,1.03)}58%{transform:translate(calc(var(--cgx,0)*3.5px),calc(var(--cgy,0)*2.5px)) scale(1.02,0.97)}}' +
     '@keyframes ag-eat{0%,100%{transform:translateY(0) scale(1)}30%,60%{transform:translateY(3px) scale(1.04,0.94)}45%{transform:translateY(0) scale(1)}}' +
     '@keyframes ag-drink{0%,100%{transform:translateY(0) rotate(0)}40%,70%{transform:translateY(4px) rotate(6deg)}}' +
     '@keyframes ag-sleep{0%,100%{transform:scale(1,1)}50%{transform:scale(1.03,0.96)}}' +
