@@ -4931,8 +4931,11 @@ class Component extends DCLogic {
     // hooks (greed -> pack size, patience -> escalate window, bravery -> predator fear radius,
     // empathy -> tending gate) and a deterministic trait lexicon: PLEX maps each pers dim to its
     // low/high adjective — the same table that will condition LLM dialogue in the staged next
-    // round. Epithets appear on the log's emotional beats. Flag off, nothing here runs or writes.
-    const PERS2 = !!(window.AGON_P || {}).pers2;
+    // round. Epithets appear on the log's emotional beats. Shipped default-on in r56 (panel:
+    // clean null — alive -0.46 t=-0.55, extinctions 1=1, knife-edge discordants cancel; shipped
+    // as a requested feature past the kill gate, not a measured win). AGON_P.nopers2 opts out:
+    // with it set, nothing here runs or writes.
+    const PERS2 = !(window.AGON_P || {}).nopers2;
     const PLEX = [['timid', 'brave'], ['solitary', 'gregarious'], ['incurious', 'curious'], ['hot-tempered', 'patient'], ['gentle', 'fierce'], ['idle', 'industrious'], ['callous', 'kind'], ['generous', 'greedy']];
     const epithet = (q) => { const p = q.pers || []; const dv = p.map((v, i) => [Math.abs(v - 0.5), i, v]).sort((x, y) => y[0] - x[0]).slice(0, 2).filter((e) => e[0] > 0.15); if (!dv.length) return 'an even-tempered soul'; const w = dv.map((e) => PLEX[e[1]][e[2] > 0.5 ? 1 : 0]); return (/^[aeiou]/.test(w[0]) ? 'an ' : 'a ') + w.join(', ') + ' soul'; };
     const store = { built: ((s.store || {}).built || []).slice(), shelterT: (s.store || {}).shelterT ?? null, water: (s.store || {}).water || 0, wallMat: (s.store || {}).wallMat || null, norms: (s.store || {}).norms || {}, mats: { ...((s.store || {}).mats || {}) }, food: (s.store || {}).food || 0, items: ((s.store || {}).items || []).slice(), known: ((s.store || {}).known || []).slice(), techs: ((s.store || {}).techs || []).slice(), insight: (s.store || {}).insight || 0, bad: (s.store || {}).bad || 0, spoiled: (s.store || {}).spoiled || 0, lots: ((s.store || {}).lots || []).map((l) => l.slice()), lk: (s.store || {}).lk || 'berry', know: { ...((s.store || {}).know || {}) }, forced: ((s.store || {}).forced || []).slice(), rec: { ...((s.store || {}).rec || {}) }, plots0: (s.store || {}).plots0, cult: (s.store || {}).cult };

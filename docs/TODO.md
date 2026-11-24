@@ -2002,3 +2002,42 @@ spatial symmetry — co-presence is too uniform. Clustering plausibly needs a su
 that locks in preference (beds/dwellings chosen by warmth, so friends sleep together and
 compound) or faction-scale separation (M3 fission across camps). The warmth graph + assortment
 is ready; the expression layer is the open design.
+
+## r56 — personality reaches behavior and language (AGON_P.nopers2 opts out): SHIPPED
+Commits 7c11a7f (mechanic) + this one (ship). Dyl's request: "create advanced personality
+system using NLP" — scoped by his answers to: staged, deterministic lexical now, LLM dialogue
+(TAMU API, plumbing already in state.llm) as its own round; surfaces ranked behavioral depth,
+then dialogue/thoughts, then log voice.
+
+### What was there already (audit before building)
+pers[8] (bravery, sociability, curiosity, patience, aggression, diligence, empathy, greed),
+~22 named TRAITS with fx and pers shifts, archetypes -> defaultWP (work preference was ALREADY
+personality-driven), strengths/flaws prose, the emergent glyph lexicon, THOUGHTS categories.
+So "advanced" meant consequential and legible, not more dimensions.
+
+### Behavior: four hooks where personality was blind (colonist-only, flag-gated)
+- greed p7 -> pack size 1-5 (was flat 3; explicit AGON_P.packN still wins)
+- patience p3 -> escalate window 12-36 ticks (was flat 24)
+- bravery p0 -> predator fear radius x0.7-1.3 (flag-off arm is x1, IEEE-exact)
+- empathy p6 -> tending gate: the kind tend while hungry (sat 0.10), the callous only when
+  comfortable (0.45); was flat 0.2
+
+### Language: PLEX, the dim -> adjective lexicon (the LLM round's conditioning table)
+timid/brave, solitary/gregarious, incurious/curious, hot-tempered/patient, gentle/fierce,
+idle/industrious, callous/kind, generous/greedy. Deterministic epithets on death lines ("A03,
+a kind, curious soul, died of heat"); voiced escalate and pack-eat lines keyed off trait
+extremes, no r() draws. Smoke: 258-446 voiced lines/world with stable per-agent character
+(A06 both "wolfs down" and "calmly weighs": greedy-patient reads as a person).
+
+### Panel (B = pers2:1): clean null — shipped past the kill gate
+alive -0.46 (t=-0.55), survived -86 (t=-0.88), built -8.3 (t=-0.83), walls -1.0, techs -0.67,
+food +0.04; extinctions 1 = 1; discordants forest s3 killed / forest s21 saved (the knife-edge
+pair), McNemar p=1.0. Noted plainly: 5/6 metrics lean weakly negative. No single shipped null
+shows anything, but if the next shipped nulls lean the same way, re-audit the baseline for
+cumulative drift (a standing watch item). New reference hashes: ab_pers2.json arm B.
+
+### Staged next: the LLM round (llm-roles-later becomes a concrete design)
+PLEX + deed tallies (stScore) + bonds (relc, flag-gated) + current need become the prompt
+context; TAMU API (state.llm: chat.tamu.ai, Claude-Haiku-4.5) generates dialogue/thought text
+only (never decisions, so determinism of outcomes is preserved); tests run mode:'rules'. The
+mockDecide Math.random carried item gets fixed in that round.
