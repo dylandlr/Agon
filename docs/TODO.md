@@ -2268,3 +2268,23 @@ fission, treaty. Reference hashes: ab_treaty.json arm B.
 - Tech pillar order, measured on all 24 canonical worlds (arm B): firecraft 24/24 and
   cooking 24/24 in the first three earned techs; shelter 22/24 and shaping 21/24 in the
   first six. Survival pillars lead everywhere; tier-2 never precedes them.
+
+## r61 — UI redesign Phase 0 (Hearth & Hide v2 foundation + dev/player split)
+- Tokens: :root values -> H&H v2 (ground #2a1d14, hide surface #4a3626, hewn border
+  #241709 / leather #7a5c40, bone ink #ece2cf / muted #b5a48c, ember signal #d8a43b,
+  blood-leaning danger #d07a5a, moss ok #7fa06a) + --font-display (Georgia serif) applied
+  to all [data-pbar] panel titles via one CSS rule.
+- Sweeps (chrome contexts only, art untouched): panel glass rgba(48,35,27,0.94/0.92) ->
+  deeper hide glass; pbar label literal #a89885 -> var(--ink-muted) (12 occ); 9 template
+  accent lines #d4c63c -> var(--signal-yellow). 23 art uses of #d4c63c left alone.
+- Dev drawer: Tools panel split. Player side keeps Inspect/Topology/X-ray, zoom, Follow,
+  Work priorities, Planet/Area/Region/Cave, quick save/load, Main menu, Neighbours.
+  WORKSHOP drawer (collapsed by default, hammer toggle in the Tools pbar, dashed fence +
+  label) now holds: world size, biome picker, formation scale, all gen sliders, Reload
+  world, Border war, and the Agonist generator link (removed from top-right HUD).
+- z-fix: the four pbar panels (Tools/Map/Inspector/Log) had no z-index and rendered UNDER
+  the z71 HUD legend -> z 85. Pre-existing collision, exposed by opening Tools over it.
+- Verified: drawer absent from layout by default, renders on toggle (geometry probe, not
+  textContent — sc-if keeps template text in DOM, lesson noted); zero pageerrors; dark +
+  snow chrome shots; hashes vs ab_buildt B: temperate s21 + desert s3 MATCH (render-only).
+- Phase 1 next: vitals bar (legend dies), alert stack with jump-to, roster chips, time block.
