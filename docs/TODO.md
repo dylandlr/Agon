@@ -2173,3 +2173,23 @@ Making births default-on changes the whole sim's character (population growth, e
 every difficulty balance — the block has a 24-colonist cap and fertility/fed gates, so it was
 designed to be on-able). That is a product call. When made, the round is: births default-on
 A/B first (its own big panel), THEN bonds A/B on top.
+
+## M5 — group tactics: audit row CORRECTED, no round needed
+Probe (fight-intent concurrency, 4 worlds, current baseline): combat is already collective.
+grassland s3 spends 92% of its 2,342 fight-ticks at 2-8 concurrent intent-holders; desert
+brawls reach 13 simultaneous; defend intents run 25-2,369 ticks/world — the allyR join code
+(defend/backup at the combat site) produces group fights routinely. The roadmap's "ABSENT —
+raids and defense are individual decisions" was wrong. Genuinely absent: raiding parties
+(raid intent fired 7 ticks across 4 worlds — the hunger gate rarely opens), long-range
+alarms, shared target selection. No probe shows colonies losing fights for lack of these, so
+building them is solution-first; parked until a failure mode demands them.
+
+## Roadmap sweep complete — M1-M6 all dispositioned (one session, r52-r59)
+M1 migration SHIPPED · M2 leadership MEASURED/parked · M2b friendship: sorting EMERGED/drift
+parked · M3 fission-as-defection SHIPPED (+ signed grudges) · M4 treaties SHIPPED · M5 tactics
+ALREADY PRESENT (audit corrected) · M6 pair bonds BUILT/dormant (births off by design).
+Four audit-table rows corrected along the way (relations not pairwise -> built; mating
+dormant; tactics present; fission precondition absent -> redesigned). Open product calls for
+Dyl: births default-on (unlocks M6), LLM dialogue (deferred), temperate treaty question,
+multi-camp architecture. Baseline: walls, roofs, order, workwarm, shade, mig, cool, pers2,
+fission, treaty. Reference hashes: ab_treaty.json arm B.
