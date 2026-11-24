@@ -2392,3 +2392,18 @@ fission, treaty. Reference hashes: ab_treaty.json arm B.
 - Double-off (nobsolo+notechpay) byte-MATCH vs ab_buildt2 B; single-off chains to ab_bsolo
   B via the panel's arm A. Glossary DAG now draws paid/cost fill bars on reachable nodes.
 - Panel ab_techpay.json pending -> verdict next. CREW implements after.
+
+## r63 panel 1 — TECHPAY as first tuned: PARKED, retuned, B re-running
+- Arm A (notechpay) 24/24 byte-MATCH vs ab_bsolo B; zero errors across 48 runs.
+- Endpoint survival neutral (alive -0.25 t=-0.21; McNemar p=1.0, 2 kills/1 save) and
+  pacing landed (techs A 13.4 -> B 8.9, -4.46*), BUT the design doc's own validation bar
+  failed: median shelter arrival 302 -> 1216 and 3/24 worlds NEVER built a house in 6000
+  ticks; peak -0.75 (t=-2.27)* is the echo of that harsher dawn. Parked as-tuned.
+- Retune: tier-0/1 costs halved in the TECH table (17 nodes; small insights are small —
+  shelter 20->10, cooking 18->9, firecraft 8->4, ...); tier-2/3 keep full price so real
+  pacing survives. Re-smoke: shelter 572/408/864 on savanna/tundra/temperate (visible
+  delay, no starvation; tundra's cold-pressure patterns + cheap cost = fastest). B arm
+  re-running as ab_techpay_b2 (A rows remain valid: flag-off never reads costs).
+- Process note: the /tmp/mar stdlib-shadowing rule bit again (import statistics hangs
+  there; exact shadow unidentified, __pycache__ suspected). Analysis one-liners now also
+  run from scratchpad with python3 -I, per the standing rule.
