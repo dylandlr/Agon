@@ -2099,3 +2099,13 @@ arm B (desert default alive=5, the exodus restored), byte-exact, 8/8 both direct
 checklist addition: a default flip must grep for literal reads of the old opt-in key — the
 const rename does not reach them, and only the both-directions inertness check catches it.
 r57 closed.
+
+## Desert s21 watch — RESOLVED as a diagnosed emergent chain, not drift
+nopers2 on the current baseline: 16 alive, ZERO deaths. pers2 on: 9 alive, causes {violence 3,
+starvation 6, heat 1}. The chain: greedy packing (pers2, up to 5/head) drains a marginal
+desert larder -> hunger -> impulse attacks (combat's impulse fires at sat<0.3) -> fatal wounds
+the callous no longer tend -> grudges -> (fission) defections. pers2 -> scarcity -> violence ->
+grudge -> exile, every link independently measured across r56/r57 probes. Ecologically
+coherent; cost one world 11 alive across two panel-null ships. Left as-is deliberately — this
+is the observation game working — but if Dyl wants desert survivable again, the lever is
+greed-hoarding under scarcity (pack size clamped by store-per-head), one line, A/B-able.
