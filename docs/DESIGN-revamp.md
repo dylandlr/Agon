@@ -152,3 +152,42 @@ garment style variants (which beard cut, how a coat is worn) currently never var
 Proposed round: style variants as norms in store.norms, spreading via the existing homophily/
 warmth graph (r55 relc), inherited household-first — measured like any other emergence round
 (do styles cluster by camp/kin more than chance?), opt-out flag, 24-world panel.
+
+## EB0 — the shelter ladder (emergence audit + program, r62)
+
+Dyl's requirement: building must run on the agents' own thinking, learning and emergence,
+with varied shelter forms, solo primitive labor, and openings (windows) as learned
+technology. Audit of what is and isn't emergent today:
+
+**Already emergent** (verified in code and measured):
+- WHEN building happens: the shelter tech is discovered by doing (tinker + lived events:
+  cold, storms, taking refuge, seeing rival walls — four ev routes added so a shivering
+  band learns walls without a workbench).
+- WHAT it is made of: wallMatFor(techs, mats) picks the vernacular material from known
+  techs + what the colony actually holds; insulation physically differs by material
+  (REALINS), and "the walls are rebuilt in stone" is a logged colony event.
+- WHO builds and WHEN they down tools: agents pick the build goal themselves (needs,
+  warmth, mats thresholds), pace is real labor (BUILDT), and now solo (BSOLO r62):
+  one segment belongs to one agent; claims free on completion/orphan/death. Cooperation
+  (shared segments, faster walls) is reserved as a FUTURE learned practice.
+- Openings: windows are now a carpentry-level refinement — before carpentry a colony
+  window tile is a crude lashed opening (dark gap behind stick bars), after it a framed
+  window. (Named tech nodes 'openings'/'glazing' with their own LORE patterns are the
+  proper ladder — queued as a flagged sim round since new discoverable techs shift runs.)
+
+**Seeded, not emergent** (the honest gap):
+- The floor plan. Every world generates its own house (1-3 rooms, sizes, mirror, door and
+  window placement) from the WORLD SEED at generation time — variety exists, but agents
+  never decide it, and experience never changes it. A colony that loses two members to
+  cold builds the same plan as one that didn't.
+
+**EB1 program — layout emergence (flagged sim rounds, in order):**
+1. EB1a shack-first: before 'shelter' matures, a 1-room makeshift shack from whatever is
+   held (planks/logs lean-to against rock or trees; reuses tent/windbreak warmth plumbing)
+   sized by band count; the full plan only opens with carpentry+markmaking.
+2. EB1b plan from need: room count/sizes derived from living colony state (heads, children,
+   stores overflow -> storage room) re-planned at season boundaries, not from the seed.
+3. EB1c site reasoning: plan placement/shape bends to terrain the agents know (lee of rock,
+   near water-but-not-flood, cave-mouth annexes), using their explored map, not the
+   generator's omniscience.
+Each: opt-out flag, 24-world panel, measured against the then-current reference.

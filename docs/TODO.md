@@ -2327,3 +2327,18 @@ fission, treaty. Reference hashes: ab_treaty.json arm B.
   supersedes ab_treaty B and voids ab_buildt.json).
 - Tech pillar order re-confirmed on the fixed build: firecraft 24/24 + cooking 24/24 in
   the first three earned; shelter 22/24, shaping 20/24 in the first six.
+
+## r62 — solo construction claims (BSOLO) + window tech ladder + emergence audit
+- BSOLO (nobsolo opt-out, panel running): one wall segment per agent; store.bown claims,
+  freed on completion/orphan/owner death (progress preserved, adoptable). Inertness:
+  nobsolo vs ab_buildt2 B 3/3 MATCH. Default smoke: maxConcurrent sites 12 (one per
+  builder — previously all builders funneled onto one segment), 104 completions, walls 81,
+  exclusivity held (1 "violation" = legitimate dead-owner transfer).
+- Windows (render-only, reads store.techs): colony window tiles without carpentry render
+  as plain wall + crude lashed opening (dark gap, stick bars); carpentry upgrades to the
+  framed window. Rival huts exempt. Verified same-tile pair (win_prim/win_carp.png).
+  Named 'openings'/'glazing' tech nodes = queued flagged round (new discoverables move runs).
+- Emergence audit recorded in DESIGN-revamp EB0: when/what-of/who = emergent (tinker+events,
+  vernacular materials, agent labor); floor plan = seed-generated variety, NOT agent-driven
+  -> EB1a/b/c program specced (shack-first, plan-from-need, site reasoning).
+- Panel ab_bsolo.json pending -> verdict next.

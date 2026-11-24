@@ -4992,6 +4992,7 @@ class Component extends DCLogic {
     // AGON_P.nobuildt opts out: with it set, nothing here runs or writes.
     const BUILDT = !(window.AGON_P || {}).nobuildt;
     const BUILDTICKS = { wattle: 4, timber: 6, stone: 9 }; // ticks of work per segment, by wall material
+    const BSOLO = BUILDT && !(window.AGON_P || {}).nobsolo; // r62: one segment per agent at a time
     const PLEX = [['timid', 'brave'], ['solitary', 'gregarious'], ['incurious', 'curious'], ['hot-tempered', 'patient'], ['gentle', 'fierce'], ['idle', 'industrious'], ['callous', 'kind'], ['generous', 'greedy']];
     const epithet = (q) => { const p = q.pers || []; const dv = p.map((v, i) => [Math.abs(v - 0.5), i, v]).sort((x, y) => y[0] - x[0]).slice(0, 2).filter((e) => e[0] > 0.15); if (!dv.length) return 'an even-tempered soul'; const w = dv.map((e) => PLEX[e[1]][e[2] > 0.5 ? 1 : 0]); return (/^[aeiou]/.test(w[0]) ? 'an ' : 'a ') + w.join(', ') + ' soul'; };
     const store = { built: ((s.store || {}).built || []).slice(), shelterT: (s.store || {}).shelterT ?? null, water: (s.store || {}).water || 0, wallMat: (s.store || {}).wallMat || null, norms: (s.store || {}).norms || {}, mats: { ...((s.store || {}).mats || {}) }, food: (s.store || {}).food || 0, items: ((s.store || {}).items || []).slice(), known: ((s.store || {}).known || []).slice(), techs: ((s.store || {}).techs || []).slice(), insight: (s.store || {}).insight || 0, bad: (s.store || {}).bad || 0, spoiled: (s.store || {}).spoiled || 0, lots: ((s.store || {}).lots || []).map((l) => l.slice()), lk: (s.store || {}).lk || 'berry', know: { ...((s.store || {}).know || {}) }, forced: ((s.store || {}).forced || []).slice(), rec: { ...((s.store || {}).rec || {}) }, plots0: (s.store || {}).plots0, cult: (s.store || {}).cult,
@@ -4999,7 +5000,8 @@ class Component extends DCLogic {
       // every tick (the r55 relc lesson, relearned on store: explicit field lists drop new state).
       // One level deep is enough (values are numbers); absent stays absent so the nobuildt arm
       // serializes identically.
-      bprog: (s.store || {}).bprog ? { ...(s.store || {}).bprog } : undefined };
+      bprog: (s.store || {}).bprog ? { ...(s.store || {}).bprog } : undefined,
+      bown: (s.store || {}).bown ? { ...(s.store || {}).bown } : undefined };
     // AGON_P.bdbg: which of the four build-gate conditions actually stalls construction. Snapshot at
     // the top of the tick, before the agent loop mutates the queue or the stores. Off by default.
     if ((window.AGON_P || {}).bdbg) {
@@ -6248,14 +6250,22 @@ class Component extends DCLogic {
           // BUILDT: construction takes time. Materials commit when work starts; progress accrues
           // per adjacent builder-tick; the segment exists only when the work is done.
           const bp = store.bprog || (store.bprog = {});
-          for (const k in bp) if (!BUILDQ.includes(k)) { if (window.__BD) window.__BD.push({ ev: 'cancel', k, pr: +bp[k].toFixed(2), tick: s.tick, qLen: BUILDQ.length, q0: BUILDQ.slice(0, 4), built: BUILTS.has(k) }); store.mats[mk] = (store.mats[mk] || 0) + 1; delete bp[k]; } // camp plan moved on: drop the orphan and return its committed material (refunded in the current wall material — close enough for the rare churn case)
-          const near = BUILDQ.map((k) => { const [x, y] = k.split(',').map(Number); return { k, x, y, d: cheb(a, { x, y }), st: bp[k] !== undefined }; })
-            .sort((p, q) => (q.st ? 1 : 0) - (p.st ? 1 : 0) || p.d - q.d)[0]; // finish started work first, then nearest
+          // BSOLO (r62): primitive building is solo work — a segment belongs to the one agent
+          // who started it (store.bown), and nobody else can advance it. A claim is freed when
+          // its segment completes, is orphaned, or its owner dies. Shared-segment work is the
+          // cooperation rung of a later tech round. AGON_P.nobsolo opts out (shared accrual).
+          const bo = BSOLO ? (store.bown || (store.bown = {})) : null;
+          for (const k in bp) if (!BUILDQ.includes(k)) { if (window.__BD) window.__BD.push({ ev: 'cancel', k, pr: +bp[k].toFixed(2), tick: s.tick, qLen: BUILDQ.length, q0: BUILDQ.slice(0, 4), built: BUILTS.has(k) }); store.mats[mk] = (store.mats[mk] || 0) + 1; delete bp[k]; if (bo) delete bo[k]; } // camp plan moved on: drop the orphan and return its committed material (refunded in the current wall material — close enough for the rare churn case)
+          if (bo) for (const k in bo) { if (!(k in bp)) { delete bo[k]; continue; } const own = s.agents.find((q) => q.id === bo[k]); if (!own || !own.alive || own.fac) delete bo[k]; }
+          const near = BUILDQ.map((k) => { const [x, y] = k.split(',').map(Number); return { k, x, y, d: cheb(a, { x, y }), st: bp[k] !== undefined, mine: bp[k] !== undefined && (!bo || bo[k] === a.id) }; })
+            .filter((p) => !bo || !(p.k in bo) || bo[p.k] === a.id) // never touch another agent's claim
+            .sort((p, q) => (q.mine ? 1 : 0) - (p.mine ? 1 : 0) || p.d - q.d)[0]; // finish own started work first, then nearest claimable
           if (near && near.d <= 1 && (near.st || (store.mats[mk] || 0) > BUILDKEEP)) {
             if (!near.st) { store.mats[mk] -= 1; bp[near.k] = 0; if (window.__BD) window.__BD.push({ ev: 'start', k: near.k, tick: s.tick, qLen: BUILDQ.length }); }
+            if (bo) bo[near.k] = a.id;
             bp[near.k] += 1 / (BUILDTICKS[store.wallMat || 'wattle'] || 6);
             if (bp[near.k] >= 1 - 1e-9) {
-              delete bp[near.k]; if (!Object.keys(bp).length) delete store.bprog;
+              delete bp[near.k]; if (bo) delete bo[near.k]; if (!Object.keys(bp).length) { delete store.bprog; if (store.bown) delete store.bown; }
               BUILTS.add(near.k); builtAdded = true;
               const qi = BUILDQ.indexOf(near.k); if (qi >= 0) BUILDQ.splice(qi, 1);
               a.work.build = (a.work.build || 0) + 1; a.rw = (a.rw || 0) + 0.3;
@@ -6645,7 +6655,7 @@ class Component extends DCLogic {
     const folA = s.follow && zk > 1 ? s.agents[s.sel] : null;
     if (folA) { zpx = clampAx(VP.w / 2 - fx - (folA.x * TS + 24) * fit * zk, VP.w, fx, WPX * fit * zk); zpy = clampAx(VP.h / 2 - fy - (folA.y * TS + 24) * fit * zk, VP.h, fy, HPX * fit * zk); }
     { const camSig = zk.toFixed(3) + '|' + (folA ? '' : Math.round(zpx) + ',' + Math.round(zpy)); if (this._camSig !== undefined && this._camSig !== camSig) { document.documentElement.classList.add('agzm'); clearTimeout(this._zmT); this._zmT = setTimeout(() => document.documentElement.classList.remove('agzm'), 240); } this._camSig = camSig; }
-    const burntSet = new Set(s.burnt || []), wallMatNow = (s.store || {}).wallMat || 'wattle';
+    const burntSet = new Set(s.burnt || []), wallMatNow = (s.store || {}).wallMat || 'wattle', carpOn = (((s.store || {}).techs) || []).includes('carpentry');
     // camp structures from technologies: the well (wells) and the tally board (marks and tallies). Each is one element; the fine detail (bucket, beam, rope, wood grain, fifth-stroke ties) is drawn only when the camera is close enough to see it.
     const campTechs = ((s.store || {}).techs || []), near = zk >= 1.6, wellP = [], tallyP = [];
     if (window.__WELLON) {
@@ -7428,7 +7438,14 @@ class Component extends DCLogic {
       dockCls: 'dock' + (s.dockOpen ? ' open' : ''), dockOpen: !!s.dockOpen, toggleDock: () => this.setState({ dockOpen: !s.dockOpen }), dockArrow: s.dockOpen ? 'v' : '^', dockSummary: 'Tick ' + s.tick + ' · ' + (s.playing ? 'playing ' + s.speed + 'x' : 'paused'),
       onLeave: () => { this._pd = null; this._mq = null; { const ov = document.getElementById('agon-marq'); if (ov) ov.remove(); } if (this.state.hover) this.setState({ hover: null }); },
       onWorldClick: (e) => { if (this.state.armed) { const q0 = evPt(e); if (q0) giveOrder(this.state.sel, { goal: 'goto', x: Math.max(0, Math.min(W - 1, Math.floor(q0[0] / TS))), y: Math.max(0, Math.min(H - 1, Math.floor(q0[1] / TS))) }); return; } if (this._dragged) { this._dragged = false; return; } if (this.state.msel && this.state.msel.length) this.setState({ msel: [] }); if (this.state.inspect === false) return; const q = evPt(e); if (!q) return; const t = hitTest(this.state, q[0], q[1]); if (t.key === this.state.pin) { this.setState({ pin: null }); return; } const patch = { pin: t.key }; if (t.kind === 'pawn') patch.sel = t.idx; this.setState(patch); },
-      tiles, props: SCENERY.filter((o) => (!o.tk || !burntSet.has(o.tk)) && (!o.grp || E0.CAMPON[o.grp]) && (!o.mat || o.mat === wallMatNow)).concat(RIVAL_PROPS, bushes, plotProps, carcProps, beds, covers, doorsP, wellP, tallyP, tentProps, fireProps, shelfIcons).filter(inV).map((o) => o.cls === undefined ? { ...o, cls: '' } : (season !== 1 && o.cls.startsWith('t-') && !o.cls.startsWith('t-dead') && (season !== 2 || !o.cls.startsWith('t-pine')) && (season !== 0 || !o.cls.startsWith('t-pine')) ? { ...o, cls: o.cls + ' q' + season } : o)), embers: EMBERS,
+      tiles, props: SCENERY.filter((o) => (!o.tk || !burntSet.has(o.tk)) && (!o.grp || E0.CAMPON[o.grp]) && (!o.mat || o.mat === wallMatNow)).concat(RIVAL_PROPS, bushes, plotProps, carcProps, beds, covers, doorsP, wellP, tallyP, tentProps, fireProps, shelfIcons).filter(inV).flatMap((o) => {
+        // windows are a carpentry-level refinement (r62): before carpentry is known, a colony
+        // window tile renders as plain wall with a crude lashed opening — a dark gap behind
+        // stick bars — and upgrades to the framed window when the tech is learned. Rival huts
+        // (o.mat null) keep their own look.
+        if (!carpOn && o.mat && o.cls && /^wl[wts]\d+1$/.test(o.cls)) return [{ ...o, cls: o.cls.slice(0, -1) + '0' },
+          { outer: o.outer, inner: 'width: 20px; height: 14px; margin: 12px 0 0 14px; border-radius: 45% 55% 50% 50%; background: #140d08 repeating-linear-gradient(90deg, transparent 0 5px, rgba(122,92,64,0.95) 5px 7px); box-shadow: inset 0 2px 3px rgba(0,0,0,0.9), 0 0 0 2px rgba(74,54,38,0.8)', cls: '' }];
+        return [o]; }).map((o) => o.cls === undefined ? { ...o, cls: '' } : (season !== 1 && o.cls.startsWith('t-') && !o.cls.startsWith('t-dead') && (season !== 2 || !o.cls.startsWith('t-pine')) && (season !== 0 || !o.cls.startsWith('t-pine')) ? { ...o, cls: o.cls + ' q' + season } : o)), embers: EMBERS,
       birds, flies: s.xray ? [] : flies, glows: s.xray ? [] : glows, fish, seaAn, seaPk, seaFl, ripples, ambStyle,
       // construction sites: segments with committed materials and work underway (store.bprog).
       // Dashed frame with a fill that rises with progress, in the wall material's tone.
