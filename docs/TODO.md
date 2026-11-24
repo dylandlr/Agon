@@ -2342,3 +2342,15 @@ fission, treaty. Reference hashes: ab_treaty.json arm B.
   vernacular materials, agent labor); floor plan = seed-generated variety, NOT agent-driven
   -> EB1a/b/c program specced (shack-first, plan-from-need, site reasoning).
 - Panel ab_bsolo.json pending -> verdict next.
+
+## r62b — tech-system ideation session (docs/DESIGN-tech.md)
+- Audit corrected two premises: timber walls ALREADY require carpentry (wallMatFor) and
+  shelter IS a discovered tech. Real finding: two half-systems — live lore patterns vs
+  dead insight economy (costs declared, nothing consumed).
+- Decided with Dyl: discovery = patterns-make-reachable + insight pays the cost (r63
+  TECHPAY); hard DAG with gap fixes (shelter req binding, storage req binding, new
+  'openings' node: no windows at all -> barred openings -> carpentry framing -> glazing
+  later) (r64 DAGFIX); shelter ladder windbreak->shack->house (EB1a); loss/spread = a mix
+  pending a measurement round (loss counters in panel, rust-as-economy-drain prototype,
+  teaching with the social arc), decision gate after.
+- Not doing: per-person-only mastery, soft reqs, research-points UI, unflagged gate edits.
