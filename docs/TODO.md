@@ -2146,3 +2146,8 @@ sorting EMERGED, drift parked (r55) · personalities SHIPPED (r56) · splitting-
 SHIPPED (r57) · treaties SHIPPED (r58) · hostility/relations/parley/mating/tech pre-existed.
 Remaining from the list: group tactics (M5), pair bonds (M6), full camp-level fission (needs
 multi-camp architecture), LLM dialogue (deferred by Dyl).
+
+### r58 ship inertness: 8/8
+notreaty:1 == ab_treaty arm A and default == ab_treaty arm B, byte-exact, on wetland 3 /
+grassland 3 / temperate 21 / desert 21 (both directions each; desert default alive=16, the
+truce-saved world, confirmed in the shipped baseline). r58 closed; social arc first pass done.
