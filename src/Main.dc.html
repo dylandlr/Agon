@@ -4913,7 +4913,7 @@ class Component extends DCLogic {
     if (AFFIL) {
       const live = agents.filter((q) => q.alive && !q.fac);
       const sim = (p, q) => { let d = 0; for (let i = 0; i < 8; i++) d += Math.abs((p.pers[i] ?? 0.5) - (q.pers[i] ?? 0.5)); return 1 - d / 8; };
-      for (const q of live) { const R = q.relc; if (R) for (const k in R) { R[k] *= 0.99967; if (R[k] < 0.01) delete R[k]; } }
+      for (const q of live) { const R = q.relc; if (R) for (const k in R) { R[k] *= 0.99967; if (R[k] < 0.001) delete R[k]; } }   // prune floor must sit BELOW one accrual step (0.0023), or every young bond is guillotined each tick before it can compound
       for (let i = 0; i < live.length; i++) for (let j = i + 1; j < live.length; j++) {
         const p = live[i], q = live[j];
         if (Math.max(Math.abs(p.x - q.x), Math.abs(p.y - q.y)) > 2) continue;
