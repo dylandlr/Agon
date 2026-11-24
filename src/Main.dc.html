@@ -4918,6 +4918,10 @@ class Component extends DCLogic {
     // diverges everywhere while behavior diverges almost nowhere. AGON_P.nofission opts out:
     // with it set, nothing here runs or writes.
     const FISS = !(window.AGON_P || {}).nofission;
+    // r59/M6 (AGON_P.bonds, opt-in): pair bonds. Mate choice weighs warmth (the fission
+    // ledgers) over proximity, and childbirth bonds the parents (+0.5 mutual warmth) — so pair
+    // stability emerges from the choice->bond->choice loop. Flag off, nothing runs or writes.
+    const BONDS = !!(window.AGON_P || {}).bonds;
     const defEv = [];   // defection notices, merged into the log once it exists (this preamble runs before 'const log' — the r52b store TDZ, same class)
     if (AFFIL || FISS) {
       const live = agents.filter((q) => q.alive && !q.fac);
@@ -6414,9 +6418,12 @@ class Component extends DCLogic {
       if (moms.length) {
         const mom = moms[Math.floor(r() * moms.length)], dads = agents.filter((a) => ok(a) && a.sex === 'M' && (a.fac || 0) === (mom.fac || 0) && cheb(a, mom) <= 14).sort((x, y) => cheb(x, mom) - cheb(y, mom));
         if (dads.length && !(mom.fac && agents.filter((a) => a.alive && a.fac === mom.fac).length >= 12) && r() < 0.5 * (mom.g.fertility || 1) * (dads[0].g.fertility || 1)) {
-          const n = agents.length, ln = (sg) => Math.min(4, Math.max(0.25, Math.exp(sg * (r() + r() + r() - 1.5) * 1.6))), kid = (syncNames(agents), mkChild(mom, dads[0], n, r, ln, tick));
-          mom.birthT = tick + 400; dads[0].birthT = tick + 150; if (mom.fac) { kid.fac = mom.fac; kid.home = mom.home; kid.id = 'R' + String(n + 1).padStart(2, '0'); } agents.push(kid); if (mindOn) A.mind.inherit(kid, mom, dads[0], tick);
-          log.push({ t: tick, text: kid.id + ' is born to ' + mom.id + ' and ' + dads[0].id + (kid.muts.length ? ' (' + kid.muts.map((k) => A.MUT_BY[k].label).join(', ') + ')' : ''), kind: 'info' });
+          const wOf = (p, q) => Math.max((p.relc || {})[q.id] || 0, (q.relc || {})[p.id] || 0);
+          const dad = BONDS ? dads.slice().sort((x, y) => (wOf(mom, y) - wOf(mom, x)) || (cheb(x, mom) - cheb(y, mom)))[0] : dads[0];
+          const n = agents.length, ln = (sg) => Math.min(4, Math.max(0.25, Math.exp(sg * (r() + r() + r() - 1.5) * 1.6))), kid = (syncNames(agents), mkChild(mom, dad, n, r, ln, tick));
+          mom.birthT = tick + 400; dad.birthT = tick + 150;
+          if (BONDS && !mom.fac) { (mom.relc = mom.relc || {})[dad.id] = Math.min(3, (mom.relc[dad.id] || 0) + 0.5); (dad.relc = dad.relc || {})[mom.id] = Math.min(3, (dad.relc[mom.id] || 0) + 0.5); } if (mom.fac) { kid.fac = mom.fac; kid.home = mom.home; kid.id = 'R' + String(n + 1).padStart(2, '0'); } agents.push(kid); if (mindOn) A.mind.inherit(kid, mom, dad, tick);
+          log.push({ t: tick, text: kid.id + ' is born to ' + mom.id + ' and ' + dad.id + (kid.muts.length ? ' (' + kid.muts.map((k) => A.MUT_BY[k].label).join(', ') + ')' : ''), kind: 'info' });
         }
       }
     }
