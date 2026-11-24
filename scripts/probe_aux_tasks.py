@@ -94,6 +94,27 @@ def roll(seed):
             np.asarray(ACT), death, len(H))
 
 
+def standardize(X, tr):
+    """Scale X by TRAIN statistics and append a WORKING intercept column.
+
+    The order matters and getting it wrong is a silent, severe bug. This probe first did the
+    opposite -- append a ones column, then divide the lot by `X[tr].std(0) + 1e-9` -- which turns
+    the intercept into (1-1)/1e-9 = exactly 0. The ridge was therefore fitted with NO INTERCEPT
+    against an UNCENTRED target, which costs roughly (mean(y))^2 / var(y) of R^2 and costs nothing
+    at all when the target happens to be centred. That is why the within-centred labels here were
+    unaffected while `fraction of life elapsed` was not. See docs/MEASUREMENT.md 0.
+
+    Columns with no train variance are zeroed instead of divided by an epsilon, which would
+    otherwise amplify their rounding noise by ~1e9 into the Gram matrix.
+    """
+    X = np.asarray(X, np.float64)
+    mu, sd = X[tr].mean(0), X[tr].std(0)
+    live = sd > 1e-8
+    Z = np.zeros_like(X)
+    Z[:, live] = (X[:, live] - mu[live]) / sd[live]
+    return np.concatenate([Z, np.ones((len(X), 1))], 1)
+
+
 def _one_split(X, y, grp, split):
     """Held-out R^2 for ONE split, with whole groups held out and the penalty tuned inside train.
 
@@ -110,9 +131,7 @@ def _one_split(X, y, grp, split):
     inner = gs[:n_tr]
     cut = max(1, int(0.75 * len(inner)))
     itr, iva = np.isin(grp, inner[:cut]), np.isin(grp, inner[cut:])
-    F = np.concatenate([X, np.ones((len(X), 1))], 1).astype(np.float64)
-    mu, sd = F[tr].mean(0), F[tr].std(0) + 1e-9
-    Fs = (F - mu) / sd
+    Fs = standardize(X, tr)
 
     def fit(m, a):
         return np.linalg.solve(Fs[m].T @ Fs[m] + a * np.eye(Fs.shape[1]), Fs[m].T @ y[m])

@@ -1,9 +1,15 @@
 """Candidate C's auxiliary head: the "dies within k ticks" label, and the head's wiring.
 
 The label shape was chosen by measurement, not argument (`scripts/probe_label_form.py`): from a
-frozen random trunk it reaches held-out AUC 0.896 at k=48, where `fraction of life elapsed` scores
-R^2 -2.424, and the formulations that do score well (within-centred remaining life, 0.522) need the
-whole life's mean and so cannot be built inside a 176-tick rollout window at all.
+frozen random trunk the hazard reaches held-out AUC 0.907 at k=48, the best of k in {12, 24, 48,
+96}. The reason it is the label, though, is that it is the only one of the four formulations
+computable inside a 176-tick rollout window: `fraction of life elapsed` needs the life's total T
+and the centred variants need the life's mean, whatever they score.
+
+(The earlier version of this docstring justified the choice with `fraction of life elapsed` at
+R^2 -2.424. That figure was an artifact of a missing intercept in the probe's ridge -- see
+docs/MEASUREMENT.md 0 -- and the label in fact scores +0.621. The choice is unchanged, because
+in-window computability is what decides it; the published reason was half wrong.)
 
 The risky part is the label, so it is tested against hand-computed cases rather than against
 itself. The rest pins that the head is genuinely optional: with `hazard_coef` 0 the parameters are

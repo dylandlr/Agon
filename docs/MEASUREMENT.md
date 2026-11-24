@@ -14,6 +14,56 @@ each one. Nothing enters section 0 on reasoning alone.
 Every line here was measured. Anything derived by reading code and not yet checked against a run
 belongs in the open-questions list at the end, not here.
 
+### Correction: two bugs in the probes, and which figures below they invalidate
+
+Found 2026-11-23 while measuring candidate D, and recorded first because it decides which of the
+figures below can be trusted.
+
+**1. The probes' ridge had no intercept.** `probe_aux_tasks.py` and `probe_label_form.py` built the
+design matrix as `np.concatenate([X, ones], 1)` and *then* scaled the whole thing by
+`X[tr].std(0) + 1e-9`. The ones column has zero train variance, so it became `(1-1)/1e-9` = exactly
+0. Every one of those ridges was fitted with **no intercept against an uncentred target**, which
+costs about `mean(y)² / var(y)` of R² — and nothing at all when the target happens to be centred.
+It announced itself in a third probe as a feature reconstructed at R² −6.2 from an input set
+containing that feature's own column.
+
+So the error is not uniform: it is zero on the within-life and centred labels and severe on the
+absolute ones, which is precisely the contrast these probes were set up to read.
+
+| figure | source | status |
+|---|---|---|
+| `R² life` / `R² Φ` at each λ, sd(target), sd(adv) | `probe_target_info.py` | **unaffected** — computed as `corrcoef(x, y)²`, which is invariant to an intercept |
+| trained-encoder hydration 0.816 / 0.059, `body_temp` 0.873 | `probe_trained_trunk.py` | **unaffected** — trains the real network, whose value head has a learned bias |
+| hazard AUC at each k | `probe_label_form.py` | **unaffected in substance** — AUC is rank-based; re-measured at k=48 as 0.907 ±0.02, was 0.896 |
+| `within-centred remaining life`, `log(1+remaining) centred` | `probe_label_form.py` | **moved slightly**: 0.522 → **0.507 ±0.05**, and 0.489 ±0.05 |
+| `fraction of life elapsed` | `probe_label_form.py` | **wrong, by 3.0**: published −2.424, actually **+0.621 ±0.04** |
+| the `R² all` and `R² from current needs` columns of the next section | `probe_aux_tasks.py` | **withdrawn pending re-measurement** |
+| the `R² within-life` column, and every hydration figure | `probe_aux_tasks.py` | **unaffected** — those labels are centred within each life, so the mean is ~0 |
+
+Two consequences worth stating plainly rather than burying:
+
+- **`fraction of life elapsed` is not the trap it was published as.** It was recorded as scoring
+  −2.424 and read as "the level problem resurfacing in the obvious-looking label". It scores +0.621,
+  the best of the three continuous formulations. The hazard label is still the right choice, but for
+  one reason only: it is the only formulation computable inside a 176-tick window. `fraction of life
+  elapsed` needs the life's total `T`, which a window does not contain, whatever it scores.
+- **"The trunk learns the trend, never the level" is now unsupported**, because the contrast it
+  rests on is between a safe column and a corrupted one — and a level-ful label scoring 0.621 is
+  evidence against it. Candidate C's shipped label is binary and in-window, so the implementation
+  does not depend on this; the explanation does.
+
+**2. Every probe before `probe_bottleneck.py` ran with silent agents.**
+`E.step(state, actions, cfg, messages=None)` defaults to silence, and all of them left it at the
+default, so the 402 heard and 130 read dimensions were **identically zero** in every local
+measurement. Nothing was ever measured about them, and the trunk in those probes faced 392 live
+inputs rather than 924. Those figures are therefore upper bounds for a real run, where the message
+head is sampled: the hazard AUC in particular was measured without the 532 inputs that a trained
+run's trunk has to look past. `probe_bottleneck.py --silent` reproduces the old condition on
+purpose, for the comparison.
+
+Both are pinned by `tests/test_probe_ridge.py`, which extracts each probe's shipped `standardize`
+by AST and exercises it, rather than testing one import and trusting the other two copies to match.
+
 ### The return identity holds exactly
 
 `G = c_a/(1−γ)·(1−γ^(T−1)) − c_d·γ^(T−1) − Φ₀`
@@ -212,22 +262,28 @@ Instrument: the GRU state `h_t` carried properly through a random-policy roll �
 nonlinear map of the agent's whole history, i.e. a reservoir — ridge-regressed with the penalty
 tuned inside train, averaged over 5 fixed splits that every label shares.
 
-| label | between-life var | R² all | R² within-life | R² from current needs |
+| label | between-life var | ~~R² all~~ | R² within-life | ~~R² from current needs~~ |
 |---|---|---|---|---|
-| remaining lifetime | 0.19 | −2.139 ±0.31 | **+0.479 ±0.11** | −1.741 ±0.31 |
-| needs change, h=1 (mean of 8) | 0.01 | 0.120 | **0.218** | 0.001 |
-| needs change, h=24 | 0.05 | −0.335 | 0.180 | −0.215 |
-| needs change, h=48 | 0.13 | −0.718 | 0.108 | −0.471 |
-| needs change, h=200 | 0.53 | −1.699 | 0.076 | −1.881 |
+| remaining lifetime | 0.19 | ~~−2.139 ±0.31~~ | **+0.479 ±0.11** | ~~−1.741 ±0.31~~ |
+| needs change, h=1 (mean of 8) | 0.01 | ~~0.120~~ | **0.218** | ~~0.001~~ |
+| needs change, h=24 | 0.05 | ~~−0.335~~ | 0.180 | ~~−0.215~~ |
+| needs change, h=48 | 0.13 | ~~−0.718~~ | 0.108 | ~~−0.471~~ |
+| needs change, h=200 | 0.53 | ~~−1.699~~ | 0.076 | ~~−1.881~~ |
 
-Three things, all of which change what C should be:
+**The struck-through columns are withdrawn**: they regressed uncentred targets through a ridge with
+no intercept (see the correction at the top of this section). The within-life column is unaffected,
+because those labels are centred within each life. Re-run `probe_aux_tasks.py` to replace them.
 
-**The level never generalizes; the trend does.** Overall R² is negative everywhere while within-life
-R² is solidly positive. The trunk tracks an agent's *progression* and cannot place its *absolute
-level* on a lifetime it has not seen. That is a complete explanation of the earlier probe's train
-R² 0.995 against held-out R² below 0.3: it was fitting a per-lifetime offset that no per-tick
-observation supplies. An MSE head on an absolute label chases that offset, which is pure gradient
-noise — it is *how* a head memorizes.
+Two things still stand, and one has been retracted:
+
+**~~The level never generalizes; the trend does.~~** *Retracted.* This rested on overall R² being
+negative everywhere while within-life R² was positive — and the overall column was the corrupted
+one. A level-ful label, `fraction of life elapsed`, generalizes across held-out lifetimes at R²
+**0.621**, which is evidence against the claim rather than for it. What remains true and separately
+measured is the *earlier* probe's train R² 0.995 against held-out below 0.3, and
+`probe_trained_trunk.py`'s 0.816 / 0.059 on hydration: those are memorization, measured without
+this bug. So heads can memorize a per-lifetime offset; the general claim that the level is never
+recoverable is not supported.
 
 **Longer horizons are monotonically worse**, 0.218 → 0.180 → 0.108 → 0.076. C was specified as the
 existing head "at a longer horizon"; h=1, the horizon already implemented, is the best of the four.
@@ -294,14 +350,20 @@ first, D second, A demoted after being measured against, B last. Capacity is sti
 
 **C is now implemented and off by default** (`97e65aa`, `code_version` `cbb6f706e03f`): a supervised
 `dies within k ticks` head behind `--hazard-coef`, with the label shape chosen by measurement
-(held-out AUC 0.896) rather than by argument. What stays open is whether it moves
-`value.explained_variance`, which only a GPU run at `--hazard-coef > 0` against an unflagged
-baseline can say. **D's premise — gradient interference in `feat_dense` — is still unmeasured.**
+(held-out AUC 0.907 at k=48, and the only formulation a 176-tick window can build) rather than by
+argument. What stays open is whether it moves `value.explained_variance`, which only a GPU run at
+`--hazard-coef > 0` against an unflagged baseline can say.
 
-**The λ experiment is the cautionary one.** It was the best-argued candidate here and the argument
-was wrong — a whole-life return identity applied to a windowed mid-life target. That is why C's
-premise *and* C's label shape were both measured before any code was written, and why the obvious
-label (`fraction of life elapsed`, R² −2.424) was not the one shipped.
+**D is being measured** by `scripts/probe_bottleneck.py`, which is what turned up the two probe
+bugs at the top of this section.
+
+**Two cautionary experiments, not one.** λ was the best-argued candidate on the list and the
+argument was wrong — a whole-life return identity applied to a windowed mid-life target. The
+intercept bug is the other kind of failure: the measurement was run, the number was wrong, and
+nothing about it looked wrong. The first is fixed by measuring instead of arguing; the second is
+not, which is why the probes now have `tests/test_probe_ridge.py` and why a figure that *confirms*
+what you expected deserves the same control as one that refutes it. `fraction of life elapsed`
+scoring −2.424 was exactly as expected, and that is why it went unexamined for a cycle.
 
 ---
 
@@ -796,12 +858,27 @@ labels generalize across held-out lifetimes (§0), and the answer reshapes the c
 #### As implemented (`97e65aa`)
 
 The label is **`dies within k ticks`**, a binary hazard, chosen by `scripts/probe_label_form.py`
-over four candidate formulations. It won on two criteria at once: held-out **AUC 0.896** at k=48
-from a frozen random trunk — the strongest of the four — and the only one computable inside a
-176-tick rollout window at all. `fraction of life elapsed` scored **R² −2.424**, which is the level
-problem of point 1 above resurfacing in the obvious-looking choice; the two formulations that do
-score well (within-centred remaining life, 0.522) need the whole life's mean and so cannot be built
-from a window.
+over four candidate formulations. **One criterion decides it: it is the only one computable inside
+a 176-tick rollout window.** `fraction of life elapsed` needs the life's total `T`; the centred
+variants need the life's mean. A window contains neither, so those three are not implementable in
+`ppo_multi`'s update however they score.
+
+Corrected figures (the first version of this section quoted the pre-fix ones — see the correction
+at the top of §0):
+
+| formulation | metric | held-out | in-window? |
+|---|---|---|---|
+| **hazard, dies within 48 ticks** | AUC | **0.907 ±0.02** | **yes** — reverse scan over `died` |
+| hazard, dies within 12 / 24 / 96 | AUC | 0.900 / 0.890 / 0.863 | yes |
+| fraction of life elapsed | R² | 0.621 ±0.04 | no: needs total `T` |
+| within-centred remaining life | R² | 0.507 ±0.05 | no: needs the life's mean |
+| log(1+remaining), centred | R² | 0.489 ±0.05 | no: needs the life's mean |
+
+k=48 is the best of the four horizons, so the shipped default is confirmed. What is **not** true,
+and was published here, is that the hazard also won on strength over `fraction of life elapsed`:
+that comparison used a figure corrupted by the missing intercept, and it was between an AUC and an
+R² in any case. These are lower bounds (a frozen random trunk) and were measured with silent
+agents, so the 532 language inputs a real run carries were absent.
 
 | what | where |
 |---|---|

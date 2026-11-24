@@ -108,6 +108,27 @@ def splits_of(g, s):
     return np.isin(g, gs[:n_tr]), np.isin(g, gs[n_tr:])
 
 
+def standardize(X, tr):
+    """Scale X by TRAIN statistics and append a WORKING intercept column.
+
+    The order matters and getting it wrong is a silent, severe bug. This probe first did the
+    opposite -- append a ones column, then divide the lot by `X[tr].std(0) + 1e-9` -- which turns
+    the intercept into (1-1)/1e-9 = exactly 0. The ridge was therefore fitted with NO INTERCEPT
+    against an UNCENTRED target, which costs roughly (mean(y))^2 / var(y) of R^2 and costs nothing
+    at all when the target happens to be centred. That is why the within-centred labels here were
+    unaffected while `fraction of life elapsed` was not. See docs/MEASUREMENT.md 0.
+
+    Columns with no train variance are zeroed instead of divided by an epsilon, which would
+    otherwise amplify their rounding noise by ~1e9 into the Gram matrix.
+    """
+    X = np.asarray(X, np.float64)
+    mu, sd = X[tr].mean(0), X[tr].std(0)
+    live = sd > 1e-8
+    Z = np.zeros_like(X)
+    Z[:, live] = (X[:, live] - mu[live]) / sd[live]
+    return np.concatenate([Z, np.ones((len(X), 1))], 1)
+
+
 def _fit(Fs, y, m, a):
     return np.linalg.solve(Fs[m].T @ Fs[m] + a * np.eye(Fs.shape[1]), Fs[m].T @ y[m])
 
@@ -125,7 +146,6 @@ def auc(y, p):
 def score(X, y, g, binary):
     """Mean held-out score over fixed grouped splits. R^2 for continuous, AUC for binary."""
     out = []
-    F = np.concatenate([X, np.ones((len(X), 1))], 1).astype(np.float64)
     for s in range(args.splits):
         tr, te = splits_of(g, s)
         if te.sum() < 20 or tr.sum() < 20:
@@ -133,8 +153,7 @@ def score(X, y, g, binary):
         gs_in = np.unique(g[tr])
         cut = max(1, int(0.75 * len(gs_in)))
         itr, iva = np.isin(g, gs_in[:cut]), np.isin(g, gs_in[cut:])
-        mu, sd = F[tr].mean(0), F[tr].std(0) + 1e-9
-        Fs = (F - mu) / sd
+        Fs = standardize(X, tr)
         best, best_a = -np.inf, 1.0
         if iva.sum() > 20:
             for a in (1e-2, 1e-1, 1, 1e1, 1e2, 1e3, 1e4):
