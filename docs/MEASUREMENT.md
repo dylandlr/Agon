@@ -37,7 +37,7 @@ absolute ones, which is precisely the contrast these probes were set up to read.
 | hazard AUC at each k | `probe_label_form.py` | **unaffected in substance** — AUC is rank-based; re-measured at k=48 as 0.907 ±0.02, was 0.896 |
 | `within-centred remaining life`, `log(1+remaining) centred` | `probe_label_form.py` | **moved slightly**: 0.522 → **0.507 ±0.05**, and 0.489 ±0.05 |
 | `fraction of life elapsed` | `probe_label_form.py` | **wrong, by 3.0**: published −2.424, actually **+0.621 ±0.04** |
-| the `R² all` and `R² from current needs` columns of the next section | `probe_aux_tasks.py` | **withdrawn pending re-measurement** |
+| the `R² all` and `R² from current needs` columns of the next section | `probe_aux_tasks.py` | **were wrong by 1.4 to 2.5; re-measured** — remaining lifetime from the current needs was published as −1.741 and is **+0.709** |
 | the `R² within-life` column, and every hydration figure | `probe_aux_tasks.py` | **unaffected** — those labels are centred within each life, so the mean is ~0 |
 
 Two consequences worth stating plainly rather than burying:
@@ -47,10 +47,12 @@ Two consequences worth stating plainly rather than burying:
   the best of the three continuous formulations. The hazard label is still the right choice, but for
   one reason only: it is the only formulation computable inside a 176-tick window. `fraction of life
   elapsed` needs the life's total `T`, which a window does not contain, whatever it scores.
-- **"The trunk learns the trend, never the level" is now unsupported**, because the contrast it
-  rests on is between a safe column and a corrupted one — and a level-ful label scoring 0.621 is
-  evidence against it. Candidate C's shipped label is binary and in-window, so the implementation
-  does not depend on this; the explanation does.
+- **"The trunk learns the trend, never the level" is refuted, not merely unsupported.** The contrast
+  it rested on was between a safe column and a corrupted one. Re-measured, the absolute level
+  generalizes across unseen lifetimes perfectly well: remaining lifetime at **0.709** from the eight
+  current needs, and `fraction of life elapsed` at **0.621** from the trunk. Candidate C's shipped
+  label is binary and in-window, so the implementation does not depend on this; the explanation did,
+  and a second conclusion built on it (that an absolute label must be avoided) goes with it.
 
 **2. Every probe before `probe_bottleneck.py` ran with silent agents.**
 `E.step(state, actions, cfg, messages=None)` defaults to silence, and all of them left it at the
@@ -253,54 +255,97 @@ What this does **not** establish: that λ=1.0 fails in training. The probe measu
 initialisation. As `V` becomes informative its bootstrap carries real information, and that could
 reverse the ordering. One random policy, one untrained critic, 8 agents, 8 seeds.
 
-### Candidate C's labels: the trunk learns the trend, never the level
+### Candidate C's labels: the eight current needs beat the trunk at the thing V needs
 
-Measured by `scripts/probe_aux_tasks.py --seeds 6`. C would extend the world model's existing
-`decode` head, which predicts the change in the eight own-state features at `DECODE_INDEX` one step
-ahead. So the question is which labels survive a split that holds out **whole agent-lifetimes**.
-Instrument: the GRU state `h_t` carried properly through a random-policy roll — a 128-dim random
-nonlinear map of the agent's whole history, i.e. a reservoir — ridge-regressed with the penalty
-tuned inside train, averaged over 5 fixed splits that every label shares.
+Measured by `scripts/probe_aux_tasks.py --seeds 6`, **re-run 2026-11-23 after the intercept fix**.
+C would extend the world model's existing `decode` head, which predicts the change in the eight
+own-state features at `DECODE_INDEX` one step ahead. So the question is which labels survive a split
+that holds out **whole agent-lifetimes**. Instrument: the GRU state `h_t` carried properly through a
+random-policy roll — a 128-dim random nonlinear map of the agent's whole history, i.e. a reservoir —
+ridge-regressed with the penalty tuned inside train, averaged over 5 fixed splits every label
+shares. 11,535 agent-ticks, 48 lifetimes.
 
-| label | between-life var | ~~R² all~~ | R² within-life | ~~R² from current needs~~ |
+| label | between-life var | R² all | R² within-life | R² from current needs |
 |---|---|---|---|---|
-| remaining lifetime | 0.19 | ~~−2.139 ±0.31~~ | **+0.479 ±0.11** | ~~−1.741 ±0.31~~ |
-| needs change, h=1 (mean of 8) | 0.01 | ~~0.120~~ | **0.218** | ~~0.001~~ |
-| needs change, h=24 | 0.05 | ~~−0.335~~ | 0.180 | ~~−0.215~~ |
-| needs change, h=48 | 0.13 | ~~−0.718~~ | 0.108 | ~~−0.471~~ |
-| needs change, h=200 | 0.53 | ~~−1.699~~ | 0.076 | ~~−1.881~~ |
+| remaining lifetime | 0.19 | 0.110 ±0.10 | 0.479 ±0.11 | **0.709 ±0.10** |
+| needs change, h=1 (mean of 8) | 0.01 | 0.211 | 0.217 | 0.103 |
+| needs change, h=24 | 0.05 | 0.149 | 0.184 | 0.329 |
+| needs change, h=48 | 0.13 | 0.088 | 0.114 | 0.421 |
+| needs change, h=200 | 0.53 | −0.266 | 0.078 | 0.131 |
 
-**The struck-through columns are withdrawn**: they regressed uncentred targets through a ridge with
-no intercept (see the correction at the top of this section). The within-life column is unaffected,
-because those labels are centred within each life. Re-run `probe_aux_tasks.py` to replace them.
+The published version of this table had `R² all` and `R² from current needs` as −2.139, −1.741,
+−0.335, −0.718, −1.699, −0.215, −0.471, −1.881 — every one an artifact of the missing intercept.
+The within-life column moved by at most 0.006 (0.218 → 0.217, 0.180 → 0.184), because those labels
+are centred within each life, which is the diagnosis of the bug confirmed from the other side.
 
-Two things still stand, and one has been retracted:
+**The biggest corrected figure is the triviality control, and it is the most important number in
+this section.** The **eight current needs alone predict remaining lifetime across held-out
+lifetimes at R² 0.709**, against the 128-dim recurrent trunk's 0.110. It was published as −1.741,
+i.e. as "the needs tell you nothing". The truth is the reverse: the information the critic needs is
+sitting in eight observed scalars at every tick, plainly and linearly, and the random trunk *loses*
+most of it.
 
-**~~The level never generalizes; the trend does.~~** *Retracted.* This rested on overall R² being
-negative everywhere while within-life R² was positive — and the overall column was the corrupted
-one. A level-ful label, `fraction of life elapsed`, generalizes across held-out lifetimes at R²
-**0.621**, which is evidence against the claim rather than for it. What remains true and separately
-measured is the *earlier* probe's train R² 0.995 against held-out below 0.3, and
-`probe_trained_trunk.py`'s 0.816 / 0.059 on hydration: those are memorization, measured without
-this bug. So heads can memorize a per-lifetime offset; the general claim that the level is never
-recoverable is not supported.
+Two consequences:
 
-**Longer horizons are monotonically worse**, 0.218 → 0.180 → 0.108 → 0.076. C was specified as the
-existing head "at a longer horizon"; h=1, the horizon already implemented, is the best of the four.
-The horizon extension is contraindicated.
+- **The target, not the observation, is the lossy part.** §0 measures the critic's GAE target as
+  carrying R² 0.27 of remaining lifetime. The raw needs carry 0.709. So the pipeline is discarding
+  signal that the observation already contains — which is the strongest case yet for C's logic, that
+  a supervised head bypassing the target is the way to deliver it.
+- **It raises a cheap design question C has not answered:** the hazard head reads the trunk `h`
+  (`haz_hidden(h)`), and on this probe a linear readout of the 8 needs beats a linear readout of the
+  trunk 0.709 to 0.110 for exactly the quantity the hazard label stands in for. Whether the head
+  should also see those scalars directly is now a measured question rather than a hunch. It is *not*
+  settled by this probe: the probe's trunk is random and its readout linear, where the real trunk is
+  trained and the head is a 2-layer MLP. Do not change the head on this figure alone.
 
-**Per-scalar at h=24, the choice of feature matters more than the horizon.** `body_temp` reaches
-within-life 0.528 where the current needs give −0.082, so the trunk supplies something real and
-non-trivial. `energy` (0.374) and `sleepiness` (0.281) are beaten or matched by the current needs
-alone (0.958, 0.484), so a head on them teaches the trunk nothing. And `hydration` is **0.024** —
-the cause of 42% of deaths is the label that does not work.
+Two more things stand, and one is retracted:
 
-That hydration figure survived three challenges, each of which could have overturned it:
+**~~The level never generalizes; the trend does.~~** *Retracted, and the corrected table refutes it
+outright.* It rested on overall R² being negative everywhere while within-life R² was positive, and
+the overall column was the corrupted one. Overall R² for remaining lifetime is **+0.110**, not
+−2.139; from the current needs it is **+0.709**. `fraction of life elapsed`, a purely level-ful
+label, generalizes at **0.621**. The absolute level across unseen lifetimes is not merely
+recoverable, it is the easiest thing here to recover — from the needs.
+
+What survives is narrower and was measured without this bug: the earlier probe's train R² 0.995
+against held-out below 0.3, and `probe_trained_trunk.py`'s 0.816 train / 0.059 held-out on
+hydration. Heads *can* memorize a per-lifetime offset instead of learning it. That is a statement
+about one label and one failure mode, not about levels in general.
+
+**Longer horizons are monotonically worse**, 0.217 → 0.184 → 0.114 → 0.078 within-life, and 0.211 →
+0.149 → 0.088 → −0.266 overall. C was specified as the existing head "at a longer horizon"; h=1,
+the horizon already implemented, is the best of the four on both columns. The horizon extension is
+contraindicated, and the corrected numbers say so more cleanly than the published ones did.
+
+**Per-scalar at h=24, the choice of feature matters more than the horizon.** Corrected figures,
+within-life against the current-needs control:
+
+| feature | R² within-life | R² from current needs | within-life sd |
+|---|---|---|---|
+| `body_temp` | **0.524** | **0.001** | 0.088 |
+| `sleepiness` | 0.285 | 0.488 | 0.372 |
+| `energy` | 0.369 | **0.973** | 0.012 |
+| `health` | 0.182 | 0.376 | 0.142 |
+| `stress` | 0.042 | 0.218 | 0.254 |
+| `satiety` | 0.024 | 0.176 | 0.046 |
+| `hydration` | **0.024** | 0.155 | 0.103 |
+
+`body_temp` is the one feature where the trunk supplies something the current needs do not: 0.524
+against 0.001. Every other feature is beaten by the eight needs alone — `energy` at 0.973 is almost
+a closed-form function of them — so a head on those teaches the trunk nothing it cannot read off its
+own input. This conclusion is unchanged by the fix; only the control column's numbers moved
+(`body_temp`'s control −0.082 → 0.001, `energy`'s 0.958 → 0.973), and they moved in the direction
+that sharpens it.
+
+And `hydration` is still **0.024** — the cause of 42% of deaths is the label that does not work.
+
+That hydration figure survived five challenges, each of which could have overturned it:
 
 | challenge | result |
 |---|---|
 | unpaired splits — every label got a different split | real bug; fixing it moved hydration 0.193 → **0.024**. All figures here are paired, 5 shared splits. |
-| the head is action-conditioned (`decode(dyn(z, a))`) and the probe regressed from `h_t` alone | adding the realized action counts over the window lifts hydration only 0.024 → **0.074**, and *lowers* the 8-feature mean (0.180 → 0.156) because 84 features cost more variance than they buy |
+| the ridge had no intercept (the correction above) | hydration is a within-centred label, so it was never affected: **0.024** before and after the fix |
+| the head is action-conditioned (`decode(dyn(z, a))`) and the probe regressed from `h_t` alone | adding the realized action counts over the window lifts hydration only 0.024 → **0.074**, and *lowers* the 8-feature mean (0.184 → 0.168) because 84 features cost more variance than they buy |
 | the label may simply not vary, making R² noise | it varies: within-life sd **0.103**, *larger* than `body_temp`'s 0.088 — comparable variance, 20× worse predictability |
 | the random-init trunk simply cannot represent it, where a trained encoder could | `scripts/probe_trained_trunk.py`: training the real network on the label reaches train R² **0.816** and held-out R² **0.059** — it memorizes. `body_temp`, the positive control, reaches held-out **0.873**. |
 
@@ -358,10 +403,16 @@ What the 64-d bottleneck preserves, and what happens when the language block is 
 
 Two conclusions, and they point the same way:
 
-**The bottleneck is doing useful work, not destroying signal.** Held-out remaining lifetime goes
-from −0.515 off the raw 924 dims to +0.355 off the 64-d output. A random 924 → 64 projection is
-acting as the regularizer that lets the fit generalize to lifetimes it has not seen; the raw input
-overfits per-lifetime idiosyncrasy. Nothing here says 64 units is a constraint.
+**The bottleneck is not destroying signal.** Held-out remaining lifetime goes from −0.515 off the
+raw 924 dims to +0.355 off the 64-d output: the random 924 → 64 projection is acting as the
+regularizer that lets the fit generalize to lifetimes it has not seen, where the raw input overfits
+per-lifetime idiosyncrasy. Nothing here says 64 units is a constraint.
+
+Read that comparison narrowly. It is a fact about ridge regression on 925 features versus 65, not
+proof that compression is beneficial — and the −0.515 is *not* evidence that the raw inputs lack the
+information, because eight of those same inputs predict remaining lifetime at **0.709** when
+regressed on their own (above). The honest statement is that the 924-d ridge overfits, the 64-d
+projection does not, and the information is in the observation either way.
 
 **Language carries lifetime signal rather than diluting it.** Zeroing it improves every reward
 scalar's reconstruction and *lowers* remaining lifetime, 0.355 → 0.253. The across-run comparison
@@ -887,17 +938,18 @@ the rollout. This is the proposal's own §5 "consequence models", and in the lit
 **C survives its premise check, but not as specified.** `scripts/probe_aux_tasks.py` measured which
 labels generalize across held-out lifetimes (§0), and the answer reshapes the candidate:
 
-1. **Predict a level-free target.** Within-life R² is positive everywhere and overall R² is negative
-   everywhere: the trunk learns an agent's progression and cannot place the absolute level on an
-   unseen lifetime. A head on an absolute label chases a per-lifetime offset no observation
-   supplies, which is how the earlier probe got train R² 0.995 and held out below 0.3. Center within
-   the life, or predict a difference or a monotone progress fraction — the label is known in
-   hindsight on a completed rollout, which is all a supervised head needs.
-2. **Do not extend the horizon.** Within-life R² falls monotonically with h: 0.218 at h=1, down to
-   0.076 at h=200. C was specified as the existing `decode` head at a longer horizon. That is the
-   wrong direction, and h=1 is already implemented.
+1. **~~Predict a level-free target.~~** *Retracted — this rested on the corrupted overall-R² column.*
+   Re-measured, remaining lifetime generalizes across unseen lifetimes at 0.110 from the trunk and
+   **0.709 from the eight current needs**, and `fraction of life elapsed` at 0.621. An absolute label
+   is not the trap this point described. What survives is narrower: a head *can* memorize a
+   per-lifetime offset rather than learn it, which is what the earlier probe's train R² 0.995
+   against held-out below 0.3 was. Centring within the life remains a legitimate option; it is no
+   longer a requirement, and the shipped hazard label is binary, so it is level-free either way.
+2. **Do not extend the horizon.** Within-life R² falls monotonically with h: 0.217 at h=1, down to
+   0.078 at h=200, and overall from 0.211 to −0.266. C was specified as the existing `decode` head
+   at a longer horizon. That is the wrong direction, and h=1 is already implemented.
 3. **Pick the feature on the measurement, not on intuition.** `body_temp` is the one own-state
-   feature where the trunk clearly beats the current needs (within-life 0.528 against −0.082).
+   feature where the trunk clearly beats the current needs (within-life 0.524 against 0.001).
    `energy` and `sleepiness` are matched or beaten by the current needs alone, so a head on them
    adds no pressure.
 
@@ -910,10 +962,14 @@ labels generalize across held-out lifetimes (§0), and the answer reshapes the c
    noise. It can only be reconsidered after a run with a trained policy, where drinking becomes
    state-determined — and that is the single measurement most likely to change C's value, because
    thirst is 42% of deaths.
-4. **The label worth adding is progression toward death** (within-life R² 0.479, against −1.741 from
-   the current needs). It is the strongest signal measured, the existing head does not predict it,
-   and it is the thing `V` actually needs. That — not a longer horizon on the needs head — is what
-   C should be.
+4. **The label worth adding is progression toward death** (within-life R² 0.479). The existing head
+   does not predict it and it is the thing `V` actually needs, so that — not a longer horizon on the
+   needs head — is what C should be. **The justification is weaker than published**: this point
+   cited the current-needs control at −1.741, i.e. as a label the needs cannot supply, and the
+   control is in fact **+0.709**. The needs predict remaining lifetime *better* than the trunk does.
+   The label is still right, because the existing head predicts one-step needs changes and nothing
+   about death timing, and because the critic's own target carries only R² 0.27 of it. But "the
+   trunk supplies what the needs cannot" was the wrong reason and is not true.
 
 #### As implemented (`97e65aa`)
 
