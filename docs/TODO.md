@@ -2419,3 +2419,7 @@ fission, treaty. Reference hashes: ab_treaty.json arm B.
   crewTicks 5->32, walls 35->61 (crews claw back the BSOLO throughput loss — the watch
   item's predicted compensator), zero pageerrors. Savanna smoke running.
 - Panel after the TECHPAY B2 verdict lands (chain: arm A nocrew vs ab_techpay_b2 B).
+- Savanna smoke: nocrew byte-MATCH vs in-panel build (second world); default crewTicks
+  26->61, walls 58->58 (crews form but throughput wasn't binding there), alive 15->15.
+  Friction pairs: 0 observed in both smokes — rare by design (needs an overeager
+  gregarious + hot-tempered pairing); panel-scale will measure the rate.
