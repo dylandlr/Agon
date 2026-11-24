@@ -2249,3 +2249,22 @@ fission, treaty. Reference hashes: ab_treaty.json arm B.
   focus exists but gated OFF by default (AGON_P.foc) - candidate measured round; no UI
   (Knowledge panel = redesign Phase 3).
 - Construction-site z note: ghost z-index (y+1)*TS-2 sits just under south neighbors.
+
+## r60 verdict — BUILDT SHIPS (default on, nobuildt opt-out)
+- Panel note first: my first panel run used a wrong biome list (coast/mediterranean/steppe/
+  taiga instead of canonical badlands/forest/highlands/volcanic) — the 8 "mismatches" were
+  comparisons against nothing. Re-ran the canonical 8; merged. Canonical extras kept in
+  /tmp/mar/ab_buildt_extra4.json. Lesson: the panel's 12 biomes are a FIXED list — read it
+  from the previous ab_*.json, never from memory.
+- Final canonical 24: arm A (nobuildt) 24/24 byte-MATCH vs ab_treaty B. Zero pageerrors.
+- Survival neutral: alive +0.46 (t=+0.62), survived +96 (t=+1.00), peak +0.21 (t=+1.10),
+  extinction discordants: 1, B-saves (forest s3), McNemar p=1.0.
+- Intended cost model: walls -41.8 (t=-11.4)*, built -72.9 (t=-8.1)* — building now costs
+  4-9 work-ticks/segment, so colonies raise fewer, paid-for walls. Side-effect: spoiled
+  +5.67 (t=+2.30)* — labor shifted off the wall line leaves more food sitting in store.
+  Accepted (small, explained); food +1.96 ns, techs +0.54 ns.
+- SHIPPED on design-correctness + survival-neutrality (vern precedent). NEW REFERENCE
+  HASHES: /tmp/mar/ab_buildt.json arm B (supersedes ab_treaty B).
+- Tech pillar order, measured on all 24 canonical worlds (arm B): firecraft 24/24 and
+  cooking 24/24 in the first three earned techs; shelter 22/24 and shaping 21/24 in the
+  first six. Survival pillars lead everywhere; tier-2 never precedes them.
