@@ -4927,6 +4927,14 @@ class Component extends DCLogic {
         (q.relc = q.relc || {})[p.id] = Math.min(3, (q.relc[p.id] || 0) + dw);
       }
     }
+    // r56 (AGON_P.pers2, opt-in): personality reaches behavior and language. Four parameter
+    // hooks (greed -> pack size, patience -> escalate window, bravery -> predator fear radius,
+    // empathy -> tending gate) and a deterministic trait lexicon: PLEX maps each pers dim to its
+    // low/high adjective — the same table that will condition LLM dialogue in the staged next
+    // round. Epithets appear on the log's emotional beats. Flag off, nothing here runs or writes.
+    const PERS2 = !!(window.AGON_P || {}).pers2;
+    const PLEX = [['timid', 'brave'], ['solitary', 'gregarious'], ['incurious', 'curious'], ['hot-tempered', 'patient'], ['gentle', 'fierce'], ['idle', 'industrious'], ['callous', 'kind'], ['generous', 'greedy']];
+    const epithet = (q) => { const p = q.pers || []; const dv = p.map((v, i) => [Math.abs(v - 0.5), i, v]).sort((x, y) => y[0] - x[0]).slice(0, 2).filter((e) => e[0] > 0.15); if (!dv.length) return 'an even-tempered soul'; const w = dv.map((e) => PLEX[e[1]][e[2] > 0.5 ? 1 : 0]); return (/^[aeiou]/.test(w[0]) ? 'an ' : 'a ') + w.join(', ') + ' soul'; };
     const store = { built: ((s.store || {}).built || []).slice(), shelterT: (s.store || {}).shelterT ?? null, water: (s.store || {}).water || 0, wallMat: (s.store || {}).wallMat || null, norms: (s.store || {}).norms || {}, mats: { ...((s.store || {}).mats || {}) }, food: (s.store || {}).food || 0, items: ((s.store || {}).items || []).slice(), known: ((s.store || {}).known || []).slice(), techs: ((s.store || {}).techs || []).slice(), insight: (s.store || {}).insight || 0, bad: (s.store || {}).bad || 0, spoiled: (s.store || {}).spoiled || 0, lots: ((s.store || {}).lots || []).map((l) => l.slice()), lk: (s.store || {}).lk || 'berry', know: { ...((s.store || {}).know || {}) }, forced: ((s.store || {}).forced || []).slice(), rec: { ...((s.store || {}).rec || {}) }, plots0: (s.store || {}).plots0, cult: (s.store || {}).cult };
     // AGON_P.bdbg: which of the four build-gate conditions actually stalls construction. Snapshot at
     // the top of the tick, before the agent loop mutates the queue or the stores. Off by default.
@@ -5895,7 +5903,7 @@ class Component extends DCLogic {
       if (a.alive && (a.sat < 0.3 || a.hyd < 0.3)) {
         const pg = a.pg;
         if (!pg || tick - pg.t >= 16) {
-          if (pg && a.sat <= pg.sat + 0.01 && a.hyd <= pg.hyd + 0.01) { a.esc = tick + 24; a.tg = null; a.tblStuck = 0; a.drStuck = 0; a.huntBan = tick + 50; if (needE0 && needD0 && a.nc) { a.nc = a.nc === 'eat' ? 'drink' : 'eat'; a.ncT = tick + 30; } (window.AGON_STATS = window.AGON_STATS || { esc: 0, escFix: 0 }).esc++; (window.AGON_LOG = window.AGON_LOG || []).push({ t: tick, id: a.id, ev: 'escalate', act: a.act, sat: +a.sat.toFixed(2), hyd: +a.hyd.toFixed(2), x: a.x, y: a.y }); if (window.AGON_LOG.length > 400) window.AGON_LOG.shift(); if (!(a.escLog > tick - 60)) { a.escLog = tick; log.push({ t: tick, text: a.id + ' is getting nowhere and changes approach', kind: 'warn' }); } }
+          if (pg && a.sat <= pg.sat + 0.01 && a.hyd <= pg.hyd + 0.01) { a.esc = tick + (PERS2 && !a.fac ? 12 + Math.round(24 * a.pers[3]) : 24); a.tg = null; a.tblStuck = 0; a.drStuck = 0; a.huntBan = tick + 50; if (needE0 && needD0 && a.nc) { a.nc = a.nc === 'eat' ? 'drink' : 'eat'; a.ncT = tick + 30; } (window.AGON_STATS = window.AGON_STATS || { esc: 0, escFix: 0 }).esc++; (window.AGON_LOG = window.AGON_LOG || []).push({ t: tick, id: a.id, ev: 'escalate', act: a.act, sat: +a.sat.toFixed(2), hyd: +a.hyd.toFixed(2), x: a.x, y: a.y }); if (window.AGON_LOG.length > 400) window.AGON_LOG.shift(); if (!(a.escLog > tick - 60)) { a.escLog = tick; log.push({ t: tick, text: a.id + (PERS2 && !a.fac ? (a.pers[3] < 0.3 ? ' loses patience and tries something else' : a.pers[3] > 0.7 ? ' calmly weighs another approach' : ' is getting nowhere and changes approach') : ' is getting nowhere and changes approach'), kind: 'warn' }); } }
           a.pg = { t: tick, x: a.x, y: a.y, sat: a.sat, hyd: a.hyd };
         }
         if (a.esc > tick) { const kn = knw(a); for (const b of bushes) if (b.food >= 1 && cheb(a, b) <= 12) { kn.set(key(b.x, b.y), true); if (FRESH) KT(a).set(key(b.x, b.y), tick); } this._KC[a.id] = null; }
@@ -5959,7 +5967,7 @@ class Component extends DCLogic {
       const sleepy = G ? G === 'sleep' : a.deepS || (!!a.slpM && (a.ene < 0.03 || (!needD && a.sat >= ((window.AGON_P || {}).eatFirst && needE ? 0.4 : 0.3) && !(a.temp < -0.5) && !(!(window.AGON_P || {}).noBite && needE && bushes.some((b) => b.x === a.x && b.y === a.y && b.food >= 1 && okFood(a, b))))));
       const bed = a.bed >= 0 ? BEDS[a.bed] : null;
       // injured colonists nearby are tended first (stops the bleeding, speeds healing); someone with no one to help tends their own wounds, badly
-      const patient = !a.dn && a.sat > 0.2 && a.hyd > 0.2 ? agents.filter((b) => b !== a && tendNeed(b) && (b.fac | 0) === (a.fac | 0) && cheb(a, b) <= 14).sort((u, v) => cheb(a, u) - cheb(a, v))[0] : null;
+      const patient = !a.dn && a.sat > (PERS2 && !a.fac ? 0.45 - 0.35 * a.pers[6] : 0.2) && a.hyd > 0.2 ? agents.filter((b) => b !== a && tendNeed(b) && (b.fac | 0) === (a.fac | 0) && cheb(a, b) <= 14).sort((u, v) => cheb(a, u) - cheb(a, v))[0] : null;
       if (a.dn) { act = 'down'; a.ene = Math.min(1, a.ene + 0.02); if (a.bub !== 'hurt') { a.bub = 'hurt'; a.bubT = 2; } if (!a.dnLog || tick - a.dnLog > 60) { a.dnLog = tick; log.push({ t: tick, text: a.id + ' is downed (' + Math.round(a.cons * 100) + '% conscious, ' + Math.round(a.blood * 100) + '% blood)', kind: 'bad' }); } }
       else if (fled) { act = 'move'; }
       else if (patient) {
@@ -5976,7 +5984,7 @@ class Component extends DCLogic {
         else { const res = moveTo(a, (x, y) => !fireAt.has(key(x, y)) && fires.some((f) => cheb({ x, y }, f) <= 2)); act = res === 'moved' ? 'move' : 'idle'; }
       }
       // a lone colonist outside camp with a stalker in sight heads for the camp (predators never enter it) instead of carrying on with the errand
-      else if (!a.fac && !inCamp(a.x, a.y) && !agents.some((b) => b !== a && b.alive && cheb(a, b) <= 2) && a.sat > 0.3 && a.hyd > 0.3 && (a.retreatT > tick || preds.some((q) => cheb(q, a) <= Math.max(3, Math.round((AK[q.k].sight + 1 + (mindOn && a.bel && !(window.AGON_P || {}).noPredFear ? Math.round(3 * A.mind.fear(a, 'pred:' + q.k)) : 0)) * ((window.AGON_P || {}).fearR ?? 0.6))) && (!AK[q.k].hurtOnly || a.hea < 0.6 || a.inj > 0.2)))) { a.retreatT = a.retreatT > tick ? a.retreatT : tick + 8;
+      else if (!a.fac && !inCamp(a.x, a.y) && !agents.some((b) => b !== a && b.alive && cheb(a, b) <= 2) && a.sat > 0.3 && a.hyd > 0.3 && (a.retreatT > tick || preds.some((q) => cheb(q, a) <= Math.max(3, Math.round((AK[q.k].sight + 1 + (mindOn && a.bel && !(window.AGON_P || {}).noPredFear ? Math.round(3 * A.mind.fear(a, 'pred:' + q.k)) : 0)) * ((window.AGON_P || {}).fearR ?? 0.6) * (PERS2 && !a.fac ? 1.3 - 0.6 * a.pers[0] : 1))) && (!AK[q.k].hurtOnly || a.hea < 0.6 || a.inj > 0.2)))) { a.retreatT = a.retreatT > tick ? a.retreatT : tick + 8;
         // back off out of the animal's sight (a few tiles, usually towards camp), and only run all the way home when hurt or when the camp is close anyway; a 25-tile dash home for every wolf on the horizon was a tenth of every colonist's year
         const nearCamp = cheb(a, { x: CAMPC[0], y: CAMPC[1] }) <= 8, hurt = a.hea < 0.6 || a.inj > 0.2, safeHere = preds.every((q) => cheb(q, a) >= AK[q.k].sight + 4);
         if (safeHere && !hurt && !nearCamp) act = 'idle';
@@ -5984,7 +5992,7 @@ class Component extends DCLogic {
       else if (shelterNeed && !(homeOK ? shelOK(a.x, a.y) : (terAt(a.x, a.y) === 7 && (CDEPTH.get(a.y * W + a.x) ?? 9) <= 3))) { const res = moveTo(a, homeOK ? (x, y) => shelOK(x, y) && !blocked(x, y) : (x, y) => terAt(x, y) === 7 && (CDEPTH.get(y * W + x) ?? 9) <= 3); act = res === 'moved' ? 'move' : 'idle'; }
       else if (shelterNeed) { if (a.slpM || a.ene < 0.3) { act = 'sleep'; a.ene = Math.min(1, a.ene + 0.06); if (a.bub !== 'sleep') { a.bub = 'sleep'; a.bubT = 4; } } else { act = 'shelter'; a.ene = Math.min(1, a.ene + 0.01); } } // sheltering from the weather is also when the tired sleep
       // freezing colonists with food and water in hand warm up at the hearth (or a cave or floor) before carrying on with work
-      else if (!a.fac && a.inv.berries > 0 && a.sat < 0.45 && !(a.pkT > tick)) { packEat(a); act = 'eat'; a.bub = 'eat'; a.bubT = 2; log.push({ t: tick, text: a.id + ' eats from the pack', kind: 'info' }); } // food in hand comes before every errand
+      else if (!a.fac && a.inv.berries > 0 && a.sat < 0.45 && !(a.pkT > tick)) { packEat(a); act = 'eat'; a.bub = 'eat'; a.bubT = 2; log.push({ t: tick, text: a.id + (PERS2 && !a.fac && a.pers[7] > 0.7 ? ' wolfs down food from the pack' : ' eats from the pack'), kind: 'info' }); } // food in hand comes before every errand
       // r53 (cool): dangerously hot colonists go to the water and cool off in it before anything
       // else — including sleep: most heat deaths in the probe were at camp, several asleep. Enter
       // at temp>0.8, stay until 0.4 (hysteresis, so no work/wade thrash); wading also refills the
@@ -6016,7 +6024,7 @@ class Component extends DCLogic {
         if (a.hyd < 0.8 && waterAdj(a.x, a.y)) { a.hyd = Math.min(1, a.hyd + 0.5); a.inv.water = 1; act = 'drink'; a.bub = 'drink'; a.bubT = 2; if (a.sat < 0.85) fishTry(a, fishHow(a) || 'bare'); }
         else { const gb = bushes.find((b) => b.x === a.x && b.y === a.y && b.food >= 1 && okFood(a, b)); gb.food -= 1; const hk = gb.k || 'berry'; a.sat = Math.min(1, a.sat + 0.35 * KIND[hk].nut); eatFx(a, hk); act = 'eat'; a.bub = 'eat'; a.bubT = 2; a.pkT = tick + 2; }
       }
-      else if (!(window.AGON_P || {}).noPack && !a.fac && a.pkT > tick && a.inv.berries < (((window.AGON_P || {}).packN) || 3) && a.hyd > 0.3 && bushes.some((b) => b.x === a.x && b.y === a.y && b.food >= 1 && okFood(a, b) && !(KIND[b.k || 'berry'].tox))) {
+      else if (!(window.AGON_P || {}).noPack && !a.fac && a.pkT > tick && a.inv.berries < ((PERS2 && !a.fac && !(window.AGON_P || {}).packN) ? 1 + Math.round(4 * a.pers[7]) : (((window.AGON_P || {}).packN) || 3)) && a.hyd > 0.3 && bushes.some((b) => b.x === a.x && b.y === a.y && b.food >= 1 && okFood(a, b) && !(KIND[b.k || 'berry'].tox))) {
         // having just eaten at a good bush, top up the pack before walking away, so the next meals cost no trip
         const gb = bushes.find((b) => b.x === a.x && b.y === a.y && b.food >= 1 && okFood(a, b)), tk = gb.food >= 2 ? 2 : 1, nu = KIND[gb.k || 'berry'].nut * tk, gn = Math.floor(nu) + (r() < nu - Math.floor(nu) ? 1 : 0);
         gb.food -= tk; a.inv.berries += gn; { const fd = FDROP[gb.k || 'berry']; if (fd && r() < 0.2 && matCount(a.mats) < carryCap) a.mats[fd] = (a.mats[fd] || 0) + 1; } if (gn > 0) a.inv.lk = gb.k || 'berry'; a.pkT = tick + 2; a.work.gather += 1; act = 'gather'; a.bub = 'gather'; a.bubT = 2;      }
@@ -6322,7 +6330,7 @@ class Component extends DCLogic {
       }
       a.act = actNow; // a downed colonist lies on the ground in the sleeping pose; a.dn marks it
       a.held = act === 'eat' || act === 'gather' ? 'berries' : act === 'drink' ? 'waterskin' : act === 'sleep' ? 'none' : act === 'craft' || act === 'strike' || a.inv.tool || a.gear.weapon ? 'tool' : 'none';
-      { const fc = fatalCause(a); if (fc) { (window.AGON_LOG = window.AGON_LOG || []).push({ t: tick, id: a.id, ev: 'death', cause: fc, act: a.act, sat: +a.sat.toFixed(2), hyd: +a.hyd.toFixed(2), x: a.x, y: a.y, bub: a.bub }); a.alive = false; a.dtick = tick; a.cause = fc; a.act = 'dead'; if (s.learn) learnDie(a); log.push({ t: tick, text: a.id + ' died of ' + a.cause, kind: 'bad' }); } }
+      { const fc = fatalCause(a); if (fc) { (window.AGON_LOG = window.AGON_LOG || []).push({ t: tick, id: a.id, ev: 'death', cause: fc, act: a.act, sat: +a.sat.toFixed(2), hyd: +a.hyd.toFixed(2), x: a.x, y: a.y, bub: a.bub }); a.alive = false; a.dtick = tick; a.cause = fc; a.act = 'dead'; if (s.learn) learnDie(a); log.push({ t: tick, text: a.id + (PERS2 && !a.fac ? ', ' + epithet(a) + ',' : '') + ' died of ' + a.cause, kind: 'bad' }); } }
     }
     animals = animals.filter((q) => !q.dead || tick - q.dt < 4);
     // relations between the home colony and rival camps: trespass breeds friction, chance meetings can turn into trade (fights come from conflictThink)
