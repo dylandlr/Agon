@@ -4910,10 +4910,14 @@ class Component extends DCLogic {
     // archived. The M2b probe: raw adjacency is flat (every pair ~550 ticks, top ~2x mean), so
     // without the similarity term warmth cannot differentiate. Flag off, nothing runs or writes.
     const AFFIL = !!(window.AGON_P || {}).affil;
-    // r57/M3 (AGON_P.fission, scaffolding): fission reads the warmth graph, so this flag enables
-    // the r55 accrual WITHOUT the parked idle-drift (measured as a time tax). The split mechanic
-    // itself lands only if the M3 probe shows cold cuts actually occur.
-    const FISS = !!(window.AGON_P || {}).fission;
+    // r57/M3 (fission): warmth accrual (without the parked idle-drift) + signed grudges +
+    // defection. Shipped default-on: panel alive -0.21 (t=-1.23, ns), no extinction changes,
+    // behavior identical in 22/24 worlds — defections fired only under stress (desert s21
+    // exodus 9->5, grassland s3 one defector), which is the emergence the mechanic exists for.
+    // Note: with this on, every world's hash now includes the warmth ledgers, so flag-on state
+    // diverges everywhere while behavior diverges almost nowhere. AGON_P.nofission opts out:
+    // with it set, nothing here runs or writes.
+    const FISS = !(window.AGON_P || {}).nofission;
     const defEv = [];   // defection notices, merged into the log once it exists (this preamble runs before 'const log' — the r52b store TDZ, same class)
     if (AFFIL || FISS) {
       const live = agents.filter((q) => q.alive && !q.fac);

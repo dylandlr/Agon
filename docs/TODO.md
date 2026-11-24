@@ -2045,3 +2045,48 @@ mockDecide Math.random carried item gets fixed in that round.
 ### r56 ship inertness: 8/8
 nopers2:1 == ab_pers2 arm A (the pre-ship baseline) and default == ab_pers2 arm B, byte-exact,
 on jungle 3 / forest 21 / temperate 21 / desert 21 (both directions each). r56 closed.
+
+## r57/M3 — fission as defection (AGON_P.nofission opts out): SHIPPED
+Commits 4abb9fc, c538685, 00f6ab6, 21e7ea2 + this one. The roadmap's M3 was rewritten twice by
+probes before any mechanic code survived contact.
+
+### Probe 1: the roadmap's schism trigger never occurs
+With warmth accrual on (fission scaffolding, no drift), the warmth graph is core-periphery in
+every world at every threshold: one warm blob + singletons, second components at most bonded
+PAIRS (cut temps 0.45-0.62 — warm). "The second-status agent leads their clique out" has no
+clique to lead. Root cause: warmth was non-negative — the graph could say "less warm" but
+never "divided".
+
+### Probe 2 (after signed warmth): feuds are stress-gated and still don't partition
+In-colony violence now turns pairs cold (struck -0.5, striker -0.25, floor -2; prune on |v|;
+grudges fade with time, never with forced proximity). Result: desert s21 carries 11 cold edges
+(coldest -1.51) at t=3000, healing to 2 by t=6000; every fed world has zero. Real vendettas,
+real healing — but feuding individuals stay embedded in the one-camp co-presence blob, so
+clique-schism stays blocked architecturally (one camp) and empirically.
+
+### The mechanic the data supports: defection (individual-grain fission)
+Every 100 ticks, a colonist (not a child) whose colony ledger is grudge-dominated (summed cold
+<= -1, outweighing all warmth) walks out and joins a rival camp — existing faction machinery
+carries everything (fac, home, combat sides, rendering). Coded act, emergent occurrence.
+Smoke: desert s21 defects in waves (3 at t=1937, 3 at t=3137 — a camp souring in bursts, all
+to Redhollow); fed worlds: zero defections, trajectories byte-identical.
+
+### Panel: alive -0.21 (t=-1.23, ns), extinctions 1=1, behavior identical in 22/24 worlds
+The whole cost is 5 legible lives in the 2 stressed worlds (desert s21 exodus 9->5, grassland
+s3 16->15), and every defector died — which is partly mechanical asymmetry, not ecology: COOL
+(r53) is colonist-only, so an exile loses wading the moment they defect. Known, accepted for
+now; revisit if rivals ever get the full thermal model. Shipped by the mig/pers2 standard:
+wishlist feature (splitting), kill gate passed, and the stress-gating IS the demonstrated
+emergence. New reference hashes: ab_fission.json arm B.
+
+### Measurement notes
+- First mechanic whose flag-on STATE diverges everywhere (warmth ledgers accrue in all worlds)
+  while BEHAVIOR diverges almost nowhere (only where defection fires). Hash mismatch no longer
+  implies behavioral divergence on this baseline; per-world alive/built comparisons do.
+- The advance-preamble TDZ trap bit a second time (r52b: store; r57: log). Anything above
+  'const log'/'const store' must read s.store and defer logging via a pending list (defEv,
+  merged where lorePend/soilEv merge).
+- DESERT S21 WATCH, escalated: 16 -> 9 (pers2 ship, panel-null overall) -> 5 (fission, ns).
+  Two consecutive rounds concentrated their cost in this one world. Next diagnostic candidate:
+  does pers2's bravery/fear or pack-size change break the r53 water-cooling equilibrium there?
+  Check before the next ship lands on top.
