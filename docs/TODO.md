@@ -2423,3 +2423,15 @@ fission, treaty. Reference hashes: ab_treaty.json arm B.
   26->61, walls 58->58 (crews form but throughput wasn't binding there), alive 15->15.
   Friction pairs: 0 observed in both smokes — rare by design (needs an overeager
   gregarious + hot-tempered pairing); panel-scale will measure the rate.
+
+## r63 FINAL verdict — TECHPAY SHIPS (retuned tier-0/1 costs)
+- B2 re-panel (retry-hardened runner, 24/24 rows, zero crashes/errors): survival fully
+  neutral — alive +0.88 (t=+0.78), peak -0.42 ns (the first tuning's -0.75* echo is gone),
+  walls/built/food/spoiled ns, McNemar p=1.0 (2 B-saves / 2 B-kills, balanced).
+- Validation bar passes: shelter 24/24 worlds, median 302 -> 616 (felt delay, no
+  starvation); cooking 24/24, 108 -> 218. Pacing lives where it should: techs 13.4 ->
+  10.7 (-2.67*), carpentry median 612 -> 2110, markmaking 592 -> 2342 — tier-2 is now a
+  real knowledge climb. The DAG's insight numbers and fill bars are live truth.
+- SHIPPED. NEW REFERENCE: ab_techpay2.json arm B (archived in docs/panels/).
+- CREW 24-world panel launched (arm A nocrew must match ab_techpay2 B; /tmp/ab rebuilt
+  to r64 src AFTER the previous panel finished — rule respected this time).
