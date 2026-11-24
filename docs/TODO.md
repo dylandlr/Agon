@@ -2109,3 +2109,40 @@ grudge -> exile, every link independently measured across r56/r57 probes. Ecolog
 coherent; cost one world 11 alive across two panel-null ships. Left as-is deliberately — this
 is the observation game working — but if Dyl wants desert survivable again, the lever is
 greed-hoarding under scarcity (pack size clamped by store-per-head), one line, A/B-able.
+
+## r58/M4 — treaties (AGON_P.notreaty opts out): SHIPPED
+Commits fd5c2b5 + this one. The last structural round of the social arc's first pass.
+
+### What already existed (audit before building)
+Diplomacy was CONTINUOUS all along: attack bias reads rel.score/100 (-0.35 rs), kills crater
+it (killPen), parleys/trades raise it. What was missing: discrete standing (a truce you can
+observe, with episodes), and a peace payoff.
+
+### The regime probe set the thresholds
+wetland s3 lives in stable peace (rel 87-100, 1759 trades); desert s21 and grassland s3
+oscillate -99..+99 (war/peace cycles already, unnamed); savanna/tundra/badlands pin near 0;
+temperate drifts to war late. So: truce sworn at rel.score >= 60 (reachable in 5/8 probed
+worlds), torn below -20 or by the kill penalty that already exists. While standing: attack
+bias -0.5, raid appetite -0.6 (symmetric — rivals damp too), trades carry +0.5 insight.
+
+### Smoke: the mechanic names what the diplomacy was already doing
+grassland cycles swear/break/swear/break/swear (3 episodes); wetland swears at t=242 and holds
+5759 ticks; desert swears at t=298 and goes 5 -> 16 alive — the truce defuses the
+pers2->scarcity->violence spiral before it starts. The desert tragedy and its prevention are
+now both emergent outcomes of the same machinery.
+
+### Panel: alive +0.00 exactly; secondaries all positive; SHIPPED
+Desert +11 cancels temperate s3 -5, temperate s21 -5, tundra s21 -4 to the decimal. Zero
+extinction changes, zero discordants. built +9.7 (t=1.57), walls +2.2, techs +0.5, food +0.7.
+Open on record: BOTH temperates lost ~5 (2/2 in one biome — mechanism unknown; the truce damps
+both sides, so it is not one-sided pacifism; candidates: trade-time displacement, the hot
+insight rate at 0.5/trade with trade counts in the thousands). First levers if a follow-up
+round investigates: insight 0.5 -> 0.1, or damping asymmetry. New reference hashes:
+ab_treaty.json arm B.
+
+### Social arc, first pass complete (Dyl's wishlist vs shipped reality)
+migration SHIPPED (r52) · leaders MEASURED, drift parked (r54) · friendship + homophily
+sorting EMERGED, drift parked (r55) · personalities SHIPPED (r56) · splitting-as-defection
+SHIPPED (r57) · treaties SHIPPED (r58) · hostility/relations/parley/mating/tech pre-existed.
+Remaining from the list: group tactics (M5), pair bonds (M6), full camp-level fission (needs
+multi-camp architecture), LLM dialogue (deferred by Dyl).

@@ -5655,8 +5655,11 @@ class Component extends DCLogic {
     // via killPen). The regime probe: wetland sits in stable peace (87-100), desert/grassland
     // oscillate -99..+99, others pin near 0 — so sworn at rel.score >= 60, torn below -20. While
     // it stands, attack appetite is damped further and trades carry insight (peace accelerates
-    // discovery). Flag off, nothing here runs or writes.
-    const TREATY = !!(window.AGON_P || {}).treaty;
+    // discovery). Shipped default-on in r58: panel alive +0.00 exactly (desert +11 cancels the
+    // temperate pair's -5s and tundra's -4), zero extinction changes, secondaries all positive
+    // (built +9.7 t=1.57). The 2/2 temperate losses are the open question on record.
+    // AGON_P.notreaty opts out: with it set, nothing here runs or writes.
+    const TREATY = !(window.AGON_P || {}).notreaty;
     const truce = TREATY ? (rel.truce || 0) : 0;
     if (TREATY) {
       if (!truce && rel.score >= 60) { rel.truce = tick; log.push({ t: tick, text: 'the camps swear peace — a truce stands', kind: 'event' }); }
