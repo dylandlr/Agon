@@ -6688,7 +6688,7 @@ class Component extends DCLogic {
       const on = i === s.sel || (s.msel || []).includes(i);
       const mk = msgKeyOf(a), LEXN = s.lex || null, wordsOn = this.optGet('words', false);
       const dmgOn = !!a.dmgV && a.dmgV >= 0.005 && s.tick - a.dmgT < 6;
-      const namesOn = this.optGet('names', false), label = namesOn ? (a.name || a.id) : a.id;
+      const namesOn = this.optGet('names', true), label = namesOn ? (a.name || a.id) : a.id;
       // what they just started doing, named in a word and left to rise and fade. Only on a change,
       // or every pawn would carry a permanent caption.
       const actsOn = this.optGet('acts', false), actAge = s.tick - (a.actT0 || 0);
@@ -7187,7 +7187,9 @@ class Component extends DCLogic {
     const dangerK = { pred: 1, bear: 1 };
     const stalk = s.animals.find((q) => !q.dead && !q.own && dangerK[q.k] && hudCol.some((c) => Math.max(Math.abs(c.a.x - q.x), Math.abs(c.a.y - q.y)) <= 6));
     if (stalk) { const c = hudCol.find((c) => Math.max(Math.abs(c.a.x - stalk.x), Math.abs(c.a.y - stalk.y)) <= 6); alertPush(2, ((A.ANIMAL_VARS[stalk.k + '.' + (window.__anvar || '')] || {}).name || this.E.ANK[stalk.k]) + ' near ' + c.a.id, c.i); }
-    const starv = hudCol.filter((c) => c.a.sat < 0.15), hung = hudCol.filter((c) => c.a.sat >= 0.15 && c.a.sat < 0.35), thirs = hudCol.filter((c) => c.a.hyd < 0.2), hurt = hudCol.filter((c) => c.a.hea < 0.5);
+    // U2: "starving" means the starvation meter is filling (mal), not a pre-breakfast sat dip —
+    // the old sat<0.15 test flapped red every dawn over healthy camps and taught alert-blindness.
+    const starv = hudCol.filter((c) => (c.a.mal || 0) > 0.05), hung = hudCol.filter((c) => !((c.a.mal || 0) > 0.05) && c.a.sat < 0.15), thirs = hudCol.filter((c) => c.a.hyd < 0.2), hurt = hudCol.filter((c) => c.a.hea < 0.5);
     if (starv.length) alertPush(2, (starv.length > 1 ? starv.length + ' colonists starving' : starv[0].a.id + ' is starving'), starv[0].i);
     else if (hung.length) alertPush(1, (hung.length > 1 ? hung.length + ' colonists hungry' : hung[0].a.id + ' is hungry'), hung[0].i);
     if (thirs.length) alertPush(1, (thirs.length > 1 ? thirs.length + ' colonists thirsty' : thirs[0].a.id + ' is thirsty'), thirs[0].i);
@@ -7195,8 +7197,10 @@ class Component extends DCLogic {
     if (dnd.length) alertPush(2, dnd.length > 1 ? dnd.length + ' colonists downed' : dnd[0].a.id + ' is downed', dnd[0].i);
     if (bld.length) alertPush(1, bld.length > 1 ? bld.length + ' colonists bleeding' : bld[0].a.id + ' is bleeding', bld[0].i);
     if (hurt.length) alertPush(hurt.some((c) => c.a.hea < 0.25) ? 2 : 1, (hurt.length > 1 ? hurt.length + ' colonists injured' : hurt[0].a.id + ' is injured'), hurt[0].i);
-    const foodN = Math.round(s.store.food || 0);
-    if (hudCol.length && foodN < hudCol.length) alertPush(foodN < 1 ? 2 : 1, 'Food stock low (' + foodN + ')', -1);
+    // U2 (design revamp): the colony plans on shelf + pockets, so the alert must too — the old
+    // shelf-only count cried "Food stock low (0)" over camps whose every pocket was full.
+    const foodN = Math.round((s.store.food || 0) + hudCol.reduce((n, c) => n + ((c.a.inv || {}).berries || 0), 0));
+    if (hudCol.length && foodN < hudCol.length) alertPush(foodN < 1 ? 2 : 1, 'Food running low (' + foodN + ' meals held)', -1);
     if (hudCol.length === 0) alertPush(2, 'No colonists left', -1);
     if (CAL.left <= 2 && (CAL.season + 1) % 4 === 3) alertPush(0, 'Winter in ' + (CAL.left || 'under 1') + ' day' + (CAL.left === 1 ? '' : 's'), -1);
     const stEvt = s.story && s.story.evt && s.tick < s.story.until ? s.story.evt : null;
@@ -7376,7 +7380,25 @@ class Component extends DCLogic {
       critters, pawns, ghosts: (() => { const occP = pawns.filter((p) => p.occ); if (this._gsE !== this.E) { this._gsE = this.E; this._gs = []; this._gso = []; } const GS = this._gs, ids = new Set(occP.map((p) => p.id)); for (let k = 0; k < GS.length; k++) if (GS[k] !== null && !ids.has(GS[k])) GS[k] = null; const have = new Set(GS); for (const p of occP) if (!have.has(p.id)) { let k = GS.indexOf(null); if (k < 0) { k = GS.length; GS.push(p.id); } else GS[k] = p.id; have.add(p.id); } const po = this._gso || [], byId = new Map(occP.map((p) => [p.id, p])); this._gso = GS.slice(); if (!occP.length) return []; return GS.map((id, k) => { const p = byId.get(id); if (!p) return { ...occP[0], gwrap: 'position: absolute; left: 0; top: 0; width: 1px; height: 1px; display: none' }; return po[k] !== id ? { ...p, gwrap: p.gwrap.replace(/transition: [^;]*/, 'transition: none') } : p; }); })(),
       crV: (() => { const byU = new Map(uOf.map((u, i) => [u, i])), ph = critters[0]; if (!ph) return []; return SLOT.map((u) => { const i = byU.get(u); if (i === undefined) return { ...ph, wrap: 'position: absolute; left: 0; top: 0; width: 1px; height: 1px; display: none' }; return !vk || visA(s.animals[i]) ? critters[i] : { ...critters[i], wrap: critters[i].wrap + '; display: none' }; }); })(), pawnsV: vk ? pawns.map((p, i) => i === s.sel || visA(s.agents[i]) ? p : { ...p, wrap: p.wrap + '; display: none' }) : pawns,
       nightStyle: 'position: absolute; left: 0; top: 0; width: ' + WPX + 'px; height: ' + HPX + 'px; pointer-events: none; z-index: 60; background: #141c3c; mix-blend-mode: multiply; opacity: ' + q04(LM.darkness * LIGHT.darkK) + '; ' + maskCss + (LM.darkness * LIGHT.darkK < 0.005 ? '; display: none' : ''),
-      rainStyle: 'position: absolute; left: 0; top: -160px; width: ' + (WPX + 80) + 'px; height: ' + (HPX + 160) + 'px; will-change: transform; pointer-events: none; z-index: 65; opacity: ' + (weather === 'rain' ? 0.35 : weather === 'storm' ? 0.6 : 0) + '; transition: opacity 1.5s linear; background-image: repeating-linear-gradient(105deg, rgba(200,220,240,0.7) 0 2px, transparent 2px 22px); background-size: 80px 160px; animation: ' + (weather === 'rain' || weather === 'storm' ? 'rain 0.5s linear infinite' : 'none'),
+      rainStyle: 'position: absolute; left: 0; top: -160px; width: ' + (WPX + 80) + 'px; height: ' + (HPX + 160) + 'px; will-change: transform; pointer-events: none; z-index: 65; opacity: ' + (weather === 'rain' ? 0.35 : weather === 'storm' ? 0.6 : 0) + '; transition: opacity 1.5s linear; background-image: repeating-linear-gradient(105deg, rgba(200,220,240,0.7) 0 2px, transparent 2px 22px); background-size: 80px 160px; animation: ' + (weather === 'rain' || weather === 'storm' ? 'rain 0.5s linear infinite' : 'none') + (() => {
+        // U3 (design revamp): rain does not fall indoors — mask the overlay by the finished roof
+        // tiles. The mask is an SVG data URI (white = rain visible, black holes over roofs),
+        // rebuilt only when the roof set changes. The overlay sits at top:-160 and slides -80,+160
+        // per cycle, so holes are drawn in overlay coordinates (+80 x, +160 y margin accounted by
+        // mask position tracking the same translate is NOT possible in pure CSS — instead the mask
+        // is sized to the overlay and holes are enlarged by the slide amplitude so no roofed tile
+        // ever shows a streak mid-cycle).
+        const RF = this.E.ROOF; if (!RF || !RF.size) return '';
+        const mk = this.E.campSig() + '|' + RF.size;
+        if (this._rmKey !== mk) {
+          const TS = this.E.TILE, W2 = WPX + 80, H2 = HPX + 160;
+          let rects = '';
+          for (const k of RF) { const i = k.indexOf(','), x = +k.slice(0, i), y = +k.slice(i + 1); rects += '<rect x="' + (x * TS - 80) + '" y="' + (y * TS + 160) + '" width="' + (TS + 80) + '" height="' + (TS + 160) + '"/>'; }
+          const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + W2 + '" height="' + H2 + '"><rect width="' + W2 + '" height="' + H2 + '" fill="white"/><g fill="black">' + rects + '</g></svg>';
+          this._rmKey = mk; this._rmVal = '; mask-image: url("data:image/svg+xml,' + encodeURIComponent(svg) + '"); -webkit-mask-image: url("data:image/svg+xml,' + encodeURIComponent(svg) + '"); mask-size: 100% 100%; -webkit-mask-size: 100% 100%';
+        }
+        return this._rmVal;
+      })(),
       bar: s.agents.map((a, i) => [a, i]).filter(([a]) => !a.fac).map(([a, i]) => ({ g: a.g, ap0: a.ap[0], ap1: a.ap[1], ap2: a.ap[2], label: 'Select ' + a.id, pressed: i === s.sel || (s.msel || []).includes(i), select: () => this.setState({ sel: i, msel: [] }),
         style: 'width: 44px; min-height: 52px; padding: 4px 0 4px; display: flex; flex-direction: column; align-items: center; border-radius: 4px; background: ' + (i === s.sel ? 'var(--surface-raised)' : 'transparent') + '; border: 1px solid ' + (i === s.sel ? 'var(--border-strong)' : 'transparent') + '; opacity: ' + (a.alive ? 1 : 0.4),
         p1: 'width: 9px; height: 3px; background: ' + (a.sat < 0.3 ? '#e08a78' : '#d4c63c'), p2: 'width: 9px; height: 3px; background: ' + (a.hyd < 0.3 ? '#e08a78' : '#7cacdf'), p3: 'width: 9px; height: 3px; background: ' + (a.hea < 0.5 ? '#e08a78' : '#7fbf8e') })),
@@ -7399,11 +7421,11 @@ class Component extends DCLogic {
       shadowsTitle: this.optGet('shadows', true) ? 'Hide shadows' : 'Show shadows',
       shadowsStyle: segBtn(!this.optGet('shadows', true)),
       toggleShadows: () => { this.prefSet('shadows', !this.optGet('shadows', true)); this.setState({ uiN: (this.state.uiN || 0) + 1 }); },
-      namesOn: this.optGet('names', false),
-      namesLabel: this.optGet('names', false) ? 'Names' : 'Numbers',
-      namesTitle: this.optGet('names', false) ? 'Label them by number instead' : 'Label them by name instead',
-      namesStyle: segBtn(this.optGet('names', false)),
-      toggleNames: () => { this.prefSet('names', !this.optGet('names', false)); this.setState({ uiN: (this.state.uiN || 0) + 1 }); },
+      namesOn: this.optGet('names', true),
+      namesLabel: this.optGet('names', true) ? 'Names' : 'Numbers',
+      namesTitle: this.optGet('names', true) ? 'Label them by number instead' : 'Label them by name instead',
+      namesStyle: segBtn(this.optGet('names', true)),
+      toggleNames: () => { this.prefSet('names', !this.optGet('names', true)); this.setState({ uiN: (this.state.uiN || 0) + 1 }); },
       actsOn: this.optGet('acts', false),
       actsLabel: this.optGet('acts', false) ? 'Doing' : 'Quiet',
       actsTitle: this.optGet('acts', false) ? 'Stop naming what they start doing' : 'Name what they start doing, over their head',
