@@ -326,6 +326,61 @@ understated relative to a trained agent; a frozen random trunk, so these are low
 lifetimes from 6 seeds; and within-life R² uses each held-out lifetime's own mean, so it measures
 within-life predictability rather than a predictor that could be deployed as-is.
 
+### The language dimensions do not crowd the bottleneck, and the bottleneck is not the problem
+
+Measured by `scripts/probe_bottleneck.py --seeds 4`, twice: once with the message head sampled
+(speech in 7–9% of living agent-ticks, as `silence_bias` intends) and once with `--silent`, which
+reproduces what every earlier probe did. 8,128 and 7,959 alive agent-ticks, 32 lifetimes each.
+
+`encode` sends the 11×11×64 window through convolutions and everything else — 924 dims — through
+one `nn.Dense(64)`. Inside those 924: **8** reward scalars at `DECODE_INDEX`, **128** of other own
+body / inventory / hand / torch / time / weather, **532** heard (402) and read (130) symbols, **256**
+mind map.
+
+| block | dims | gradient share, speaking | silent | rel ‖Δh‖ if zeroed, speaking |
+|---|---|---|---|---|
+| mind map | 256 | **0.606** | 0.636 | 0.764 |
+| other own/inv/time | 128 | 0.253 | 0.268 | 0.447 |
+| **reward scalars** | **8** | **0.092** | 0.096 | 0.253 |
+| **language heard+read** | **532** | **0.049** | **0.000** | 0.106 |
+
+The 8 inputs that determine reward drive about **twice** the gradient of all 532 language
+dimensions, from 1/66th as many inputs. The block that dominates is the mind map.
+
+What the 64-d bottleneck preserves, and what happens when the language block is removed:
+
+| label | 924-d in | 64-d out | 64-d, language zeroed | 64-d out, silent run |
+|---|---|---|---|---|
+| food | 1.0000 | 0.730 | 0.850 | 0.861 |
+| sleepiness | 1.0000 | 0.524 | 0.766 | 0.774 |
+| stress | 1.0000 | 0.769 | 0.883 | 0.862 |
+| **remaining lifetime** (grouped) | **−0.515 ±1.21** | **+0.355 ±0.099** | +0.253 ±0.187 | +0.242 ±0.069 |
+
+Two conclusions, and they point the same way:
+
+**The bottleneck is doing useful work, not destroying signal.** Held-out remaining lifetime goes
+from −0.515 off the raw 924 dims to +0.355 off the 64-d output. A random 924 → 64 projection is
+acting as the regularizer that lets the fit generalize to lifetimes it has not seen; the raw input
+overfits per-lifetime idiosyncrasy. Nothing here says 64 units is a constraint.
+
+**Language carries lifetime signal rather than diluting it.** Zeroing it improves every reward
+scalar's reconstruction and *lowers* remaining lifetime, 0.355 → 0.253. The across-run comparison
+agrees: silent from the start reads 0.242. The mechanism is unexamined — speech is sampled
+conditional on `h`, so heard symbols may carry something about neighbours' state, but this probe
+does not establish that and the two runs are not paired on trajectories (messages change `marks`
+and the read features, so the rolls diverge). What it does establish is that "the language channel
+dilutes what the critic needs" has no support.
+
+Instrument checks worth keeping, because they are what makes the ablation trustworthy: the 924-d
+column reconstructs each scalar at exactly **1.0000**, as it must when the input set contains that
+scalar's own column — this is the check that caught the intercept bug. And on the silent run,
+`64-d out` and `64-d, language zeroed` agree to all four digits, which they must, because zeroing an
+already-zero block is a no-op.
+
+Limits: weights at initialization, so a *trained* `feat_dense` could allocate its units
+deliberately; a uniform-random action policy; and the gradient-share figures are exact per sample
+but an approximation when averaged over ticks (§5d D).
+
 ### The target is not empty, and the critic still does not fit it
 
 At the shipped λ the target already carries R² 0.27 of remaining lifetime, yet `value.
@@ -345,8 +400,11 @@ improves that. So the failure is the critic not fitting a noisy target, with rep
 capacity ruled out (train R² 0.995). What is left is optimization, and `value.explained_variance`
 on a live run is still the number that quantifies it — read against the scale in §5d, not against 1.
 
-The candidates are in **§5d**, re-ranked after the λ probe: **C** (auxiliary prediction heads) is
-first, D second, A demoted after being measured against, B last. Capacity is still not among them.
+The candidates are in **§5d**, and every one of the four has now been measured rather than argued:
+**C** (auxiliary prediction heads) is implemented, **A** (raise λ) and **D** (a critic input path
+away from the language dims) were both measured *against*, and **B** (lengthen the window) waited on
+A and so falls with it. Capacity was never among them. **So the list of local measurements that
+could advance the diagnosis is empty: what remains is a run.**
 
 **C is now implemented and off by default** (`97e65aa`, `code_version` `cbb6f706e03f`): a supervised
 `dies within k ticks` head behind `--hazard-coef`, with the label shape chosen by measurement
@@ -354,7 +412,9 @@ first, D second, A demoted after being measured against, B last. Capacity is sti
 argument. What stays open is whether it moves `value.explained_variance`, which only a GPU run at
 `--hazard-coef > 0` against an unflagged baseline can say.
 
-**D is being measured** by `scripts/probe_bottleneck.py`, which is what turned up the two probe
+**D is refuted** by `scripts/probe_bottleneck.py` (above, and §5d D): the 8 reward scalars drive
+twice the gradient of all 532 language dims, the 924 → 64 projection *raises* held-out lifetime R²
+from −0.515 to +0.355, and removing language lowers it. That probe is also what turned up the two
 bugs at the top of this section.
 
 **Two cautionary experiments, not one.** λ was the best-argued candidate on the list and the
@@ -921,14 +981,42 @@ not launch all 365 as one job.
 run at `--hazard-coef > 0` against an unflagged baseline, and EV should be read against the scale
 below (the target itself carries only R² 0.27 at sd 0.58), not against 1.
 
-### D. A critic input path not shared with the 532 language dimensions
+### D. A critic input path not shared with the 532 language dimensions — **measured, refuted**
 
 `feat_dense` puts 532 heard/read symbols and the 8 scalars that determine reward through the same
-64-unit bottleneck (§6). The rationale would be gradient interference, not capacity.
+64-unit bottleneck (§6). The rationale was gradient interference, not capacity: capacity measured
+fine (train R² 0.995; encoder effective rank 34/128, condition number 1.3e3).
 
-**Last, and not yet justified.** Capacity was measured fine (train R² 0.995; encoder effective rank
-34/128, condition number 1.3e3). Interference is unmeasured, so this candidate rests on a
-hypothesis nothing in §0 supports. It needs its own measurement before it needs an implementation.
+**`scripts/probe_bottleneck.py --seeds 4` refutes it on the arithmetic the claim rests on.** See §0
+for the figures. Three independent reasons, in descending order of how hard they are to argue with:
+
+1. **The 8 scalars out-drive all 532 language dimensions 2:1.** Gradient share 0.092 against 0.049.
+   The dominant consumer of that bottleneck is the **mind map** at 0.606 from 256 dims — a block D
+   never mentions. Leave-one-block-out agrees: zeroing the scalars moves the activation 0.253
+   relative, zeroing every language dimension 0.106.
+2. **The bottleneck helps the critic rather than hurting it.** Held-out R² of remaining lifetime,
+   grouped by whole lifetime: **−0.515 ±1.21 from the raw 924 dims, +0.355 ±0.099 from the 64-d
+   output.** Compressing 924 → 64 does not destroy what V needs; it is what makes it generalize
+   across unseen lifetimes at all. D's framing of the bottleneck as the problem is backwards.
+3. **Removing language makes the critic's quantity worse, not better.** Zeroing the language block
+   raises reconstruction of every reward scalar (food 0.730 → 0.850) and *lowers* remaining
+   lifetime (0.355 → 0.253 ±0.187). The across-run comparison points the same way: with agents
+   silent from the start, lifetime reads 0.242 ±0.069. So those 532 inputs carry signal about
+   lifetime rather than diluting it, and D's intervention would remove it.
+
+Point 1 is the robust one. `∂L/∂W = x ⊗ δ` means `‖δ‖` factors out, so the per-sample share depends
+only on input energies — a property of the environment and the policy, never of the weights.
+Training cannot change it except through the policy's input statistics: an agent that talks far more
+than the 7–9% of ticks measured here would raise language's share, and would have to raise it more
+than tenfold to reach the mind map's.
+
+Points 2 and 3 carry the init caveat the probe was written with: a trained `feat_dense` allocates
+its 64 units deliberately, which a random one cannot. They were also measured under a uniform-random
+action policy. Neither weakens point 1.
+
+**Verdict: last, and now measured against rather than merely unsupported.** Why the mind map
+dominates the bottleneck, and whether that matters, is a new and unexamined question — but it is not
+D, and nothing yet says the 64-unit width is a constraint at all.
 
 ### E. Φ is carrying the signal — so the Φ experiment points the other way
 
@@ -946,22 +1034,24 @@ whether C's supervised head makes Φ redundant. Neither is specified.
 
 ### Why this order
 
-**C first**, because it is the only candidate whose premise is measured rather than argued: the
-signal is absent from the target at every λ, the labels are free, and the architecture already fits
-them to R² 0.995. **D second**, because the sharpened root cause — signal present at R² 0.27,
-explained variance ~0, capacity ruled out — now points at optimization and interference, which is
-exactly D's hypothesis; it needs its own measurement first, and it is no longer "nothing in §0
-supports it". **A** is cheap enough to run as a side experiment but has been measured against and
-must not be presented as the fix. **B** still waits on A.
+**C first and implemented**, because it is the only candidate whose premise survived measurement:
+the signal is absent from the target at every λ, the labels are free from the rollout, and the
+architecture already fits them. Its premise *and* its label shape were measured before its code was
+written.
+
+**A, B and D are all measured against.** A was the best-argued candidate on the list and the
+argument was wrong — raising λ moves target signal 0.269 → 0.179 while doubling variance. B waited
+on A. D's premise is refuted three ways (above). None of the three should be presented as the fix,
+and A is not even worth a side experiment now that the probe shows what it does to the target.
 
 One change at a time, or the result cannot be attributed — which is the whole reason the diagnosis
-took this long. And the reason A was demoted is worth keeping in view: it was the best-argued
-candidate on this list and the argument was wrong.
+took this long.
 
-C's premise and C's label shape were both measured before its code was written, and C is now
-implemented behind `--hazard-coef` (above). The next step is a run, not another candidate: one
-baseline, one `--hazard-coef > 0`, separate `--root`s, judged on `value.explained_variance`. D stays
-second and still owes its own measurement before it owes an implementation.
+**The next step is a run, not another candidate**, and that is now a statement about what is left
+rather than a preference: one baseline, one `--hazard-coef > 0`, separate `--root`s, judged on
+`value.explained_variance` against the scale above. The two questions a trained checkpoint would
+settle that nothing local can — whether the hazard head moves EV, and whether hydration becomes
+learnable once drinking is state-determined — are the same run.
 
 ---
 
