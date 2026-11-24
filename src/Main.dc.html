@@ -4784,9 +4784,11 @@ class Component extends DCLogic {
     // never fired anywhere: far gathers mostly don't happen (the agents who range die or fail), so
     // the signal samples the survivable radius, not the need — 0 fires in 48 probed windows. The
     // knowledge-exhaustion gate died the same way: the pooled map shows 13-29 food bushes within 12
-    // of camp in every dying world, the whole time it dies. What does discriminate is distress: >= 2
-    // deaths to the land (starvation, thirst, heat) in a 500-tick window happens only in the dying
-    // worlds (temperate's worst window is 1). So: on distress, move toward the centroid of food the
+    // of camp in every dying world, the whole time it dies. What discriminates better is distress:
+    // >= 2 deaths to the land (starvation, thirst, heat) in a 500-tick window. (The 4-world gate
+    // probe suggested this happens only in dying worlds; the panel corrected that — it also fires
+    // in struggling-but-viable worlds: temperate/forest/wetland s21 all moved and all end alive.)
+    // On distress, move toward the centroid of food the
     // colony knows beyond its home radius — migSite then scores water adjacency around that aim
     // point. Cooldown 2000, shelter established, and >= 2 far entries (nothing known = nowhere to
     // go). Deterministic, no RNG. Shipped default-on in r52 (panel: fired 4/24 worlds, no harm,
