@@ -2090,3 +2090,12 @@ emergence. New reference hashes: ab_fission.json arm B.
   Two consecutive rounds concentrated their cost in this one world. Next diagnostic candidate:
   does pers2's bravery/fear or pack-size change break the r53 water-cooling equilibrium there?
   Check before the next ship lands on top.
+
+### r57 ship inertness: 8/8 after the flag-fork fix
+First pass 7/8: desert s21's new default reverted to 9 alive because the violence->cold gate
+read the LITERAL fission key, which the default flip left false (851a20f shipped the fork;
+428edf0 fixed it). After the fix: nofission:1 == ab_fission arm A and default == ab_fission
+arm B (desert default alive=5, the exodus restored), byte-exact, 8/8 both directions. Ship
+checklist addition: a default flip must grep for literal reads of the old opt-in key — the
+const rename does not reach them, and only the both-directions inertness check catches it.
+r57 closed.
