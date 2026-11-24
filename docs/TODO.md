@@ -1927,3 +1927,7 @@ New reference hashes: ab_cool.json arm B.
 - Re-test fresh (r51, killed) on top of cool+mig someday: its kill list was heat-mediated
   (ranging into heat), and the desert s21 fresh+mig save hints the three interact.
 - forest s21 remains the panel's knife-edge bellwether; treat its flips as noise, not signal.
+
+### r53 ship inertness: 8/8
+nocool:1 == ab_cool arm A and default == ab_cool arm B, byte-exact, on jungle 3 / forest 21 /
+temperate 21 / desert 21 (both directions each). r53 closed.
