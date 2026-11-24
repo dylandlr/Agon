@@ -2151,3 +2151,25 @@ multi-camp architecture), LLM dialogue (deferred by Dyl).
 notreaty:1 == ab_treaty arm A and default == ab_treaty arm B, byte-exact, on wetland 3 /
 grassland 3 / temperate 21 / desert 21 (both directions each; desert default alive=16, the
 truce-saved world, confirmed in the shipped baseline). r58 closed; social arc first pass done.
+
+## r59/M6 — pair bonds (AGON_P.bonds): built correct, PARKED as dormant — births never run
+Commit b524e4c; flag stays off (and does nothing on, outside the sandbox). The smoke found the
+real story: s.births is a sandbox toggle, unset in panel/default runs, so the organic birth
+block NEVER executes — zero births in all 8 smoke arms, flag-off inertness 4/4 MATCH, flag-on
+byte-identical too. The roadmap audit's "Mating EXISTS" row is hereby corrected: the code
+exists; the feature is dormant. All population change in real runs is deaths and defections
+from a fixed worldgen roster (which varies by world — the "Run started with 12 agents" log
+line is the default scenario's text, not a count).
+
+### What r59 adds, for when births exist
+Mate choice sorts eligible fathers by mutual warmth (fission ledgers) with distance tiebreak
+(the old rule was nearest-wins); a birth adds +0.5 mutual warmth between colonist parents.
+Pair stability would then emerge from the choice->bond->choice loop — measured as repeat-pair
+births, distinct pairs, partners per mother, infant survival. The mechanic and its metrics are
+ready; they await the births round.
+
+### The decision that is Dyl's, not the standing go's
+Making births default-on changes the whole sim's character (population growth, every world,
+every difficulty balance — the block has a 24-colonist cap and fertility/fed gates, so it was
+designed to be on-able). That is a product call. When made, the round is: births default-on
+A/B first (its own big panel), THEN bonds A/B on top.
