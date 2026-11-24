@@ -4931,6 +4931,24 @@ class Component extends DCLogic {
         (p.relc = p.relc || {})[q.id] = Math.min(3, (p.relc[q.id] || 0) + dw);
         (q.relc = q.relc || {})[p.id] = Math.min(3, (q.relc[p.id] || 0) + dw);
       }
+      // r57/M3 (FISS): defection — fission at the individual grain, the only grain the probe
+      // supports (feuds exist under stress; cliques never form; there is one camp). A colonist
+      // whose colony ledger is dominated by grudges (summed cold <= -1 and outweighing all
+      // warmth) can no longer bear it: they walk out and join a rival camp. The act is coded;
+      // who leaves, and whether anyone ever does, emerges from the feud dynamics. Children stay.
+      if (FISS && tick % 100 === 37) {
+        for (const q of live) {
+          if (q.build === 'child' || !q.relc) continue;
+          let neg = 0, pos = 0; for (const k in q.relc) { const v = q.relc[k]; if (v < 0) neg += v; else pos += v; }
+          if (neg <= -1 && neg + pos < 0) {
+            const host = agents.find((b) => b.alive && b.fac && b.home);
+            if (host) {
+              q.fac = host.fac; q.home = host.home.slice(); q.bed = -1; q.tg = null; q.intent = null;
+              log.push({ t: tick, text: q.id + ' can no longer bear the colony and defects to ' + (RIVALS[host.fac - 1] ? RIVALS[host.fac - 1].name : 'the rivals'), kind: 'bad' });
+            }
+          }
+        }
+      }
     }
     // r56 (AGON_P.pers2, opt-in): personality reaches behavior and language. Four parameter
     // hooks (greed -> pack size, patience -> escalate window, bravery -> predator fear radius,
