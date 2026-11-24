@@ -5674,7 +5674,7 @@ class Component extends DCLogic {
       // r57 (fission/affil): violence inside the colony turns the pair cold in the warmth graph —
       // the struck resent hard, the striker cools too. This is the repulsion the M3 probe showed
       // the graph lacks: warmth was non-negative, so it could say "less warm" but never "divided".
-      if ((((window.AGON_P || {}).affil) || ((window.AGON_P || {}).fission)) && !a.fac && !t.fac) {
+      if ((AFFIL || FISS) && !a.fac && !t.fac) {   // r57 ship fix: literal flag reads here forked from the FISS const when the default flipped — the inertness check caught desert reverting to 9 alive
         (t.relc = t.relc || {})[a.id] = Math.max(-2, ((t.relc[a.id]) || 0) - 0.5);
         (a.relc = a.relc || {})[t.id] = Math.max(-2, ((a.relc[t.id]) || 0) - 0.25);
       }
