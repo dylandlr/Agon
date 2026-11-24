@@ -2435,3 +2435,21 @@ fission, treaty. Reference hashes: ab_treaty.json arm B.
 - SHIPPED. NEW REFERENCE: ab_techpay2.json arm B (archived in docs/panels/).
 - CREW 24-world panel launched (arm A nocrew must match ab_techpay2 B; /tmp/ab rebuilt
   to r64 src AFTER the previous panel finished — rule respected this time).
+
+## r64 verdict — CREW SHIPS; stack watch opened
+- Arm A (nocrew) 24/24 byte-MATCH vs ab_techpay2 B; zero crashes/errors.
+- The BSOLO watch item's prediction CONFIRMED: walls +4.96 (t=+3.09)*, built +14.1
+  (t=+3.34)* — warm-pair crews recover the solo-building throughput loss (BSOLO -6.9 ->
+  net ~-1.9 vs pre-BSOLO). Survival ns across the board (alive -0.83 t=-1.81, peak +0.08,
+  McNemar p=1.0, one discordant).
+- STACK WATCH (new): full default (BSOLO+TECHPAY+CREW) vs pre-stack ab_buildt2 B —
+  endpoint alive dead flat (-0.04, t=-0.05) and techs -1.92* intended, BUT extinction
+  discordants run 3-0 against (alpine21, forest3, tundra21; McNemar p=0.25 ns) and
+  survived leans -248 (t=-1.77 ns). One-directional on marginal/harsh worlds: slower
+  tech + solo building bite hardest where the margin was thinnest. EB1a (shack-first:
+  cheap early shelter BEFORE the full plan) is the designed fix — its panel must check
+  those three worlds specifically.
+- CREW's emergence claim (crews form along warmth lines beyond chance) is NOT yet
+  measured — panel rows carry no pair data; a dedicated instrumented probe (permutation
+  test at join moments) is queued with the emergence dossier. No claim until measured.
+- SHIPPED. NEW REFERENCE: ab_crew.json arm B (archived in docs/panels/).
