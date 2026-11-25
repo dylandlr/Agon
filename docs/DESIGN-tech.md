@@ -24,7 +24,25 @@ spread = **investigate before choosing** a mix of death-loss / rust / explicit t
 
 ## The refined model
 
-### 1. Discovery: reachable, then paid (r63 "TECHPAY", flag `notechpay`)
+### 1. Discovery: reachable, then paid (r63 "TECHPAY", flag `notechpay`; scope cut r66 "T1FREE", flag `not1free`)
+
+**r66 amendment:** the payment economy applies to **tiers 2-3 only**. The r66 famine
+investigation falsified the assumption below that payment never deadlocks a
+survival-critical tech: on the four thin-margin worlds the stack had killed
+(alpine21/forest3/tundra21/wetland3), payment-gating the tier-0/1 survival line both
+delayed cooking past the winter-1 stock-up window and — the larger effect — deadlocked
+its recovery after the first death wave (full re-pay from an insight pool nobody feeds
+while starving, plus a sustained-reachability requirement where instant-fire catches one
+pattern flicker; every TECHPAY-on arm ended with 2-6 techs, every TECHPAY-off arm with
+5-10). Two within-economy fixes failed their smokes before the scope cut: PRESS
+(crisis-directed payment — the trigger fires only during the famine, after the delays
+mattered) and REPAY (lost techs keep paid progress — the lost patterns were never
+re-lived, so there was nothing to re-fire). The principled reading: subsistence skills
+(tiers 0-1: cooking, shelter, storage, bedding...) are practiced into existence, not
+researched — a band that roasts meat knows cooking. Cumulative understanding (tier 2+:
+carpentry, metalwork, kilning, medicine) keeps reachable-then-paid, which is what the
+pacing knob was about anyway; the r63 halving of tier-0/1 costs was the design fighting
+itself. Full evidence chain in TODO.md r66.
 
 A tech **fires** when three things are true, in order:
 

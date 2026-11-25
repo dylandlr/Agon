@@ -2488,3 +2488,38 @@ fission, treaty. Reference hashes: ab_treaty.json arm B.
   round is a FAMINE INVESTIGATION on those four worlds: where does the early food economy
   fail under the stack (TECHPAY's later cooking? labor sunk into BUILDT/BSOLO? forage
   radius in cold?) — diagnose with instrumented runs BEFORE any fix is proposed.
+
+## r66 — famine investigation (diagnosis complete; T1FREE panel pending)
+- Probe 1 (famine_probe, pre-stack vs default on the four dead worlds): labor histograms
+  and store-first-empty ticks IDENTICAL between arms; death waves uniformly 'starved' at
+  t1792-1841 entering winter 1 in both; cookT doubled under the stack (64->132/140,
+  156/168->288/292). First read blamed TECHPAY's cooking delay. Too narrow — see below.
+- FALSIFIED FIX #1 (PRESS): crisis-directed payment (mean sat<0.4 -> food line jumps the
+  queue at triple budget). Inert smoke passed, but cookT unmoved on 3 of 4 worlds and all
+  four still extinct: colonies aren't hungry at t64-140 when the delay happens; they're
+  hungry at t1700 when it's too late. REVERTED, never committed.
+- Layer factorial (5 configs x 4 worlds): full 0/0/0/0; -TECHPAY 3/0/2/5; -CREW 0/0/0/7;
+  -EB1 0/0/0/3; pre-stack 2/4/5/4 (alpine21/forest3/tundra21/wetland3). TECHPAY is the
+  dominant killer (rescues 3/4 alone); wetland3 is a tipping-point world (any layer off
+  saves it); forest3 needs TECHPAY plus another layer off (interaction, unattributed).
+- The telling detail: every TECHPAY-on arm ends with 2-6 techs, every TECHPAY-off arm
+  with 5-10. forest3/tundra21 under the stack end at {firecraft, shelter} — cooking fired
+  at t132-140, was LOST in the first death wave, and never re-fired for 4000+ ticks. The
+  harm is a RECOVERY asymmetry on top of the delay: a lost tech cost full re-pay from an
+  insight pool nobody feeds while starving, and needed its patterns continuously
+  reachable for 8*cost ticks, where instant-fire arms catch one pattern flicker.
+- FALSIFIED FIX #2 (REPAY): lost techs keep their paid progress (re-fire instantly when
+  patterns return). Inert smoke passed, but forest3/tundra21 still ended {firecraft,
+  shelter} — the lost patterns were never RE-LIVED in the TECHPAY timeline, so free
+  re-fire had nothing to fire. REVERTED, never committed.
+- SHIPPED CANDIDATE (T1FREE, flag not1free): tiers 0-1 fire on pattern match; the insight
+  economy paces tiers 2-3 only. Rationale: the survival line (cooking, shelter, storage,
+  bedding — all tier 0-1) is subsistence practice lived into existence, not cumulative
+  research; payment-gating it both delays it past the winter-1 stock-up window and
+  deadlocks recovery after a death wave. DESIGN-tech's assumption "payment never
+  deadlocks a survival-critical tech" is FALSIFIED; the r63 halving of tier-0/1 costs
+  was the design fighting itself. Smoke: not1free vs ab_eb1 B MATCH (temperate21,
+  tundra21); default rescues tundra21 (4 alive, 13 techs — recovery works) and wetland3
+  (5), forest3 still 0 (equals the -TECHPAY ceiling; its death is the CREW/EB1
+  interaction), alpine21 still 0 (-TECHPAY gives 3; gap is tier-2-adjacent, unexplained).
+  Not tuning further to single seeds. 24-world panel running (ab_t1free.json).

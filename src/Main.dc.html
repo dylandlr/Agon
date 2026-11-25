@@ -5035,6 +5035,21 @@ class Component extends DCLogic {
     // AGON_P.notechpay opts out (instant fire on pattern match, no new accruals, no techProg).
     const TECHPAY = !(window.AGON_P || {}).notechpay;
     const PAYRATE = 0.5; // insight paid per derive pass (every 4 ticks) into one reachable tech
+    // T1FREE (r66): tiers 0-1 fire on pattern match; the insight economy paces tiers 2-3 only.
+    // The r66 famine factorial (alpine21/forest3/tundra21/wetland3, all extinct under the full
+    // stack): removing TECHPAY alone rescued 3 of 4 worlds, and within-TECHPAY fixes both failed
+    // their smokes — crisis-directed payment (PRESS) never fired before the delays happened, and
+    // free re-learn after knowledge loss (REPAY) had nothing to fire because the lost patterns
+    // were never re-lived in the TECHPAY timeline. The mechanism is structural: payment-gating
+    // the survival line (cooking, shelter, storage, bedding — all tier 0-1) both delays it past
+    // the winter-1 stock-up window and deadlocks its recovery after a death wave, since a paid
+    // tech needs sustained reachability and an insight pool nobody feeds while starving. The
+    // DESIGN-tech assumption "payment never deadlocks a survival-critical tech" is falsified.
+    // Subsistence skills are practiced into existence, not researched: a band that roasts meat
+    // knows cooking. Cumulative understanding (carpentry, metalwork, kilning, medicine — tier 2+)
+    // keeps the reachable-then-paid economy and the pacing knob, which was about those tiers
+    // anyway (the r63 halving of tier 0-1 costs was the design fighting itself). AGON_P.not1free opts out.
+    const T1FREE = TECHPAY && !(window.AGON_P || {}).not1free;
     const PLEX = [['timid', 'brave'], ['solitary', 'gregarious'], ['incurious', 'curious'], ['hot-tempered', 'patient'], ['gentle', 'fierce'], ['idle', 'industrious'], ['callous', 'kind'], ['generous', 'greedy']];
     const epithet = (q) => { const p = q.pers || []; const dv = p.map((v, i) => [Math.abs(v - 0.5), i, v]).sort((x, y) => y[0] - x[0]).slice(0, 2).filter((e) => e[0] > 0.15); if (!dv.length) return 'an even-tempered soul'; const w = dv.map((e) => PLEX[e[1]][e[2] > 0.5 ? 1 : 0]); return (/^[aeiou]/.test(w[0]) ? 'an ' : 'a ') + w.join(', ') + ' soul'; };
     const store = { built: ((s.store || {}).built || []).slice(), shelterT: (s.store || {}).shelterT ?? null, water: (s.store || {}).water || 0, wallMat: (s.store || {}).wallMat || null, norms: (s.store || {}).norms || {}, mats: { ...((s.store || {}).mats || {}) }, food: (s.store || {}).food || 0, items: ((s.store || {}).items || []).slice(), known: ((s.store || {}).known || []).slice(), techs: ((s.store || {}).techs || []).slice(), insight: (s.store || {}).insight || 0, bad: (s.store || {}).bad || 0, spoiled: (s.store || {}).spoiled || 0, lots: ((s.store || {}).lots || []).map((l) => l.slice()), lk: (s.store || {}).lk || 'berry', know: { ...((s.store || {}).know || {}) }, forced: ((s.store || {}).forced || []).slice(), rec: { ...((s.store || {}).rec || {}) }, plots0: (s.store || {}).plots0, cult: (s.store || {}).cult,
@@ -5093,8 +5108,8 @@ class Component extends DCLogic {
         // its patterns decay, and is lost with the tech on knowledge loss (full re-pay —
         // the rust investigation will revisit that harshness).
         const tp = store.techProg || {}, keep = [], newly = [];
-        for (const k of nt) { if (was.includes(k)) keep.push(k); else if (store.forced.includes(k)) { keep.push(k); newly.push(k); } }
-        const reach = nt.filter((k) => !was.includes(k) && !store.forced.includes(k))
+        for (const k of nt) { if (was.includes(k)) keep.push(k); else if (store.forced.includes(k) || (T1FREE && A.techOf(k).tier <= 1)) { keep.push(k); newly.push(k); } }
+        const reach = nt.filter((k) => !was.includes(k) && !store.forced.includes(k) && !(T1FREE && A.techOf(k).tier <= 1))
           .sort((p, q) => A.techOf(p).cost - A.techOf(q).cost || (p < q ? -1 : 1));
         let budget = PAYRATE; // one pool, cheapest reachable tech drinks first
         for (const k of reach) { const c = A.techOf(k).cost; tp[k] = tp[k] || 0;
