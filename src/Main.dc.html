@@ -179,8 +179,8 @@ body.agon-paused *{animation-play-state:paused !important}
     <!-- HUD: screen-fixed, outside the scaled world -->
     <div style="position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; z-index: 71">
       <div style="position: absolute; left: 16px; top: 88px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start">
-        <div style="display: flex; flex-direction: column; gap: 1px; padding: 5px 9px; background: rgba(34,24,18,0.82); border: 1px solid #1c110b; border-radius: 4px; font-size: 12px; line-height: 17px; color: #e9dcc8">
-          <sc-for list="{{hud.res}}" as="q" hint-placeholder-count="3"><div><span style="{{q.dot}}"></span>{{q.text}}</div></sc-for>
+        <div onClick="{{hud.vitalsClick}}" title="Open the Colony panel" style="pointer-events: auto; cursor: pointer; display: flex; flex-direction: column; gap: 1px; padding: 6px 10px; background: rgba(34,24,18,0.86); border: 1px solid #1c110b; border-radius: 4px; font-size: 12px; line-height: 17px; color: #e9dcc8">
+          <sc-for list="{{hud.res}}" as="q" hint-placeholder-count="5"><div style="display: flex; gap: 7px; align-items: center"><span style="{{q.dot}}"></span><span style="flex: 1; min-width: 74px">{{q.label}}</span><span style="{{q.numStyle}}">{{q.num}}</span><span aria-hidden="true" style="font-size: 10px; line-height: 10px; letter-spacing: -0.5px; color: #8a7a66; min-width: 54px; text-align: right; font-family: monospace">{{q.spark}}</span></div></sc-for>
         </div>
       </div>
       <div style="position: absolute; right: 16px; top: 64px; display: flex; flex-direction: column; gap: 4px; align-items: flex-end; max-width: 320px">
@@ -7443,10 +7443,28 @@ class Component extends DCLogic {
       }
     }
     const hudBtn = (k, label) => ({ label, on: hudTab === k, click: () => this.setState({ hudTab: hudTab === k ? '' : k }), style: 'pointer-events: auto; cursor: pointer; height: 28px; padding: 0 14px; border: 1px solid #1c110b; border-bottom: 0; border-radius: 4px 4px 0 0; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: ' + (hudTab === k ? '#1c110b' : '#e9dcc8') + '; background: ' + (hudTab === k ? '#ffd23f' : 'rgba(35,24,15,0.95)') });
-    const resList = [{ l: 'Colonists', v: hudCol.length, c: '#e9dcc8' }, { l: 'Food', v: foodN, c: foodN < hudCol.length ? '#ff9a8a' : '#d4c63c' }, { l: 'Water', v: Math.round(s.store.water || 0), c: '#7cacdf' }].concat(['wood', 'stone', 'flint', 'bone', 'hide', 'fur', 'fiber', 'sinew', 'resin', 'horn', 'tusk', 'claw', 'feather', 'hoof', 'scale', 'fat', 'shell'].filter((k) => ((s.store.mats || {})[k] || 0) > 0).map((k) => ({ l: A.MATS[k].label, v: Math.round(s.store.mats[k]), c: A.MATS[k].color })));
+    // vitals bar (UI Phase 1): the five colony vitals with a trend spark each (samples every
+    // 10 ticks, ~12 days of history, render-side only). Materials live in the Stock tab.
+    const coldN = hudCol.filter((c) => (c.a.temp || 0) < -0.3).length;
+    const hapAll = hudCol.map((c) => c.a.hap === undefined ? 0.6 : c.a.hap).sort((x, y) => x - y);
+    const moodMed = hapAll.length ? hapAll[Math.floor(hapAll.length / 2)] : 0;
+    const vh = this._vh && this._vh.last <= s.tick ? this._vh : (this._vh = { last: -1, s: [] });
+    if (s.tick !== vh.last && s.tick % 10 === 0) { vh.last = s.tick; vh.s.push([hudCol.length, foodN, Math.round(s.store.water || 0), coldN, moodMed]); if (vh.s.length > 60) vh.s.shift(); }
+    const SPB = '▁▂▃▄▅▆▇█';
+    const spark = (i) => { const xs = vh.s.slice(-26).map((r) => r[i]); if (xs.length < 2) return ''; const lo = Math.min(...xs), hi = Math.max(...xs); return xs.map((v) => SPB[hi === lo ? 3 : Math.min(7, Math.floor((v - lo) / (hi - lo) * 7.99))]).join(''); };
+    const resList = [
+      { l: 'Colonists', v: hudCol.length, c: '#e9dcc8', sp: spark(0) },
+      { l: 'Meals', v: foodN, c: foodN < hudCol.length ? '#ff9a8a' : '#d4c63c', sp: spark(1), warn: foodN < hudCol.length },
+      { l: 'Water', v: Math.round(s.store.water || 0), c: '#7cacdf', sp: spark(2) },
+      { l: 'Cold', v: coldN, c: coldN ? '#ff9a8a' : '#9a8a76', sp: spark(3), warn: coldN > 0 },
+      { l: 'Mood', v: Math.round(moodMed * 100) + '%', c: moodMed < 0.35 ? '#ff9a8a' : '#b9a0e0', sp: spark(4), warn: moodMed < 0.35 },
+    ];
     const hud = {
-      alerts: hudAlerts.slice(0, 7).map((q) => ({ text: q.text, style: q.style, click: () => { if (q.idx >= 0) this.setState({ sel: q.idx }); } })),
-      res: resList.map((q) => ({ text: q.l + ' ' + q.v, dot: 'display: inline-block; width: 8px; height: 8px; margin-right: 5px; border: 1px solid #1c110b; background: ' + q.c })),
+      // alert jump-to (UI Phase 1): clicking an alert about a colonist selects them AND pans
+      // the camera onto them (the existing follow plumbing), so the observer lands on the subject.
+      alerts: hudAlerts.slice(0, 7).map((q) => ({ text: q.text, style: q.style, click: () => { if (q.idx >= 0) this.setState({ sel: q.idx, follow: true, zoom: Math.max(this.state.zoom || 1, 2.4) }); } })),
+      vitalsClick: () => this.setState({ hudTab: 'colony' }),
+      res: resList.map((q) => ({ label: q.l, num: String(q.v), spark: q.sp, numStyle: 'min-width: 34px; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; color: ' + (q.warn ? '#ff9a8a' : '#e9dcc8'), dot: 'display: inline-block; width: 8px; height: 8px; border: 1px solid #1c110b; background: ' + q.c })),
       tabs: [hudBtn('colony', 'Colony'), hudBtn('stock', 'Stock'), hudBtn('goals', 'Goals'), hudBtn('events', 'Events'), hudBtn('wild', 'Wildlife'), hudBtn('tech', 'Tech')],
       open: !!hudTab, title: { colony: 'Colony', stock: 'Stockpile', goals: 'Goals', events: 'Events', wild: 'Wildlife', tech: 'Technology' }[hudTab] || '',
       rows: hudRows.map((q) => ({ ...q, rowStyle: rowSt + (q.on ? '; background: rgba(255,210,63,0.18)' : '') + (q.pick ? '; cursor: pointer' : '') + (q.done ? '; opacity: 0.6' : ''), pick: q.pick || (() => {}), hasB: !!q.b1, hasB4: !!q.b4, lStyle: q.wrap ? 'flex: 1; min-width: 0; white-space: normal; color: #b8a890; font-size: 11px; line-height: 15px; padding-bottom: 3px' : 'flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap', b1: q.b1 || barO(0, '#000'), b2: q.b2 || barO(0, '#000'), b3: q.b3 || barO(0, '#000'), b4: q.b4 || barO(0, '#000') })),
