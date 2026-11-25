@@ -2453,3 +2453,22 @@ fission, treaty. Reference hashes: ab_treaty.json arm B.
   measured — panel rows carry no pair data; a dedicated instrumented probe (permutation
   test at join moments) is queued with the emergence dossier. No claim until measured.
 - SHIPPED. NEW REFERENCE: ab_crew.json arm B (archived in docs/panels/).
+
+## r65 — EB1a shack-first implemented (flag noeb1; panel running)
+- Two mechanisms: (1) until carpentry+markmaking, only room0 ("the shack") is open to
+  build — under the all-walls-before-roofs rule its roof lands seasons earlier (temperate:
+  roofed t2659, room1 gate held 9000 ticks, zero violations); (2) windbreaks extended:
+  a freezing UNSHELTERED agent raises one at camp too, drawing hide/fur from the shared
+  store when their own carry is bare.
+- Gate lesson (diagnosed, fixed): first version gated camp windbreaks on NOT knowing the
+  shelter tech — tundra21's second death wave froze at camp at -1 AFTER learning shelter
+  but before any wall rose. Knowing walls in theory warms nobody; gate is now
+  freezing+unsheltered, not tech-ignorant.
+- Honest finding from the marginal-world diagnosis (tundra21 deep dive): the first death
+  wave is STARVATION while freezing (sat 0, far from camp, foraging at -0.95) — famine-led,
+  not shelter-led. Windbreaks now rise (3 on tundra21, 13 temperate) but single-seed
+  outcomes still swing (forest3: 3 alive one run, 0 the next). Stopped tuning to single
+  seeds — that is what the panel is for. If EB1a reads aggregate-neutral+ and the
+  marginals stay dead, the stack-watch hypothesis moves to the food economy under
+  TECHPAY pacing, not shelter.
+- Inertness smokes: noeb1 vs ab_crew B MATCH (temperate21, tundra21+retest, savanna21).

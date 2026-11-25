@@ -3028,7 +3028,14 @@ function applyCamp(st) {
   const roomDone = (i) => { for (const k of CAMPW0) { const [x, y] = k.split(',').map(Number); if (campGrp(x, y) === 'room' + i && !BUILT.has(k)) return false; } return true; };
   let stage = -1;
   if (full) stage = 99;
-  else if (on.shelter && st.store && st.store.shelterT != null) { stage = 0; while (stage < NROOM - 1 && roomDone(stage)) stage++; }
+  else if (on.shelter && st.store && st.store.shelterT != null) { stage = 0;
+    // EB1a (r65): shack-first. Until the colony knows carpentry AND markmaking (worked wood
+    // and a way to hold a plan outside one head), only room0 — the shack — is open to build,
+    // so its walls finish fast and the all-walls-before-roofs rule roofs it seasons earlier.
+    // The rest of the generated plan opens with the knowledge. AGON_P.noeb1 restores the old
+    // room chain.
+    const openAll = (window.AGON_P || {}).noeb1 || (T.includes('carpentry') && T.includes('markmaking'));
+    while (openAll && stage < NROOM - 1 && roomDone(stage)) stage++; }
   for (let i = 0; i < NROOM; i++) on['room' + i] = on.shelter && stage >= i;
   on.annex = !!ANX && on.shelter && on.carpentry && on.bedding && stage >= NROOM + 4;
   // ruins: a camp a colony walked away from. What it had finished still stands here,
@@ -5021,6 +5028,7 @@ class Component extends DCLogic {
     const BUILDTICKS = { wattle: 4, timber: 6, stone: 9 }; // ticks of work per segment, by wall material
     const BSOLO = BUILDT && !(window.AGON_P || {}).nobsolo; // r62: one segment per agent at a time
     const CREW = BSOLO && !(window.AGON_P || {}).nocrew; // r64: warm pairs may crew a segment; clashing pairs are slower than solo
+    const EB1 = !(window.AGON_P || {}).noeb1; // r65: shack-first — room0 only until carpentry+markmaking; camp windbreaks before shelter
     // TECHPAY (r63): a technology whose patterns are met is REACHABLE, not yet known — the
     // colony's insight pool pays its cost over derive passes (cheapest first), and the tech
     // fires when paid. Insight gains a real engine: +2 on every colony-first discovery.
@@ -6147,9 +6155,10 @@ class Component extends DCLogic {
         if (waterAdj(a.x, a.y)) { if (a.hyd < 0.8) { a.hyd = Math.min(1, a.hyd + 0.5); a.inv.water = 1; } act = 'shelter'; a.ene = Math.min(1, a.ene + 0.01); a.bub = 'drink'; a.bubT = 2; }
         else { const res = moveTo(a, (x, y) => waterAdj(x, y)); act = res === 'moved' ? 'move' : 'idle'; }
       }
-      else if (!a.fac && a.temp < -0.5 && !shelt(a.x, a.y) && terAt(a.x, a.y) < 6 && cheb(a, { x: CAMPC[0], y: CAMPC[1] }) > 8 && !(s.tents || []).some((q) => q.t > tick && cheb(a, q) <= 1) && (a.mats.hide || 0) + (a.mats.fur || 0) >= 2 && a.ene > 0.02) {
+      else if (!a.fac && a.temp < -0.5 && !shelt(a.x, a.y) && terAt(a.x, a.y) < 6 && (cheb(a, { x: CAMPC[0], y: CAMPC[1] }) > 8 || EB1) && !(s.tents || []).some((q) => q.t > tick && cheb(a, q) <= 1) && ((a.mats.hide || 0) + (a.mats.fur || 0) >= 2 || (EB1 && inCamp(a.x, a.y) && (store.mats.hide || 0) + (store.mats.fur || 0) >= 2)) && a.ene > 0.02) { // EB1a: a freezing, UNSHELTERED agent raises a windbreak at camp too (knowing walls in theory warms nobody — tundra21 died of exactly that gate), drawing the shared store if their own back is bare
         // cold, far from home, with skins on their back: drape them over branches as a windbreak and sit it out behind it. Nothing has to be known for this; anyone who has carried a hide in the wind thinks of it
-        const nh = Math.min(2, a.mats.hide || 0); a.mats.hide = (a.mats.hide || 0) - nh; if (nh < 2) a.mats.fur = (a.mats.fur || 0) - (2 - nh);
+        if ((a.mats.hide || 0) + (a.mats.fur || 0) >= 2) { const nh = Math.min(2, a.mats.hide || 0); a.mats.hide = (a.mats.hide || 0) - nh; if (nh < 2) a.mats.fur = (a.mats.fur || 0) - (2 - nh); }
+        else { const nh = Math.min(2, store.mats.hide || 0); store.mats.hide = (store.mats.hide || 0) - nh; if (nh < 2) store.mats.fur = (store.mats.fur || 0) - (2 - nh); } // EB1a camp windbreak draws the shared store
         s.tents = (s.tents || []).filter((q) => q.t > tick); s.tents.push({ x: a.x, y: a.y, t: tick + 400, by: a.id }); act = 'idle'; a.bub = 'cold'; a.bubT = 3;
         log.push({ t: tick, text: a.id + ' drapes hides over a frame of branches: a windbreak against the cold', kind: 'info' }); if (a.work) a.work.craft = (a.work.craft || 0) + 1;
       } else if (!a.fac && a.temp < -0.45 && !needE && !needD && a.ene > 0.05 && cheb(a, { x: HEARTH[0], y: HEARTH[1] }) > 10 && !(agents.some((b) => b !== a && b.alive && !b.fac && cheb(a, b) <= 1)) && (() => {
