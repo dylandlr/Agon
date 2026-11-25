@@ -2472,3 +2472,19 @@ fission, treaty. Reference hashes: ab_treaty.json arm B.
   marginals stay dead, the stack-watch hypothesis moves to the food economy under
   TECHPAY pacing, not shelter.
 - Inertness smokes: noeb1 vs ab_crew B MATCH (temperate21, tundra21+retest, savanna21).
+
+## r65 verdict — EB1a SHIPS; stack watch ESCALATES to a famine investigation
+- Arm A (noeb1) 24/24 byte-MATCH vs ab_crew B; zero crashes/errors.
+- Best survival lean in the stack: alive +0.75 (t=+1.92, just under threshold), peak ns,
+  techs ns; walls -9.5* / built -8.4* are the intended plan-gating shape, not harm.
+  One discordant (wetland3, B-kills), McNemar p=1.0. SHIPPED.
+  NEW REFERENCE: ab_eb1.json arm B (archived in docs/panels/).
+- Named marginals: alpine21 / forest3 / tundra21 all stayed dead in BOTH arms — EB1a
+  neither saved nor harmed them. Confirms the deep-dive: their deaths are FAMINE-led
+  (sat 0 while foraging in deep cold), not shelter-led.
+- STACK WATCH ESCALATED: current default vs pre-stack ab_buildt2 B — alive +0.71 ns
+  (aggregate healthy) but extinction discordants now 4-0 AGAINST (alpine21, forest3,
+  tundra21, wetland3; McNemar p=0.125). One-directional and strengthening. Next measured
+  round is a FAMINE INVESTIGATION on those four worlds: where does the early food economy
+  fail under the stack (TECHPAY's later cooking? labor sunk into BUILDT/BSOLO? forage
+  radius in cold?) — diagnose with instrumented runs BEFORE any fix is proposed.
