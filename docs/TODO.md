@@ -2523,3 +2523,31 @@ fission, treaty. Reference hashes: ab_treaty.json arm B.
   (5), forest3 still 0 (equals the -TECHPAY ceiling; its death is the CREW/EB1
   interaction), alpine21 still 0 (-TECHPAY gives 3; gap is tier-2-adjacent, unexplained).
   Not tuning further to single seeds. 24-world panel running (ab_t1free.json).
+
+## r66 verdict — T1FREE SHIPS; stack watch improves to 2-0
+- Arm A (not1free) 24/24 byte-MATCH vs ab_eb1 B; zero crashes/errors.
+- Panel A vs B: every metric ns (alive -0.83 t=-1.32; techs +1.54 t=+1.66; food +1.04).
+  Extinction discordants 2 rescued (tundra21 0->4, wetland3 0->5), 0 killed, McNemar
+  p=0.500. Honest note: the ns alive lean comes from three worlds dropping ~7
+  (jungle3, savanna3, temperate21) amid tech-count gains elsewhere (tundra3 10->20,
+  savanna3 13->21) — chaotic reshuffle from shifted tech timing, no mechanism found,
+  not tuned. SHIPPED. NEW REFERENCE: ab_t1free.json arm B (archived in docs/panels/).
+- STACK LEDGER vs pre-stack ab_buildt2 B: alive -0.12 ns; walls -9.67* / built -11.29*
+  (intended EB1a plan-gating shape); extinction discordants now 2-0 AGAINST (alpine21,
+  forest3; were 4-0). Both residual worlds also die under -TECHPAY alone or need a
+  second layer off: alpine21 (pre-stack 2 alive; gap is tier-2-adjacent, unexplained)
+  and forest3 (needs TECHPAY plus CREW or EB1 off — unattributed two-layer interaction).
+  WATCH CONTINUES on those two; next escalation would be a pairwise factorial
+  (noT+noC, noT+noE, noC+noE) on forest3 before any fix candidate.
+
+## UI Phase 1 (in progress, render-only, hash-inert MATCH on temperate21)
+- Vitals bar ships: colonists/meals/water/cold/mood-median with warn colors + ~12-day
+  unicode sparks (render-side buffer, resets on rewind); click opens Colony panel; the
+  mats list moves to Stock where it already lived. Reads the famine at a glance.
+- Alert jump-to ships: alert click selects the subject AND pans onto them via the
+  existing follow plumbing (zoom >= 2.4). Verified under Playwright.
+- Roster chips ship: mood ring (danger pops, ok/neutral translucent), status glyph
+  (downed/injured/asleep priority), proportional need micro-bars + 4th mood bar,
+  hover = name + current act.
+- Still open in Phase 1: time-block merge (season dial + clock + weather + speed +
+  minimap into one bottom-right block); alert grouping by subject; pulse on jump-to.

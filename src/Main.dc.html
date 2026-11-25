@@ -355,10 +355,13 @@ body.agon-paused *{animation-play-state:paused !important}
   <div style="position: absolute; left: 170px; right: 500px; top: 12px; display: flex; justify-content: center; pointer-events: none">
   <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; padding: 6px; border-radius: 8px; background: rgba(35,24,15,0.94); border: 1px solid var(--border); max-width: 100%; box-sizing: border-box; pointer-events: auto">
     <sc-for list="{{bar}}" as="b" hint-placeholder-count="12">
-      <button aria-label="{{b.label}}" aria-pressed="{{b.pressed}}" onClick="{{b.select}}" style="{{b.style}}">
-        <dc-import name="Pawn" ge="{{b.p.ge}}" sx="{{b.p.sx}}" phy="{{b.p.phy}}" muscle="{{b.p.muscle}}" stamina="{{b.p.stamina}}" frame="{{b.p.frame}}" fat="{{b.p.fat}}" strength="{{b.p.strength}}" shadow="{{false}}" build="{{b.p.build}}" grow="{{b.p.grow}}" old="{{b.p.old}}" a0="{{b.p.a0}}" a1="{{b.p.a1}}" a2="{{b.p.a2}}" expression="{{b.p.expr}}" look="S" wa="{{b.wa}}" wc="{{b.wc}}" ww="{{b.ww}}" size="{{34}}" hint-size="34px,34px"></dc-import>
+      <button aria-label="{{b.label}}" aria-pressed="{{b.pressed}}" title="{{b.tip}}" onClick="{{b.select}}" style="{{b.style}}">
+        <span style="{{b.ring}}">
+          <dc-import name="Pawn" ge="{{b.p.ge}}" sx="{{b.p.sx}}" phy="{{b.p.phy}}" muscle="{{b.p.muscle}}" stamina="{{b.p.stamina}}" frame="{{b.p.frame}}" fat="{{b.p.fat}}" strength="{{b.p.strength}}" shadow="{{false}}" build="{{b.p.build}}" grow="{{b.p.grow}}" old="{{b.p.old}}" a0="{{b.p.a0}}" a1="{{b.p.a1}}" a2="{{b.p.a2}}" expression="{{b.p.expr}}" look="S" wa="{{b.wa}}" wc="{{b.wc}}" ww="{{b.ww}}" size="{{34}}" hint-size="34px,34px"></dc-import>
+          <span aria-hidden="true" style="{{b.glyphStyle}}">{{b.glyph}}</span>
+        </span>
         <div style="display: flex; gap: 2px; margin-top: 2px">
-          <div style="{{b.p1}}"></div><div style="{{b.p2}}"></div><div style="{{b.p3}}"></div>
+          <div style="{{b.p1}}"></div><div style="{{b.p2}}"></div><div style="{{b.p3}}"></div><div style="{{b.p4}}"></div>
         </div>
       </button>
     </sc-for>
@@ -7394,6 +7397,8 @@ class Component extends DCLogic {
     const hudTab = s.hudTab || '';
     const rowSt = 'display: flex; gap: 8px; align-items: center; font-size: 12px; line-height: 18px; padding: 1px 0';
     const barO = (v, col) => ({ bar: 'display: block; width: 46px; height: 5px; background: rgba(0,0,0,0.45); border: 1px solid #1c110b; box-sizing: border-box', fill: 'display: block; height: 100%; width: ' + Math.round(Math.max(0, Math.min(1, v)) * 100) + '%; background: ' + col });
+    // roster-chip micro-bar: a 9px track whose fill is proportional to the need (gradient stop), not a binary color flip
+    const pbarF = (v, col) => { const p = Math.round(Math.max(0, Math.min(1, v)) * 100); return 'width: 9px; height: 3px; background: linear-gradient(to right, ' + col + ' ' + p + '%, rgba(0,0,0,0.5) ' + p + '%)'; };
     let hudRows = [];
     if (hudTab === 'colony') hudRows = hudCol.map((c) => ({ pick: () => this.setState({ sel: c.i }), l: c.a.id, r: c.a.act || '', b1: barO(c.a.hea, '#7fbf8e'), b2: barO(c.a.sat, c.a.sat < 0.3 ? '#e08a78' : '#d4c63c'), b3: barO(c.a.hyd, '#7cacdf'), b4: barO(c.a.ene == null ? 1 : c.a.ene, '#b9a0e0'), on: c.i === s.sel }));
     else if (hudTab === 'stock') {
@@ -7648,7 +7653,13 @@ class Component extends DCLogic {
       })(),
       bar: s.agents.map((a, i) => [a, i]).filter(([a]) => !a.fac).map(([a, i]) => ({ g: a.g, p: this.pawnProps(a), wa: a.alive ? A.wornKey(a.gear && a.gear.armor) : '', wc: a.alive ? A.wornKey(a.gear && a.gear.clothing) : '', ww: a.alive ? A.wornKey(a.gear && a.gear.weapon) : '', label: 'Select ' + a.id, pressed: i === s.sel || (s.msel || []).includes(i), select: () => this.setState({ sel: i, msel: [] }),
         style: 'width: 44px; min-height: 52px; padding: 4px 0 4px; display: flex; flex-direction: column; align-items: center; border-radius: 4px; background: ' + (i === s.sel ? 'var(--surface-raised)' : 'transparent') + '; border: 1px solid ' + (i === s.sel ? 'var(--border-strong)' : 'transparent') + '; opacity: ' + (a.alive ? 1 : 0.4),
-        p1: 'width: 9px; height: 3px; background: ' + (a.sat < 0.3 ? '#e08a78' : '#d4c63c'), p2: 'width: 9px; height: 3px; background: ' + (a.hyd < 0.3 ? '#e08a78' : '#7cacdf'), p3: 'width: 9px; height: 3px; background: ' + (a.hea < 0.5 ? '#e08a78' : '#7fbf8e') })),
+        // roster chip (UI Phase 1): mood ring around the portrait, status glyph (downed >
+        // injured > asleep), proportional need fills (sat/hyd/hea/mood), hover = name + act
+        tip: a.id + ' · ' + (a.alive ? (a.act || 'idle') : 'dead'),
+        ring: 'position: relative; display: inline-flex; border-radius: 7px; border: 2px solid ' + (!a.alive ? 'transparent' : (a.hap === undefined ? 0.6 : a.hap) < 0.35 ? 'var(--danger)' : (a.hap === undefined ? 0.6 : a.hap) < 0.6 ? 'rgba(181,164,140,0.4)' : 'rgba(127,160,106,0.55)'),
+        glyph: !a.alive ? '' : a.dn ? '✚' : (a.wn || []).some((w) => !w.td && w.bl > 0.001) || a.hea < 0.5 ? '✚' : a.act === 'sleep' ? '☾' : '',
+        glyphStyle: 'position: absolute; right: -5px; top: -7px; font-size: 11px; line-height: 12px; font-weight: 700; text-shadow: 0 1px 2px rgba(0,0,0,0.8); color: ' + (a.dn ? '#ff6a5a' : a.hea < 0.5 || (a.wn || []).some((w) => !w.td && w.bl > 0.001) ? '#ffc24a' : '#9db8d2'),
+        p1: pbarF(a.sat, a.sat < 0.3 ? '#e08a78' : '#d4c63c'), p2: pbarF(a.hyd, a.hyd < 0.3 ? '#e08a78' : '#7cacdf'), p3: pbarF(a.hea, a.hea < 0.5 ? '#e08a78' : '#7fbf8e'), p4: pbarF(a.hap === undefined ? 0.6 : a.hap, '#b9a0e0') })),
       calText: 'Year ' + CAL.year + ' · ' + SEASONS[CAL.season] + ' ' + CAL.sday, calLeft: (CAL.left === 0 ? 'last day of ' : CAL.left + ' days to ') + (CAL.left === 0 ? SEASONS[CAL.season].toLowerCase() : SEASONS[(CAL.season + 1) % 4].toLowerCase()), calBar: 'height: 100%; width: ' + (CAL.frac * 100).toFixed(1) + '%; background: ' + ['#8ac45a', '#e6c04a', '#d9803a', '#9ec8e8'][CAL.season], day: Math.floor(s.tick / 50) + 1, hour: String(Math.floor(hr)).padStart(2, '0') + ':' + String(Math.floor((hr % 1) * 60)).padStart(2, '0'),
       lightText: 'sun ' + (LM.elev >= 0 ? '+' : '') + LM.elev.toFixed(0) + '°   light ' + LM.ambient.toFixed(2) + '   dark ' + LM.darkness.toFixed(2) + '', season: SEASONS[season], temp: Math.round(tmp) + '°C', windTxt: ['E','SE','S','SW','W','NW','N','NE'][((Math.round(Math.atan2(WND.dy, WND.dx) / (Math.PI / 4)) % 8) + 8) % 8] + ' wind ' + WND.sp.toFixed(1) + ' m/s', weather,
       cursorText: String(s.tick),
