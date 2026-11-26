@@ -2551,3 +2551,31 @@ fission, treaty. Reference hashes: ab_treaty.json arm B.
   hover = name + current act.
 - Still open in Phase 1: time-block merge (season dial + clock + weather + speed +
   minimap into one bottom-right block); alert grouping by subject; pulse on jump-to.
+
+## r66b — pairwise probe on the residual worlds (watch escalation, measured)
+- forest3 pairwise (T1FREE default stack): noT+noC 0, noT+noE 0, noC+noE **4 alive** —
+  the killer pair is CREW x EB1 TOGETHER; TECHPAY is irrelevant on forest3 post-T1FREE.
+  Neither layer alone rescues (r66 factorial: noC 0, noE 0). Hypothesized mechanism for
+  r67: a joiner in a q<1 crew produces 0.7 worker-equivalents while a free segment sits
+  unclaimed (BSOLO opportunity cost), plus mutual warmth decay souring the colony; the
+  designed "bad crews dissolve themselves" pressure is too weak. EB1's stage cap +
+  windbreak economy amplifies the slow-build cost on thin-margin worlds.
+- alpine21: default ends 6 techs / 0 alive; noT ends 10 techs / 3 alive — the gap is the
+  delayed tier-2 line (wells, leverage, metalwork never paid under default). Wells
+  missing in an alpine winter is a thirst/cold-chain lead. Watch continues; no fix
+  candidate yet (single world, mechanism unverified).
+- r67 candidate (flag TBD): joiners feel sustained q<1 friction and leave decisively,
+  claiming their own segment (emergent-honest: they know their own patience/warmth and
+  feel the arguments; no oracle). Warmth decay + friction log stay — the social texture
+  is the point. Ships only through inert smoke + 24-world panel vs ab_t1free B.
+- Probe hygiene: techLog extraction in probes returned empty (entry shape mismatch) —
+  fix the field names before r67 instrumentation.
+
+## UI Phase 1 — time block (render-only)
+- The Map panel becomes a pure time block: minimap, day/night dial, clock, calendar +
+  temp, weather + wind, season bar, play/speed. The five view toggles (sound, signs,
+  quiet, shadows, names) move to the Tools panel under Inspect/Topology/X-ray.
+  Verified by screenshot both panels; zero pageerrors. Phase 1 remaining: alert
+  grouping by subject, jump-to pulse.
+- Noticed (queue): weather label said 'clear' while rain rendered on temperate21 t600 —
+  pre-existing display lag, investigate with the chronicle/event work.
