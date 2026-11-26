@@ -2575,7 +2575,14 @@ fission, treaty. Reference hashes: ab_treaty.json arm B.
 - The Map panel becomes a pure time block: minimap, day/night dial, clock, calendar +
   temp, weather + wind, season bar, play/speed. The five view toggles (sound, signs,
   quiet, shadows, names) move to the Tools panel under Inspect/Topology/X-ray.
-  Verified by screenshot both panels; zero pageerrors. Phase 1 remaining: alert
-  grouping by subject, jump-to pulse.
+  Verified by screenshot both panels; zero pageerrors.
+- Alert grouping by subject ships: one colonist with several conditions gets ONE merged
+  line at max severity ("A01: starving · thirsty") instead of a line per condition;
+  multi-colonist categories keep their counted lines. Verified by forcing conditions on
+  one agent in a probe page.
+- Jump-to pulse ships: an alert click draws a brief ember ring (agjpulse, 2 beats) on
+  the subject in world coords, alongside the existing select+follow+zoom. Verified by
+  screenshot. UI PHASE 1 COMPLETE. Inertness re-verified after each change (MATCH,
+  temperate21 vs ab_eb1 B).
 - Noticed (queue): weather label said 'clear' while rain rendered on temperate21 t600 —
   pre-existing display lag, investigate with the chronicle/event work.

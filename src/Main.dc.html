@@ -9,7 +9,7 @@
 <body>
 <x-dc><helmet>
 <style>
-:root{--ground:#2a1d14;--surface:#4a3626;--surface-raised:#57402c;--border:#241709;--border-strong:#7a5c40;--ink:#ece2cf;--ink-muted:#b5a48c;--accent-blue:#9db8d2;--fill-blue:#3d5a74;--fill-green:#3d5c41;--signal-yellow:#d8a43b;--on-signal:#1c110b;--danger:#d07a5a;--ok:#7fa06a;--font-display:Georgia,'Iowan Old Style',serif}[data-pbar]{font-family:var(--font-display)}@keyframes agbchip{0%{transform:translate(0,-2px);opacity:0.9}100%{transform:translate(var(--bcx,6px),16px);opacity:0}}@keyframes agbset{0%{transform:scale(0.35);opacity:0.75}100%{transform:scale(1.6);opacity:0}}
+:root{--ground:#2a1d14;--surface:#4a3626;--surface-raised:#57402c;--border:#241709;--border-strong:#7a5c40;--ink:#ece2cf;--ink-muted:#b5a48c;--accent-blue:#9db8d2;--fill-blue:#3d5a74;--fill-green:#3d5c41;--signal-yellow:#d8a43b;--on-signal:#1c110b;--danger:#d07a5a;--ok:#7fa06a;--font-display:Georgia,'Iowan Old Style',serif}[data-pbar]{font-family:var(--font-display)}@keyframes agbchip{0%{transform:translate(0,-2px);opacity:0.9}100%{transform:translate(var(--bcx,6px),16px);opacity:0}}@keyframes agbset{0%{transform:scale(0.35);opacity:0.75}100%{transform:scale(1.6);opacity:0}}@keyframes agjpulse{0%{transform:scale(0.4);opacity:0.9}100%{transform:scale(2.2);opacity:0}}
 body{margin:0;background:#1c110b}
 button{font:inherit;color:inherit;cursor:pointer}
 a{color:#7cacdf}
@@ -7370,13 +7370,26 @@ class Component extends DCLogic {
     // U2: "starving" means the starvation meter is filling (mal), not a pre-breakfast sat dip —
     // the old sat<0.15 test flapped red every dawn over healthy camps and taught alert-blindness.
     const starv = hudCol.filter((c) => (c.a.mal || 0) > 0.05), hung = hudCol.filter((c) => !((c.a.mal || 0) > 0.05) && c.a.sat < 0.15), thirs = hudCol.filter((c) => c.a.hyd < 0.2), hurt = hudCol.filter((c) => c.a.hea < 0.5);
-    if (starv.length) alertPush(2, (starv.length > 1 ? starv.length + ' colonists starving' : starv[0].a.id + ' is starving'), starv[0].i);
-    else if (hung.length) alertPush(1, (hung.length > 1 ? hung.length + ' colonists hungry' : hung[0].a.id + ' is hungry'), hung[0].i);
-    if (thirs.length) alertPush(1, (thirs.length > 1 ? thirs.length + ' colonists thirsty' : thirs[0].a.id + ' is thirsty'), thirs[0].i);
+    // grouped by subject (UI Phase 1): when ONE colonist carries several conditions, they get
+    // one merged line ("A08: starving · bleeding") at max severity instead of a line per
+    // condition. Multi-colonist categories keep their counted lines.
+    const solo = {};
+    const addSolo = (c, lvl, word) => { (solo[c.i] = solo[c.i] || { id: c.a.id, conds: [] }).conds.push([lvl, word]); };
+    if (starv.length > 1) alertPush(2, starv.length + ' colonists starving', starv[0].i);
+    else if (starv.length) addSolo(starv[0], 2, 'starving');
+    else if (hung.length > 1) alertPush(1, hung.length + ' colonists hungry', hung[0].i);
+    else if (hung.length) addSolo(hung[0], 1, 'hungry');
+    if (thirs.length > 1) alertPush(1, thirs.length + ' colonists thirsty', thirs[0].i);
+    else if (thirs.length) addSolo(thirs[0], 1, 'thirsty');
     const dnd = hudCol.filter((c) => c.a.dn), bld = hudCol.filter((c) => !c.a.dn && c.a.wn && c.a.wn.some((w) => !w.td && w.bl > 0.001));
-    if (dnd.length) alertPush(2, dnd.length > 1 ? dnd.length + ' colonists downed' : dnd[0].a.id + ' is downed', dnd[0].i);
-    if (bld.length) alertPush(1, bld.length > 1 ? bld.length + ' colonists bleeding' : bld[0].a.id + ' is bleeding', bld[0].i);
-    if (hurt.length) alertPush(hurt.some((c) => c.a.hea < 0.25) ? 2 : 1, (hurt.length > 1 ? hurt.length + ' colonists injured' : hurt[0].a.id + ' is injured'), hurt[0].i);
+    if (dnd.length > 1) alertPush(2, dnd.length + ' colonists downed', dnd[0].i);
+    else if (dnd.length) addSolo(dnd[0], 2, 'downed');
+    if (bld.length > 1) alertPush(1, bld.length + ' colonists bleeding', bld[0].i);
+    else if (bld.length) addSolo(bld[0], 1, 'bleeding');
+    if (hurt.length > 1) alertPush(hurt.some((c) => c.a.hea < 0.25) ? 2 : 1, hurt.length + ' colonists injured', hurt[0].i);
+    else if (hurt.length) addSolo(hurt[0], hurt[0].a.hea < 0.25 ? 2 : 1, 'injured');
+    for (const i of Object.keys(solo)) { const g = solo[i], lvl = Math.max(...g.conds.map((x) => x[0]));
+      alertPush(lvl, g.conds.length > 1 ? g.id + ': ' + g.conds.map((x) => x[1]).join(' · ') : g.id + ' is ' + g.conds[0][1], +i); }
     // U2 (design revamp): the colony plans on shelf + pockets, so the alert must too — the old
     // shelf-only count cried "Food stock low (0)" over camps whose every pocket was full.
     const foodN = Math.round((s.store.food || 0) + hudCol.reduce((n, c) => n + ((c.a.inv || {}).berries || 0), 0));
@@ -7467,7 +7480,7 @@ class Component extends DCLogic {
     const hud = {
       // alert jump-to (UI Phase 1): clicking an alert about a colonist selects them AND pans
       // the camera onto them (the existing follow plumbing), so the observer lands on the subject.
-      alerts: hudAlerts.slice(0, 7).map((q) => ({ text: q.text, style: q.style, click: () => { if (q.idx >= 0) this.setState({ sel: q.idx, follow: true, zoom: Math.max(this.state.zoom || 1, 2.4) }); } })),
+      alerts: hudAlerts.slice(0, 7).map((q) => ({ text: q.text, style: q.style, click: () => { if (q.idx >= 0) { this._jp = { idx: q.idx, t0: Date.now() }; this.setState({ sel: q.idx, follow: true, zoom: Math.max(this.state.zoom || 1, 2.4) }); } } })),
       vitalsClick: () => this.setState({ hudTab: 'colony' }),
       res: resList.map((q) => ({ label: q.l, num: String(q.v), spark: q.sp, numStyle: 'min-width: 34px; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; color: ' + (q.warn ? '#ff9a8a' : '#e9dcc8'), dot: 'display: inline-block; width: 8px; height: 8px; border: 1px solid #1c110b; background: ' + q.c })),
       tabs: [hudBtn('colony', 'Colony'), hudBtn('stock', 'Stock'), hudBtn('goals', 'Goals'), hudBtn('events', 'Events'), hudBtn('wild', 'Wildlife'), hudBtn('tech', 'Tech')],
@@ -7618,6 +7631,9 @@ class Component extends DCLogic {
       bdust: (() => { const done = this._bdone || {}; const out = [];
         for (const k in done) { const [x, y] = k.split(',').map(Number);
           out.push({ style: 'position: absolute; left: ' + (x * TS + 8) + 'px; top: ' + (y * TS + 8) + 'px; width: 32px; height: 32px; border-radius: 50%; border: 3px solid rgba(220,205,180,0.75); z-index: ' + ((y + 1) * TS) + '; pointer-events: none; animation: agbset 0.9s ease-out forwards' }); }
+        // jump-to pulse (UI Phase 1): a brief ember ring on the colonist an alert click landed on
+        if (this._jp && Date.now() - this._jp.t0 < 1600) { const a2 = s.agents[this._jp.idx];
+          if (a2) out.push({ style: 'position: absolute; left: ' + (a2.x * TS + TS / 2 - 27) + 'px; top: ' + (a2.y * TS + TS / 2 - 27) + 'px; width: 54px; height: 54px; border-radius: 50%; border: 3px solid var(--signal-yellow); z-index: 9999; pointer-events: none; opacity: 0; animation: agjpulse 0.8s ease-out 2' }); }
         return out; })(),
       fireGlow: E0.CAMPON.fire ? ring(130, 0.05, LM.darkness, ms, false) : 'display: none', fireGlow2: E0.CAMPON.fire ? ring(70, 0.07, LM.darkness, ms, true) : 'display: none',
       shadows: !this.optGet('shadows', true) ? [] : SHADOWS.filter((o) => !o.grp || E0.CAMPON[o.grp]).concat(entShadows, s.bushes.map((b) => ({ style: shapeSt(bushBox(b).sh) }))),
