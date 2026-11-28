@@ -2586,3 +2586,19 @@ fission, treaty. Reference hashes: ab_treaty.json arm B.
   temperate21 vs ab_eb1 B).
 - Noticed (queue): weather label said 'clear' while rain rendered on temperate21 t600 —
   pre-existing display lag, investigate with the chronicle/event work.
+
+## r67 — CREWF: clash penalty is a coordination cost (panel pending)
+- Root cause found in the r64 CREW physics: the helper's (q-1)/T adjustment applied even
+  with the OWNER ABSENT — a keen joiner in the q<0.95 band subtracted progress all night
+  while the owner slept, erasing the day's work. Progress clamps at 0, so the wall stalls
+  forever with mats committed and two workers pinned to it. That stall, under EB1's
+  windbreak/stage economy, is the wetland3/forest3 famine engine from r66b.
+- Fix (flag nocrewf): the negative term applies only while the owner is adjacent AND
+  building (coordination cost needs two people coordinating); a helper alone on a foreign
+  claim lays material at half pace, never negative. Friction lines, warmth decay and
+  grudges untouched — bad pairs still sour and dissolve; they just can't reverse-build.
+- Smoke: nocrewf vs ab_t1free B MATCH (temperate21, tundra21). Default spots:
+  forest3 0 -> 4 ALIVE (the fix beats full CREW removal there — removal killed good crews
+  too; the fix only kills the stall), wetland3 0 -> 4, tundra21 holds 4, alpine21 still 0
+  (its gap is the unpaid tier-2 line — separate mechanism, still on watch).
+- 24-world panel running (ab_crewf.json): arm A nocrewf must hash-match ab_t1free B.

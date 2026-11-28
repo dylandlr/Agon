@@ -5031,6 +5031,14 @@ class Component extends DCLogic {
     const BUILDTICKS = { wattle: 4, timber: 6, stone: 9 }; // ticks of work per segment, by wall material
     const BSOLO = BUILDT && !(window.AGON_P || {}).nobsolo; // r62: one segment per agent at a time
     const CREW = BSOLO && !(window.AGON_P || {}).nocrew; // r64: warm pairs may crew a segment; clashing pairs are slower than solo
+    // CREWF (r67): the clash penalty is a COORDINATION cost, so it applies only while the
+    // owner is actually at the wall working. r66b traced the wetland3/forest3 famine residue
+    // to CREW x EB1: a keen joiner in the q<0.95 band subtracted (q-1)/T from the segment
+    // all night while the owner slept, erasing the owner's day work — a stalled wall that
+    // never finishes, two workers pinned to it, mats committed, shelter never done. With the
+    // owner absent the helper's own hands still lay wattle: half pace, never negative.
+    // Friction lines, warmth decay and grudges are untouched. AGON_P.nocrewf opts out.
+    const CREWF = CREW && !(window.AGON_P || {}).nocrewf;
     const EB1 = !(window.AGON_P || {}).noeb1; // r65: shack-first — room0 only until carpentry+markmaking; camp windbreaks before shelter
     // TECHPAY (r63): a technology whose patterns are met is REACHABLE, not yet known — the
     // colony's insight pool pays its cost over derive passes (cheapest first), and the tech
@@ -6366,7 +6374,8 @@ class Component extends DCLogic {
             if (own2) {
               // crewing on someone else's wall: the pair's quality decides whether this helps
               const q2 = crewQ(own2) || 0.7;
-              bp[near.k] = Math.max(0, bp[near.k] + (q2 - 1) / (BUILDTICKS[store.wallMat || 'wattle'] || 6));
+              const ownerHere = cheb(own2, { x: near.x, y: near.y }) <= 1 && own2.act === 'build';
+              bp[near.k] = Math.max(0, bp[near.k] + (CREWF ? (ownerHere ? q2 - 1 : q2 * 0.5) : (q2 - 1)) / (BUILDTICKS[store.wallMat || 'wattle'] || 6));
               if (q2 < 0.95 && tick % 40 === 17) { // friction: they work against each other, and both feel it
                 a.relc = a.relc || {}; own2.relc = own2.relc || {};
                 a.relc[own2.id] = Math.max(-2, (a.relc[own2.id] || 0) - 0.02); own2.relc[a.id] = Math.max(-2, (own2.relc[a.id] || 0) - 0.02);
